@@ -86,13 +86,14 @@ npm run typecheck    # TypeScript prüfen
 npm run package      # Installer für das aktuelle System bauen (→ release/)
 ```
 
-**Neue Version veröffentlichen:** Version in `package.json` erhöhen, committen, Tag setzen und pushen:
+**Neue Version veröffentlichen:** Version in `package.json` erhöhen, committen und auf `main` pushen – GitHub Actions erkennt die neue Version, baut die Mac- und Windows-Installer und veröffentlicht sie als Release. (Alternativ: Tag setzen oder den Release-Workflow manuell starten.)
 
 ```bash
-git tag v0.1.1 && git push origin main --tags
+npm version patch --no-git-tag-version   # z. B. 0.1.0 → 0.1.1
+git commit -am "Version 0.1.1" && git push
 ```
 
-GitHub Actions baut dann die Mac- und Windows-Installer und veröffentlicht sie als Release. Installierte PanoCut-Versionen finden das Update automatisch.
+Installierte PanoCut-Versionen finden das Update automatisch.
 
 ### Aufbau
 

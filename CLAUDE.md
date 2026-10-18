@@ -25,9 +25,9 @@ fertige Installer über GitHub Releases.
   beiden Stellen umsetzen.
 - Keine Menü-Accelerator ohne Modifier (würden Tastatureingaben in Textfeldern schlucken); Einzeltasten in `useKeyboard.ts`.
 - Alle Texte nach `i18n/de.ts`.
-- Version in `package.json` erhöhen und Tag `vX.Y.Z` pushen → `release.yml` baut und veröffentlicht Mac + Windows.
+- Version in `package.json` erhöhen und auf `main` pushen → `release.yml` baut und veröffentlicht Mac + Windows (Tags/API-Writes sind aus der Cloud-Umgebung nicht möglich; `gh workflow run release.yml` geht).
   `ci.yml` läuft bei jedem Push auf `main` (Typecheck, Build, Selbsttest, Linux-Paket).
-- Der Cloud-Arbeitsplatz erreicht npm nicht; Prüfen über die CI-Logs (`gh run list`, `gh run view --log-failed`).
+- Der Cloud-Arbeitsplatz erreicht npm nicht; prüfen mit `tools/offline-typecheck/run.sh` und über die CI (`gh run list`).
 
 ## Fahrplan
 
@@ -35,3 +35,11 @@ fertige Installer über GitHub Releases.
 Übergänge (`xfade`/`acrossfade`); Titel; Stabilisierung (`vidstabdetect/vidstabtransform`); Untertitel (whisper.cpp).
 0.3: Tracking (OpenCV), Chroma Key (`chromakey`/`colorkey`), KI-Masken (Segmentierung), Freistellen.
 0.4: Effekt-/Animations-Bibliothek, eigene Effekte, Audio-Ducking.
+
+## Lokale Prüfung ohne npm
+
+`tools/offline-typecheck/run.sh` prüft beide TypeScript-Projekte ohne `node_modules` (globales `tsc`, Typquellen per git,
+Electron-Stub). Für den FFmpeg-Teil lässt sich `src/main/smoke.ts` mit esbuild bündeln (Alias `electron` → kleiner Shim
+mit `app.getPath`, `electron-log` → console) und mit `PANOCUT_FFMPEG=/usr/bin/ffmpeg PANOCUT_FFPROBE=/usr/bin/ffprobe`
+direkt unter Node ausführen. Vollständige CI-Logs sind aus der Cloud nicht abrufbar (`gh run view <id> --json jobs`
+zeigt nur den Schritt-Status).

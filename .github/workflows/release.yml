@@ -1,9 +1,12 @@
 name: Release
 
-# Ein Tag wie `v0.1.0` baut die Installer für Mac und Windows und veröffentlicht sie
-# als GitHub-Release. PanoCut findet neue Versionen darüber automatisch.
+# Baut die Installer für Mac und Windows und veröffentlicht sie als GitHub-Release.
+# Läuft, wenn die Version in package.json auf `main` erhöht wurde (und noch kein Release
+# dafür existiert), bei einem Tag `vX.Y.Z` oder manuell über "Run workflow".
+# PanoCut findet neue Versionen über diese Releases automatisch.
 on:
   push:
+    branches: [main]
     tags: ['v*']
   workflow_dispatch:
 
@@ -11,8 +14,35 @@ permissions:
   contents: write
 
 jobs:
+  check:
+    name: Version prüfen
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.decide.outputs.publish }}
+      version: ${{ steps.decide.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: decide
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event_name }}" != "push" ] || [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          if gh release view "v$version" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release v$version existiert bereits – nichts zu tun."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Neue Version v$version – Release wird gebaut."
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
     name: ${{ matrix.name }}
+    needs: check
+    if: needs.check.outputs.publish == 'true'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
