@@ -22,7 +22,20 @@ jobs:
       - name: Selbsttest (Import + Export ohne Oberfläche)
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq xvfb
-          xvfb-run -a npx electron . --smoke-test --no-sandbox
+          set -o pipefail
+          xvfb-run -a npx electron . --smoke-test --no-sandbox 2>&1 | tee smoke.log
+      # Bei Fehlern das Protokoll in den Branch `ci-logs` legen (von der Cloud-Umgebung aus lesbar)
+      - name: Protokoll sichern
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p /tmp/cilogs && cp smoke.log /tmp/cilogs/smoke-${{ github.run_id }}.log 2>/dev/null || true
+          cd /tmp/cilogs
+          git init -q && git checkout -q -b ci-logs
+          git config user.email "ci@panocut" && git config user.name "PanoCut CI"
+          git add -A && git commit -q -m "Protokoll Lauf ${{ github.run_id }}"
+          git push -q -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ci-logs
       - name: Linux-Paket bauen (Packaging-Check)
         run: npx electron-builder --linux AppImage --publish never
       - uses: actions/upload-artifact@v4
