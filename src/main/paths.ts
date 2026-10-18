@@ -9,7 +9,6 @@ function unpacked(p: string): string {
 }
 
 let ffmpegPath: string | null = null;
-let ffprobePath: string | null = null;
 
 export function getFfmpegPath(): string {
   if (ffmpegPath) return ffmpegPath;
@@ -20,16 +19,6 @@ export function getFfmpegPath(): string {
   if (!p) throw new Error('FFmpeg wurde nicht gefunden.');
   ffmpegPath = unpacked(p);
   return ffmpegPath;
-}
-
-export function getFfprobePath(): string {
-  if (ffprobePath) return ffprobePath;
-  const envPath = process.env.PANOCUT_FFPROBE;
-  if (envPath && fs.existsSync(envPath)) return (ffprobePath = envPath);
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  const mod = require('ffprobe-static') as { path: string };
-  ffprobePath = unpacked(mod.path);
-  return ffprobePath;
 }
 
 export function getCacheDir(): string {

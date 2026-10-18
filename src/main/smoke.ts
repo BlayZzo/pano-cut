@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createClip, createProject } from '@shared/timeline';
 import type { ExportOptions, MediaItem } from '@shared/types';
-import { runFfmpeg, runFfprobe } from './ffmpeg';
+import { probeFile, runFfmpeg } from './ffmpeg';
 import { prepareMedia, probeMedia } from './media';
 import { ExportJob } from './exporter';
 
@@ -61,8 +61,8 @@ export async function runSmokeTest(): Promise<number> {
       if (p.phase === 'error') log(' Fehler:', p.message);
     });
     await job.run();
-    const probe = await runFfprobe(out);
-    const dur = Number(probe.format.duration);
+    const probe = await probeFile(out);
+    const dur = probe.format.duration ?? 0;
     const v = probe.streams.find((s) => s.codec_type === 'video');
     const a = probe.streams.find((s) => s.codec_type === 'audio');
     log(`Ergebnis: ${dur.toFixed(2)} s, ${v?.width}x${v?.height} ${v?.codec_name}, Audio: ${a?.codec_name}`);

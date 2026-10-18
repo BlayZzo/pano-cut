@@ -1,6 +1,6 @@
 import { spawn, ChildProcess } from 'node:child_process';
 import log from 'electron-log';
-import { getFfmpegPath, getFfprobePath } from './paths';
+import { getFfmpegPath } from './paths';
 
 export interface RunOptions {
   onProgress?: (p: { outTime: number; fps?: number; speed?: string }) => void;
@@ -86,37 +86,95 @@ export function runFfmpeg(args: string[], opts: RunOptions = {}): Promise<string
   });
 }
 
-export interface ProbeResult {
-  format: { duration?: string; size?: string; format_name?: string; tags?: Record<string, string> };
-  streams: Array<{
-    codec_type: string;
-    codec_name?: string;
-    width?: number;
-    height?: number;
-    r_frame_rate?: string;
-    avg_frame_rate?: string;
-    duration?: string;
-    nb_frames?: string;
-    tags?: Record<string, string>;
-    side_data_list?: Array<{ rotation?: number; side_data_type?: string }>;
-    channels?: number;
-    sample_rate?: string;
-    pix_fmt?: string;
-  }>;
+export interface ProbeStream {
+  index: number;
+  codec_type: 'video' | 'audio' | 'subtitle' | 'data' | 'attachment';
+  codec_name?: string;
+  width?: number;
+  height?: number;
+  fps?: number;
+  rotation?: number;
+  channels?: number;
+  sample_rate?: number;
+  pix_fmt?: string;
+  attachedPic?: boolean;
 }
 
-export function runFfprobe(file: string): Promise<ProbeResult> {
+export interface ProbeResult {
+  format: { duration?: number; format_name?: string; bitrate?: number };
+  streams: ProbeStream[];
+}
+
+function parseDuration(s: string): number {
+  const m = /(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(s);
+  if (!m) return 0;
+  return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3]);
+}
+
+/**
+ * Liest Dateiinformationen über `ffmpeg -i` (wir liefern kein ffprobe mit – spart ~40 MB pro Installer).
+ * Die Ausgabe von ffmpeg ist seit Jahren stabil formatiert.
+ */
+export function probeFile(file: string): Promise<ProbeResult> {
   return new Promise((resolve, reject) => {
-    const args = ['-v', 'error', '-print_format', 'json', '-show_format', '-show_streams', file];
-    const child = spawn(getFfprobePath(), args, { windowsHide: true });
-    let out = '';
+    const child = spawn(getFfmpegPath(), ['-hide_banner', '-nostdin', '-i', file], { windowsHide: true, stdio: ['ignore', 'ignore', 'pipe'] });
     let err = '';
-    child.stdout.on('data', (d) => (out += d.toString()));
     child.stderr.on('data', (d) => (err += d.toString()));
-    child.on('error', (e) => reject(new Error(`ffprobe konnte nicht gestartet werden: ${e.message}`)));
-    child.on('close', (code) => {
-      if (code !== 0) return reject(new Error(err.trim() || `ffprobe-Fehler (${code})`));
-      try { resolve(JSON.parse(out)); } catch (e) { reject(new Error('ffprobe-Ausgabe unlesbar')); }
+    child.on('error', (e) => reject(new Error(`FFmpeg konnte nicht gestartet werden: ${e.message}`)));
+    child.on('close', () => {
+      const result: ProbeResult = { format: {}, streams: [] };
+      const lines = err.split(/\r?\n/);
+      let sawInput = false;
+      let current: ProbeStream | null = null;
+      for (const raw of lines) {
+        const line = raw.trimEnd();
+        if (/^Input #0,/.test(line)) {
+          sawInput = true;
+          const m = /^Input #0, ([^,]+(?:,[^,]+)*?), from/.exec(line);
+          if (m) result.format.format_name = m[1];
+          continue;
+        }
+        if (!sawInput) continue;
+        if (/^\s*Duration:/.test(line)) {
+          const d = /Duration: ([^,]+)/.exec(line);
+          if (d && !d[1].includes('N/A')) result.format.duration = parseDuration(d[1]);
+          const b = /bitrate: (\d+) kb\/s/.exec(line);
+          if (b) result.format.bitrate = Number(b[1]) * 1000;
+          continue;
+        }
+        const sm = /^\s*Stream #0:(\d+)(?:\[[^\]]*\])?(?:\([^)]*\))?: (Video|Audio|Subtitle|Data|Attachment): (.*)$/.exec(line);
+        if (sm) {
+          const rest = sm[3];
+          const codec = /^([A-Za-z0-9_]+)/.exec(rest)?.[1];
+          current = { index: Number(sm[1]), codec_type: sm[2].toLowerCase() as ProbeStream['codec_type'], codec_name: codec };
+          if (current.codec_type === 'video') {
+            const dim = /, (\d{2,5})x(\d{2,5})(?:[ ,\[]|$)/.exec(rest);
+            if (dim) { current.width = Number(dim[1]); current.height = Number(dim[2]); }
+            const fps = /([\d.]+) fps/.exec(rest) ?? /([\d.]+) tbr/.exec(rest);
+            if (fps) current.fps = Number(fps[1]);
+            const pix = /, (yuv[a-z0-9]+|rgb[a-z0-9]*|gray[a-z0-9]*|bgr[a-z0-9]*|gbr[a-z0-9]*|pal8|monob)/.exec(rest);
+            if (pix) current.pix_fmt = pix[1];
+            if (rest.includes('(attached pic)')) current.attachedPic = true;
+          } else if (current.codec_type === 'audio') {
+            const sr = /(\d+) Hz/.exec(rest);
+            if (sr) current.sample_rate = Number(sr[1]);
+            if (/\bmono\b/.test(rest)) current.channels = 1;
+            else if (/\bstereo\b/.test(rest)) current.channels = 2;
+            else { const ch = /(\d+) channels/.exec(rest); if (ch) current.channels = Number(ch[1]); }
+          }
+          result.streams.push(current);
+          continue;
+        }
+        if (current && /rotation of (-?[\d.]+) degrees/.test(line)) {
+          current.rotation = Number(/rotation of (-?[\d.]+) degrees/.exec(line)![1]);
+        }
+        if (/^\s*Output #|^At least one output/.test(line)) break;
+      }
+      if (!sawInput) {
+        const tail = err.trim().split('\n').slice(-3).join('\n');
+        return reject(new Error(tail || 'Datei konnte nicht gelesen werden'));
+      }
+      resolve(result);
     });
   });
 }

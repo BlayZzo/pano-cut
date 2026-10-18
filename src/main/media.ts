@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import log from 'electron-log';
 import type { MediaInfo, MediaItem, MediaType } from '@shared/types';
 import { makeId } from '@shared/timeline';
-import { parseFps, runFfmpeg, runFfprobe } from './ffmpeg';
+import { probeFile, runFfmpeg } from './ffmpeg';
 import { fileExists, mediaCacheDir } from './paths';
 import { reverseVideo } from './reverse';
 
@@ -39,18 +39,15 @@ export async function probeMedia(file: string): Promise<MediaItem> {
     info: { duration: 0, width: 0, height: 0, fps: 0, hasVideo: false, hasAudio: false, rotation: 0, is360: false, fileSize: stat.size },
   };
   try {
-    const probe = await runFfprobe(file);
-    const v = probe.streams.find((s) => s.codec_type === 'video' && !(s.tags?.mimetype ?? '').startsWith('image/') );
+    const probe = await probeFile(file);
+    const v = probe.streams.find((s) => s.codec_type === 'video' && !s.attachedPic);
     const a = probe.streams.find((s) => s.codec_type === 'audio');
-    let rotation = 0;
-    const sd = v?.side_data_list?.find((s) => typeof s.rotation === 'number');
-    if (sd?.rotation) rotation = sd.rotation;
-    else if (v?.tags?.rotate) rotation = Number(v.tags.rotate) || 0;
+    const rotation = v?.rotation ?? 0;
     let width = v?.width ?? 0;
     let height = v?.height ?? 0;
     if (Math.abs(rotation) % 180 === 90) [width, height] = [height, width];
-    const duration = Number(probe.format.duration ?? v?.duration ?? a?.duration ?? 0) || 0;
-    const fps = parseFps(v?.avg_frame_rate) || parseFps(v?.r_frame_rate) || 0;
+    const duration = probe.format.duration ?? 0;
+    const fps = v?.fps ?? 0;
     const info: MediaInfo = {
       duration: type === 'image' ? 0 : duration,
       width,
