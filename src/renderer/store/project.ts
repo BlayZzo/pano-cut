@@ -1,9 +1,11 @@
 import { create } from 'zustand';
 import { temporal } from 'zundo';
 import type { Clip, MediaItem, Project, ProjectSettings, Track, TrackKind } from '@shared/types';
+import type { PanoSettings, Stabilization, StitchSettings, SubtitleSegment, TitleStyle, Transition } from '@shared/types';
 import {
-  clipDuration, clipEnd, createClip, createProject, createTrack, makeId, MIN_CLIP_DURATION, nextFreeStart, overlaps, sourceTimeAt,
+  clipDuration, clipEnd, createClip, createProject, createTitleClip, createTrack, makeId, MIN_CLIP_DURATION, nextFreeStart, overlaps, sourceLimit, sourceTimeAt,
 } from '@shared/timeline';
+import { defaultPano, defaultSubtitleStyle } from '@shared/pano';
 
 export interface ProjectState {
   project: Project;
@@ -32,6 +34,13 @@ export interface ProjectState {
   addTrack(kind: TrackKind): void;
   removeTrack(id: string): void;
   updateTrack(id: string, patch: Partial<Track>): void;
+
+  addTitleClip(trackId: string, start: number, title: TitleStyle): Clip | null;
+  setPano(id: string, pano: PanoSettings | undefined): void;
+  setTransition(id: string, transition: Transition | undefined): void;
+  setStabilize(id: string, s: Stabilization | undefined): void;
+  setSubtitles(id: string, segments: SubtitleSegment[] | null, style?: Partial<Omit<TitleStyle, 'text'>>, enabled?: boolean): void;
+  updateMediaStitch(mediaId: string, patch: Partial<StitchSettings>): void;
 }
 
 const HISTORY_LIMIT = 200;
@@ -72,6 +81,7 @@ export const useProject = create<ProjectState>()(
         if (!media || !track || track.locked) return null;
         if (track.kind === 'audio' && media.type === 'image') return null;
         const clip = createClip(media, trackId, Math.max(0, start));
+        if (media.info.is360 && track.kind === 'video') clip.pano = defaultPano(s.project.settings.is360 ? 'equirect' : 'flat');
         clip.start = nextFreeStart(s.project, clip, clip.start, trackId);
         set({ project: { ...s.project, clips: { ...s.project.clips, [clip.id]: clip } } });
         return clip;
@@ -142,7 +152,7 @@ export const useProject = create<ProjectState>()(
         const c = s.project.clips[id];
         if (!c) return {};
         const media = s.project.media[c.mediaId];
-        const srcMax = media?.type === 'image' ? Number.POSITIVE_INFINITY : (media?.info.duration ?? c.out);
+        const srcMax = sourceLimit(c, media);
         let next: Clip;
         if (side === 'start') {
           // Neuer Anfang auf der Timeline; In-Punkt entsprechend verschieben
@@ -231,6 +241,56 @@ export const useProject = create<ProjectState>()(
       updateTrack: (id, patch) => set((s) => ({
         project: { ...s.project, tracks: s.project.tracks.map((t) => (t.id === id ? { ...t, ...patch } : t)) },
       })),
+
+      addTitleClip: (trackId, start, title) => {
+        const s = get();
+        const track = s.project.tracks.find((t) => t.id === trackId);
+        if (!track || track.kind !== 'video' || track.locked) return null;
+        const clip = createTitleClip(trackId, Math.max(0, start), title);
+        clip.start = nextFreeStart(s.project, clip, clip.start, trackId);
+        set({ project: { ...s.project, clips: { ...s.project.clips, [clip.id]: clip } } });
+        return clip;
+      },
+      setPano: (id, pano) => set((s) => {
+        const c = s.project.clips[id];
+        if (!c) return {};
+        const next = { ...c };
+        if (pano) next.pano = pano; else delete next.pano;
+        return { project: { ...s.project, clips: { ...s.project.clips, [id]: next } } };
+      }),
+      setTransition: (id, transition) => set((s) => {
+        const c = s.project.clips[id];
+        if (!c) return {};
+        const next = { ...c };
+        if (transition) next.transition = transition; else delete next.transition;
+        return { project: { ...s.project, clips: { ...s.project.clips, [id]: next } } };
+      }),
+      setStabilize: (id, st) => set((s) => {
+        const c = s.project.clips[id];
+        if (!c) return {};
+        const next = { ...c };
+        if (st) next.stabilize = st; else delete next.stabilize;
+        return { project: { ...s.project, clips: { ...s.project.clips, [id]: next } } };
+      }),
+      setSubtitles: (id, segments, style, enabled) => set((s) => {
+        const c = s.project.clips[id];
+        if (!c) return {};
+        const next = { ...c };
+        if (segments === null) { delete next.subtitles; }
+        else {
+          next.subtitles = {
+            segments,
+            style: { ...(c.subtitles?.style ?? defaultSubtitleStyle()), ...(style ?? {}) },
+            enabled: enabled ?? c.subtitles?.enabled ?? true,
+          };
+        }
+        return { project: { ...s.project, clips: { ...s.project.clips, [id]: next } } };
+      }),
+      updateMediaStitch: (mediaId, patch) => set((s) => {
+        const m = s.project.media[mediaId];
+        if (!m || !m.stitch) return {};
+        return { project: { ...s.project, media: { ...s.project.media, [mediaId]: { ...m, stitch: { ...m.stitch, ...patch } } } } };
+      }),
     }),
     {
       limit: HISTORY_LIMIT,

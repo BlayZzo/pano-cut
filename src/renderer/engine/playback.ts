@@ -1,5 +1,8 @@
-import type { Clip, MediaItem, Project, Track } from '@shared/types';
-import { clamp, clipAt, clipDuration, projectDuration, sourceTimeAt, videoTracksBottomUp } from '@shared/timeline';
+import type { Clip, MediaItem, Project, Track, TransitionType } from '@shared/types';
+import { clamp, clipAt, clipDuration, clipEnd, clipsOnTrack, projectDuration, sourceTimeAt, videoTracksBottomUp } from '@shared/timeline';
+import { panoViewAt } from '@shared/pano';
+import { PanoGL } from './panogl';
+import { drawStyledText } from './text';
 
 type MediaEl = HTMLVideoElement | HTMLAudioElement | HTMLImageElement;
 
@@ -9,6 +12,15 @@ interface Slot {
   isVideo: boolean;
   isImage: boolean;
   lastSeek: number;
+  pano?: PanoGL;
+}
+
+interface DrawExtra {
+  alpha?: number;
+  dx?: number;        // Pixel-Versatz (Übergänge)
+  dy?: number;
+  clipPath?: (ctx: CanvasRenderingContext2D) => void;
+  localT?: number;    // Clip-lokale Zeit (für 360°-Keyframes)
 }
 
 const RATE_MIN = 0.0625;
@@ -21,6 +33,14 @@ function isDisplayableImage(path: string): boolean {
   const ext = path.split('.').pop()?.toLowerCase() ?? '';
   return DISPLAYABLE_IMAGES.has(ext);
 }
+
+/** Quellzeit ohne Begrenzung auf den Clip (für Übergänge, die über das Clip-Ende hinausreichen). */
+function sourceTimeUnclamped(clip: Clip, t: number): number {
+  const local = (t - clip.start) * clip.speed;
+  return clip.reverse ? clip.out - local : clip.in + local;
+}
+
+interface ActiveTransition { a: Clip; b: Clip; type: TransitionType; progress: number; duration: number; cut: number }
 
 /**
  * Die Vorschau-Engine: zeichnet die Timeline auf ein Canvas und spielt die Proxy-Dateien
@@ -43,7 +63,10 @@ export class PlaybackEngine {
   onEnded: () => void = () => {};
   /** Wird gerufen, wenn für einen Rückwärts-Clip noch keine Rückwärts-Vorschau existiert. */
   onNeedReversed: (media: MediaItem) => void = () => {};
+  /** Wird gerufen, wenn für einen stabilisierten Clip noch keine stabilisierte Vorschau existiert. */
+  onNeedStabilized: (media: MediaItem, strength: number) => void = () => {};
   private requestedReversed = new Set<string>();
+  private requestedStabilized = new Set<string>();
 
   constructor(project: Project) {
     this.project = project;
@@ -59,7 +82,6 @@ export class PlaybackEngine {
     const changed = this.project !== project;
     this.project = project;
     if (!changed) return;
-    // Elemente für gelöschte Clips entsorgen
     for (const [id, slot] of this.slots) {
       if (!project.clips[id]) {
         this.disposeSlot(slot);
@@ -107,6 +129,11 @@ export class PlaybackEngine {
     if (this.playing) this.pause(); else this.play();
   }
 
+  /** Erzwingt ein Neuzeichnen (z. B. nach Änderung von Einstellungen ohne Projektwechsel). */
+  redraw(): void {
+    if (!this.playing) this.render(this.current);
+  }
+
   destroy(): void {
     this.pause();
     for (const slot of this.slots.values()) this.disposeSlot(slot);
@@ -152,6 +179,7 @@ export class PlaybackEngine {
       return { src: url(p), reversedFile: false };
     }
     if (clip.reverse && media.proxyReversed) return { src: url(media.proxyReversed), reversedFile: true };
+    if (clip.stabilize?.enabled && media.proxyStabilized && !clip.reverse) return { src: url(media.proxyStabilized), reversedFile: false };
     if (media.proxy) return { src: url(media.proxy), reversedFile: false };
     return { src: url(media.path), reversedFile: false };
   }
@@ -195,31 +223,55 @@ export class PlaybackEngine {
   }
 
   /** Zeit innerhalb der tatsächlich geladenen Datei (Proxy, ggf. rückwärts). */
-  private fileTime(clip: Clip, media: MediaItem, t: number, reversedFile: boolean): number {
-    const src = sourceTimeAt(clip, t);
+  private fileTime(clip: Clip, media: MediaItem, t: number, reversedFile: boolean, unclamped = false): number {
+    const src = unclamped ? sourceTimeUnclamped(clip, t) : sourceTimeAt(clip, t);
     if (reversedFile) return Math.max(0, media.info.duration - src);
-    return src;
+    return Math.max(0, src);
   }
 
-  private syncMedia(slot: Slot, clip: Clip, media: MediaItem, track: Track, t: number): void {
+  /** Lautstärke-Multiplikator durch Übergänge (Ton weich überblenden). */
+  private transitionGain(clip: Clip, t: number): number {
+    let gain = 1;
+    const tr = clip.transition;
+    if (tr) {
+      const half = Math.min(tr.duration, clipDuration(clip)) / 2;
+      const local = t - clip.start;
+      if (local < half) gain *= clamp(local / half, 0, 1);
+    }
+    // Übergang des nächsten Clips (dieser Clip blendet aus)
+    const next = clipsOnTrack(this.project, clip.trackId).find((c) => c.transition && Math.abs(c.start - clipEnd(clip)) < 1 / 30);
+    if (next?.transition) {
+      const half = Math.min(next.transition.duration, clipDuration(next), clipDuration(clip)) / 2;
+      const remain = clipEnd(clip) - t;
+      if (remain < half) gain *= clamp(remain / half, 0, 1);
+    }
+    return gain;
+  }
+
+  private syncMedia(slot: Slot, clip: Clip, media: MediaItem, track: Track, t: number, unclamped = false): void {
     const m = slot.el as HTMLMediaElement;
     const { reversedFile } = this.desiredSrc(clip, media);
-    const target = this.fileTime(clip, media, t, reversedFile);
+    const target = this.fileTime(clip, media, t, reversedFile, unclamped);
     const needsSeekMode = (clip.reverse && !reversedFile) || clip.speed < RATE_MIN || clip.speed > RATE_MAX;
 
     if (clip.reverse && !media.proxyReversed && media.proxy && !this.requestedReversed.has(media.id)) {
       this.requestedReversed.add(media.id);
       this.onNeedReversed(media);
     }
+    if (clip.stabilize?.enabled && !media.proxyStabilized && media.proxy && !this.requestedStabilized.has(media.id)) {
+      this.requestedStabilized.add(media.id);
+      this.onNeedStabilized(media, clip.stabilize.strength);
+    }
 
-    // Lautstärke mit Ein-/Ausblenden
     const local = t - clip.start;
     const dur = clipDuration(clip);
     let gain = clamp(clip.volume, 0, 1);
     if (clip.fadeIn > 0 && local < clip.fadeIn) gain *= clamp(local / clip.fadeIn, 0, 1);
     if (clip.fadeOut > 0 && dur - local < clip.fadeOut) gain *= clamp((dur - local) / clip.fadeOut, 0, 1);
+    gain *= this.transitionGain(clip, t);
     m.volume = clamp(gain, 0, 1);
-    m.muted = this.muted || clip.muted || track.muted || needsSeekMode;
+    const outside = local < 0 || local > dur;
+    m.muted = this.muted || clip.muted || track.muted || needsSeekMode || outside;
 
     if (this.playing && !needsSeekMode) {
       const rate = clamp(clip.speed, RATE_MIN, RATE_MAX);
@@ -237,42 +289,138 @@ export class PlaybackEngine {
     }
   }
 
-  private drawClip(ctx: CanvasRenderingContext2D, slot: Slot, clip: Clip, W: number, H: number): void {
-    const el = slot.el;
+  private drawClip(ctx: CanvasRenderingContext2D, slot: Slot, clip: Clip, media: MediaItem, W: number, H: number, extra: DrawExtra = {}): void {
+    let source: CanvasImageSource = slot.el as CanvasImageSource;
     let vw = 0, vh = 0;
-    if (slot.isImage) { vw = (el as HTMLImageElement).naturalWidth; vh = (el as HTMLImageElement).naturalHeight; }
+    if (slot.isImage) { vw = (slot.el as HTMLImageElement).naturalWidth; vh = (slot.el as HTMLImageElement).naturalHeight; }
     else if (slot.isVideo) {
-      const v = el as HTMLVideoElement;
+      const v = slot.el as HTMLVideoElement;
       if (v.readyState < 2) return;
       vw = v.videoWidth; vh = v.videoHeight;
     } else return;
     if (!vw || !vh) return;
 
+    // 360°: Ansicht per WebGL berechnen
+    if (media.info.is360 && clip.pano) {
+      if (!slot.pano) slot.pano = new PanoGL();
+      if (slot.pano.available) {
+        const localT = extra.localT ?? (this.current - clip.start);
+        const view = panoViewAt(clip.pano, localT);
+        const mode = clip.pano.mode;
+        const outW = mode === 'equirect' ? Math.min(vw, 2048) : W;
+        const outH = mode === 'equirect' ? Math.round(outW / 2) : H;
+        const srcTime = slot.isVideo ? (slot.el as HTMLVideoElement).currentTime : 0;
+        const out = slot.pano.render(source as TexImageSource, outW, outH, mode, view, srcTime);
+        if (out) { source = out; vw = outW; vh = outH; }
+      }
+    }
+
     const tr = clip.transform;
     const col = clip.color;
     ctx.save();
-    ctx.globalAlpha = clamp(clip.opacity, 0, 1);
+    if (extra.clipPath) extra.clipPath(ctx);
+    ctx.globalAlpha = clamp(clip.opacity, 0, 1) * (extra.alpha ?? 1);
     const filters: string[] = [];
     if (Math.abs(col.brightness) > 1e-4) filters.push(`brightness(${1 + col.brightness})`);
     if (Math.abs(col.contrast - 1) > 1e-4) filters.push(`contrast(${col.contrast})`);
     if (Math.abs(col.saturation - 1) > 1e-4) filters.push(`saturate(${col.saturation})`);
     if (Math.abs(col.hue) > 1e-4) filters.push(`hue-rotate(${col.hue}deg)`);
     ctx.filter = filters.length ? filters.join(' ') : 'none';
-    ctx.translate(W / 2 + (tr.x / 100) * W, H / 2 + (tr.y / 100) * H);
+    ctx.translate(W / 2 + (tr.x / 100) * W + (extra.dx ?? 0), H / 2 + (tr.y / 100) * H + (extra.dy ?? 0));
     ctx.rotate((tr.rotation * Math.PI) / 180);
     const sc = Math.max(0.01, tr.scale);
     if (clip.fit === 'cover') {
       const s = Math.max(W / vw, H / vh);
       const sw = W / s, sh = H / s;
-      ctx.drawImage(el as CanvasImageSource, (vw - sw) / 2, (vh - sh) / 2, sw, sh, (-W * sc) / 2, (-H * sc) / 2, W * sc, H * sc);
+      ctx.drawImage(source, (vw - sw) / 2, (vh - sh) / 2, sw, sh, (-W * sc) / 2, (-H * sc) / 2, W * sc, H * sc);
     } else if (clip.fit === 'stretch') {
-      ctx.drawImage(el as CanvasImageSource, (-W * sc) / 2, (-H * sc) / 2, W * sc, H * sc);
+      ctx.drawImage(source, (-W * sc) / 2, (-H * sc) / 2, W * sc, H * sc);
     } else {
       const s = Math.min(W / vw, H / vh) * sc;
       const dw = vw * s, dh = vh * s;
-      ctx.drawImage(el as CanvasImageSource, -dw / 2, -dh / 2, dw, dh);
+      ctx.drawImage(source, -dw / 2, -dh / 2, dw, dh);
     }
     ctx.restore();
+  }
+
+  private drawTitle(ctx: CanvasRenderingContext2D, clip: Clip, W: number, H: number, t: number): void {
+    if (!clip.title) return;
+    ctx.save();
+    ctx.globalAlpha = clamp(clip.opacity, 0, 1);
+    drawStyledText(ctx, clip.title, clip.title.text, W, H, { localT: t - clip.start, duration: clipDuration(clip), animate: true });
+    ctx.restore();
+  }
+
+  private drawSubtitles(ctx: CanvasRenderingContext2D, clip: Clip, W: number, H: number, t: number): void {
+    const subs = clip.subtitles;
+    if (!subs || !subs.enabled) return;
+    const local = t - clip.start;
+    for (const seg of subs.segments) {
+      if (local >= seg.start && local < seg.end && seg.text.trim()) {
+        drawStyledText(ctx, subs.style, seg.text, W, H, { localT: 0, duration: 1, animate: false });
+      }
+    }
+  }
+
+  /** Läuft gerade ein Übergang auf dieser Spur? */
+  private transitionAt(track: Track, t: number): ActiveTransition | null {
+    for (const b of clipsOnTrack(this.project, track.id)) {
+      const tr = b.transition;
+      if (!tr) continue;
+      const a = clipsOnTrack(this.project, track.id).find((c) => c.id !== b.id && Math.abs(clipEnd(c) - b.start) < 1 / 30);
+      if (!a) continue;
+      const d = Math.min(tr.duration, clipDuration(a), clipDuration(b));
+      const start = b.start - d / 2;
+      if (t >= start && t < start + d) {
+        return { a, b, type: tr.type, progress: (t - start) / d, duration: d, cut: b.start };
+      }
+    }
+    return null;
+  }
+
+  private drawTransition(ctx: CanvasRenderingContext2D, tr: ActiveTransition, track: Track, W: number, H: number, t: number): void {
+    const { a, b, progress: p } = tr;
+    const mediaA = this.project.media[a.mediaId];
+    const mediaB = this.project.media[b.mediaId];
+    const draw = (clip: Clip, media: MediaItem | undefined, extra: DrawExtra) => {
+      if (clip.kind === 'title') { this.drawTitle(ctx, clip, W, H, t); return; }
+      if (!media || media.status === 'error' || media.type === 'audio') return;
+      const slot = this.getSlot(clip, media);
+      if (!slot.isImage) this.syncMedia(slot, clip, media, track, t, true);
+      this.drawClip(ctx, slot, clip, media, W, H, { ...extra, localT: t - clip.start });
+    };
+    const type = tr.type;
+    const rect = (x: number, y: number, w: number, h: number) => (c: CanvasRenderingContext2D) => { c.beginPath(); c.rect(x, y, w, h); c.clip(); };
+    const circle = (r: number, inside: boolean) => (c: CanvasRenderingContext2D) => {
+      c.beginPath();
+      if (inside) c.arc(W / 2, H / 2, r, 0, Math.PI * 2);
+      else { c.rect(0, 0, W, H); c.arc(W / 2, H / 2, r, 0, Math.PI * 2, true); }
+      c.clip();
+    };
+    const R = Math.hypot(W, H) / 2;
+    switch (type) {
+      case 'fadeblack':
+      case 'fadewhite': {
+        ctx.fillStyle = type === 'fadeblack' ? '#000' : '#fff';
+        if (p < 0.5) { draw(a, mediaA, {}); ctx.globalAlpha = p * 2; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
+        else { ctx.fillRect(0, 0, W, H); draw(b, mediaB, { alpha: (p - 0.5) * 2 }); }
+        break;
+      }
+      case 'wipeleft': draw(a, mediaA, {}); draw(b, mediaB, { clipPath: rect(W * (1 - p), 0, W * p, H) }); break;
+      case 'wiperight': draw(a, mediaA, {}); draw(b, mediaB, { clipPath: rect(0, 0, W * p, H) }); break;
+      case 'wipeup': draw(a, mediaA, {}); draw(b, mediaB, { clipPath: rect(0, H * (1 - p), W, H * p) }); break;
+      case 'wipedown': draw(a, mediaA, {}); draw(b, mediaB, { clipPath: rect(0, 0, W, H * p) }); break;
+      case 'smoothleft': draw(a, mediaA, {}); draw(b, mediaB, { clipPath: rect(W * (1 - p), 0, W * p, H), alpha: 1 }); break;
+      case 'smoothright': draw(a, mediaA, {}); draw(b, mediaB, { clipPath: rect(0, 0, W * p, H) }); break;
+      case 'slideleft': draw(a, mediaA, { dx: -W * p }); draw(b, mediaB, { dx: W * (1 - p) }); break;
+      case 'slideright': draw(a, mediaA, { dx: W * p }); draw(b, mediaB, { dx: -W * (1 - p) }); break;
+      case 'slideup': draw(a, mediaA, { dy: -H * p }); draw(b, mediaB, { dy: H * (1 - p) }); break;
+      case 'slidedown': draw(a, mediaA, { dy: H * p }); draw(b, mediaB, { dy: -H * (1 - p) }); break;
+      case 'circleopen': draw(a, mediaA, {}); draw(b, mediaB, { clipPath: circle(R * p, true) }); break;
+      case 'circleclose': draw(b, mediaB, {}); draw(a, mediaA, { clipPath: circle(R * (1 - p), true) }); break;
+      case 'zoomin': draw(a, mediaA, {}); draw(b, mediaB, { alpha: p }); break;
+      default: draw(a, mediaA, {}); draw(b, mediaB, { alpha: p }); break;
+    }
   }
 
   render(t: number): void {
@@ -284,7 +432,7 @@ export class PlaybackEngine {
     for (const track of project.tracks) {
       if (track.kind !== 'audio') continue;
       const clip = clipAt(project, track.id, t);
-      if (!clip) continue;
+      if (!clip || clip.kind === 'title') continue;
       const media = project.media[clip.mediaId];
       if (!media || media.status === 'error' || media.type === 'image') continue;
       const slot = this.getSlot(clip, media);
@@ -292,6 +440,7 @@ export class PlaybackEngine {
       this.syncMedia(slot, clip, media, track, t);
     }
 
+    const tracks = videoTracksBottomUp(project);
     if (ctx && this.canvas) {
       const W = this.canvas.width, H = this.canvas.height;
       ctx.save();
@@ -300,23 +449,34 @@ export class PlaybackEngine {
       ctx.fillStyle = project.settings.background || '#000';
       ctx.fillRect(0, 0, W, H);
       ctx.restore();
-      for (const track of videoTracksBottomUp(project)) {
+      for (const track of tracks) {
         if (track.hidden) continue;
+        const tr = this.transitionAt(track, t);
+        if (tr) {
+          activeIds.add(tr.a.id);
+          activeIds.add(tr.b.id);
+          this.drawTransition(ctx, tr, track, W, H, t);
+          const cur = t < tr.cut ? tr.a : tr.b;
+          this.drawSubtitles(ctx, cur, W, H, t);
+          continue;
+        }
         const clip = clipAt(project, track.id, t);
         if (!clip) continue;
+        if (clip.kind === 'title') { this.drawTitle(ctx, clip, W, H, t); continue; }
         const media = project.media[clip.mediaId];
         if (!media || media.status === 'error' || media.type === 'audio') continue;
         const slot = this.getSlot(clip, media);
         activeIds.add(clip.id);
         if (!slot.isImage) this.syncMedia(slot, clip, media, track, t);
-        this.drawClip(ctx, slot, clip, W, H);
+        this.drawClip(ctx, slot, clip, media, W, H);
+        this.drawSubtitles(ctx, clip, W, H, t);
       }
     } else {
       // Ohne Canvas trotzdem den Ton synchron halten
-      for (const track of videoTracksBottomUp(project)) {
+      for (const track of tracks) {
         if (track.hidden) continue;
         const clip = clipAt(project, track.id, t);
-        if (!clip) continue;
+        if (!clip || clip.kind === 'title') continue;
         const media = project.media[clip.mediaId];
         if (!media || media.type !== 'video') continue;
         const slot = this.getSlot(clip, media);
@@ -330,7 +490,7 @@ export class PlaybackEngine {
       if (!activeIds.has(id)) {
         this.pauseSlot(slot);
         const clip = project.clips[id];
-        if (clip && !slot.isImage) {
+        if (clip && !slot.isImage && clip.kind !== 'title') {
           const m = slot.el as HTMLMediaElement;
           const media = project.media[clip.mediaId];
           if (media && clip.start > t && clip.start - t < 2) {

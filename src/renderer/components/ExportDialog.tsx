@@ -29,6 +29,8 @@ export function ExportDialog(): React.ReactElement {
   const [quality, setQuality] = useState<ExportQuality>(preset.quality);
   const [hardware, setHardware] = useState(settings.hardwareAccel);
   const [useRange, setUseRange] = useState(false);
+  const [maxSize, setMaxSize] = useState<string>('');
+  const [spherical, setSpherical] = useState(!!project.settings.is360);
   const [outputPath, setOutputPath] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [photosState, setPhotosState] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
@@ -55,10 +57,12 @@ export function ExportDialog(): React.ReactElement {
   }, [project, useRange, rangeIn, rangeOut]);
 
   const estSize = useMemo(() => {
+    const limit = parseFloat(maxSize);
+    if (isFinite(limit) && limit > 0 && codec !== 'prores' && codec !== 'gif') return limit * 1024 * 1024 * 0.96;
     const bpp = codec === 'prores' ? 2.5 : { low: 0.05, medium: 0.08, high: 0.12, max: 0.2 }[quality];
     const bits = width * height * fps * bpp * duration + 192_000 * duration;
     return bits / 8;
-  }, [width, height, fps, quality, codec, duration]);
+  }, [width, height, fps, quality, codec, duration, maxSize]);
 
   const safeName = project.name.replace(/[\\/:*?"<>|]+/g, '_').trim() || 'Video';
 
@@ -70,9 +74,12 @@ export function ExportDialog(): React.ReactElement {
       if (!out) return;
       setOutputPath(out);
     }
+    const maxSizeMB = parseFloat(maxSize);
     const options: ExportOptions = {
       outputPath: out, width, height, fps, format, codec, quality, hardware, audioBitrate: quality === 'low' ? 128 : 192,
       range: useRange && rangeIn !== null && rangeOut !== null ? { start: rangeIn, end: rangeOut } : undefined,
+      maxSizeMB: isFinite(maxSizeMB) && maxSizeMB > 0 ? maxSizeMB : undefined,
+      spherical: spherical && (presetId === 'pano' || Math.abs(width / height - 2) < 0.02),
     };
     setPhotosState('idle');
     const id = await window.panocut.startExport(project, options);
@@ -150,6 +157,21 @@ export function ExportDialog(): React.ReactElement {
                   <>
                     <label />
                     <label className="toggle"><input type="checkbox" checked={useRange} onChange={(e) => setUseRange(e.target.checked)} /> {t.export.range}</label>
+                  </>
+                )}
+                {(codec === 'h264' || codec === 'h265' || codec === 'vp9') && (
+                  <>
+                    <label>{t.exportExtra.maxSize}</label>
+                    <div className="inline">
+                      <input type="number" min={1} step={1} placeholder="–" value={maxSize} onChange={(e) => setMaxSize(e.target.value)} style={{ width: 90 }} /> MB
+                      <span className="hint" style={{ flex: 1 }}>{t.exportExtra.maxSizeHint}</span>
+                    </div>
+                  </>
+                )}
+                {(presetId === 'pano' || Math.abs(width / height - 2) < 0.02) && (format === 'mp4' || format === 'mov') && (
+                  <>
+                    <label />
+                    <label className="toggle"><input type="checkbox" checked={spherical} onChange={(e) => setSpherical(e.target.checked)} /> {t.exportExtra.spherical}</label>
                   </>
                 )}
                 <label>{t.export.outputTo}</label>

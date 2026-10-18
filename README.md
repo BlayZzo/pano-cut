@@ -51,7 +51,10 @@ Außerdem: **Hilfe → Nach Updates suchen …**
 3. **In die Timeline ziehen** – Clips auf die Video- oder Audiospuren ziehen. Sie rasten an anderen Clips und am Abspielkopf ein.
 4. **Schneiden** – Abspielkopf setzen und **S** drücken (oder die Schere). Ränder ziehen zum Trimmen.
 5. **Bearbeiten** – im Inspektor rechts: **Tempo** (Zeitlupe/Zeitraffer), **Rückwärts**, **Lautstärke** mit Ein-/Ausblenden, **Position & Größe**, **Deckkraft**, **Helligkeit/Kontrast/Sättigung/Farbton**.
-6. **Exportieren** – **⌘/Strg + E**: Preset wählen (Handy 9:16, Quadrat, Full HD, 4K, WhatsApp, ProRes, GIF), Qualität einstellen, fertig. Auf dem Mac danach direkt **„In Fotos importieren“** – und von dort per WhatsApp teilen.
+6. **360°** – Insta360-Dateien werden beim Import zusammengesetzt. Clip auswählen und in der Vorschau mit der Maus **umschauen** (Mausrad = zoomen). Im Inspektor die Ansicht wählen (Ausschnitt, ganzes Panorama, Little Planet) und mit **Keyframes** eine Kamerafahrt anlegen.
+7. **Übergänge & Titel** – im Reiter „Übergänge“ einen Übergang auf einen Clip ziehen; im Reiter „Titel“ eine Vorlage auf eine Videospur ziehen und den Text im Inspektor ändern.
+8. **Untertitel** – Clip auswählen → Inspektor → „Untertitel automatisch erzeugen“. Das Sprachmodell wird beim ersten Mal geladen; alles läuft auf deinem Rechner.
+9. **Exportieren** – **⌘/Strg + E**: Preset wählen (Handy 9:16, Quadrat, Full HD, 4K, WhatsApp, ProRes, GIF, 360°), Qualität oder **maximale Dateigröße** einstellen, fertig. Auf dem Mac danach direkt **„In Fotos importieren“** – und von dort per WhatsApp teilen.
 
 **Rückgängig** mit ⌘/Strg + Z, so oft du willst. Alle Tastenkürzel unter **Hilfe → Tastenkürzel**.
 
@@ -62,7 +65,7 @@ Außerdem: **Hilfe → Nach Updates suchen …**
 - **Bilder:** JPG, PNG, WebP, GIF, BMP, TIFF, HEIC, Insta360 `.insp`
 
 > **Blackmagic:** ProRes- und H.264/H.265-Aufnahmen funktionieren. **Blackmagic RAW (.braw)** braucht ein eigenes SDK und ist noch nicht dabei.
-> **Insta360:** `.insv`-Rohdateien werden derzeit mit einer Linse angezeigt; das vollständige Zusammenfügen (Stitching) und die 360°-Neuausrichtung kommen in Version 0.2.
+> **Insta360:** `.insv`- und `.lrv`-Rohdateien werden automatisch zusammengesetzt. Die Naht ist nicht ganz so perfekt wie in Insta360 Studio (dort werden Kalibrierdaten der Kamera benutzt); im Inspektor lässt sich das Linsen-Sichtfeld feinjustieren. Bereits in Insta360 Studio exportierte 360°-Videos (2:1) werden ebenfalls erkannt.
 
 ---
 
@@ -71,9 +74,11 @@ Außerdem: **Hilfe → Nach Updates suchen …**
 | Version | Inhalt |
 |---|---|
 | **0.1** ✅ | Mediathek mit Hover-Vorschau, Timeline (Spuren, Schneiden, Trimmen, Einrasten), Tempo/Zeitlupe/Zeitraffer, Rückwärts, Bild- und Tonbearbeitung, Export-Presets, Fotos-Import (Mac), Auto-Update, Installer/Deinstaller |
-| **0.2** | 360°: Stitching der Insta360-Rohdateien, Neuausrichtung mit Keyframes, Reframing auf 16:9/9:16 · Übergänge · Titel/Text · Stabilisierung · automatische Untertitel |
-| **0.3** | Tracking · Green Screen / Chroma Key · KI-Masken für Personen und Objekte · Freistellen und Überlagern |
-| **0.4** | Effekt- und Animations-Bibliothek · eigene Effekte · Audio-Ducking · Mehrkamera |
+| **0.2** ✅ | 360°: Stitching der Insta360-Rohdateien, Umschauen in der Vorschau, Kamerafahrten mit Keyframes, Little Planet, 360°-Export mit Metadaten · 20 Übergänge · Titel-Vorlagen · Stabilisierung · automatische Untertitel (lokal) · Export mit Größenlimit |
+| **0.3** | KI-Info-Button: Personen, Tiere und Objekte erkennen und tracken · KI-Masken (nachbesserbar) · Green Screen / Chroma Key · Freistellen · Bausteine (Text, Untertitel) an getrackte Objekte heften · kopierte Objekte in einer Projekt-Mediathek, optional mit eigener Cloud (Nextcloud/WebDAV, S3) |
+| **0.4** | Effekt- und Animations-Bibliothek · eigene Effekte · Audio-Ducking · Mehrkamera · Elgato Stream Deck · KI-Bildverbesserung auf Wunsch · Übersetzung von Untertiteln |
+
+Alles läuft lokal auf deinem Rechner – ohne Abo, ohne Cloud-Zwang.
 
 ---
 

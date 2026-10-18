@@ -20,6 +20,7 @@ export const EXPORT_PRESETS: ExportPreset[] = [
   { id: 'whatsapp', name: 'WhatsApp (klein)', description: 'Kleine Datei zum schnellen Teilen – 1280×720', width: 1280, height: 720, fps: 30, format: 'mp4', codec: 'h264', quality: 'medium' },
   { id: 'prores', name: 'ProRes (Weiterbearbeitung)', description: 'Verlustarm für DaVinci / Final Cut – 1920×1080', width: 1920, height: 1080, fps: 30, format: 'mov', codec: 'prores', quality: 'max' },
   { id: 'gif', name: 'GIF', description: 'Kurze Animation – 640×360', width: 640, height: 360, fps: 15, format: 'gif', codec: 'gif', quality: 'medium' },
+  { id: 'pano', name: '360° Panorama (2:1)', description: 'Komplettes Panorama für YouTube/Facebook 360 – 3840×1920', width: 3840, height: 1920, fps: 30, format: 'mp4', codec: 'h265', quality: 'high' },
   { id: 'custom', name: 'Benutzerdefiniert', description: 'Eigene Auflösung, Format und Codec', width: 1920, height: 1080, fps: 30, format: 'mp4', codec: 'h264', quality: 'high' },
 ];
 

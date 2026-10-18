@@ -19,6 +19,11 @@ asarUnpack:
 
 afterPack: build/afterPack.js
 
+# Untertitel-Modul (whisper.cpp), pro System/Architektur in der CI gebaut
+extraResources:
+  - from: resources/whisper/${os}-${arch}
+    to: whisper
+
 publish:
   provider: github
   owner: BlayZzo
@@ -30,7 +35,6 @@ mac:
   electronLanguages: [de, en]
   target:
     - target: dmg
-    - target: zip
   icon: build/icon.png
   identity: null
   hardenedRuntime: false

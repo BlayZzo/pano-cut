@@ -1,6 +1,7 @@
-import React, { useEffect, useRef } from 'react';
-import { formatTime, projectDuration } from '@shared/timeline';
-import { useProject } from '../store/project';
+import React, { useEffect, useRef, useState } from 'react';
+import { clipDuration, formatTime, projectDuration } from '@shared/timeline';
+import { keyframeAt, panoViewAt, upsertKeyframe } from '@shared/pano';
+import { beginTransaction, endTransaction, useProject } from '../store/project';
 import { useUi } from '../store/ui';
 import { engine, playPause } from '../engine/instance';
 import { goEnd, goStart, stepFrames } from '../actions';
@@ -15,6 +16,12 @@ export function Preview(): React.ReactElement {
   const playing = useUi((s) => s.playing);
   const loop = useUi((s) => s.loop);
   const setLoop = useUi((s) => s.setLoop);
+  const selection = useUi((s) => s.selection);
+  const playhead = useUi((s) => s.playhead);
+  const clips = useProject((s) => s.project.clips);
+  const media = useProject((s) => s.project.media);
+  const setPano = useProject((s) => s.setPano);
+  const [dragging, setDragging] = useState(false);
 
   useEffect(() => {
     const c = canvasRef.current;
@@ -27,11 +34,56 @@ export function Preview(): React.ReactElement {
     return () => engine.setCanvas(null);
   }, [settings.width, settings.height]);
 
+  // 360°-Clip unter dem Abspielkopf, der ausgewählt ist → mit der Maus umschauen
+  const panoClip = selection.map((id) => clips[id]).find((c) => c && c.pano && media[c.mediaId]?.info.is360 && playhead >= c.start && playhead < c.start + clipDuration(c));
+
+  const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (!panoClip || e.button !== 0) return;
+    const clip = panoClip;
+    const pano = clip.pano!;
+    const local = Math.max(0, Math.min(clipDuration(clip), playhead - clip.start));
+    const base = keyframeAt(pano, local) ?? (pano.keyframes.length === 1 ? pano.keyframes[0] : { t: local, ...panoViewAt(pano, local) });
+    const startX = e.clientX, startY = e.clientY;
+    const rect = (e.target as HTMLCanvasElement).getBoundingClientRect();
+    const degPerPx = (pano.mode === 'equirect' ? 360 : base.fov) / Math.max(1, rect.width);
+    beginTransaction();
+    setDragging(true);
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+    const move = (ev: PointerEvent) => {
+      const dx = ev.clientX - startX, dy = ev.clientY - startY;
+      const yaw = ((base.yaw - dx * degPerPx + 540) % 360) - 180;
+      const pitch = Math.max(-90, Math.min(90, base.pitch + dy * degPerPx));
+      setPano(clip.id, upsertKeyframe(pano, { ...base, yaw, pitch }));
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      endTransaction();
+      setDragging(false);
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  const onWheel = (e: React.WheelEvent<HTMLCanvasElement>) => {
+    if (!panoClip || panoClip.pano!.mode === 'equirect') return;
+    e.preventDefault();
+    const clip = panoClip;
+    const pano = clip.pano!;
+    const local = Math.max(0, Math.min(clipDuration(clip), playhead - clip.start));
+    const base = keyframeAt(pano, local) ?? (pano.keyframes.length === 1 ? pano.keyframes[0] : { t: local, ...panoViewAt(pano, local) });
+    const min = pano.mode === 'littleplanet' ? 120 : 30;
+    const max = pano.mode === 'littleplanet' ? 320 : 150;
+    const fov = Math.max(min, Math.min(max, base.fov + e.deltaY * 0.05));
+    setPano(clip.id, upsertKeyframe(pano, { ...base, fov }));
+  };
+
   return (
     <section className="preview">
-      <div className="preview-stage">
-        <canvas ref={canvasRef} style={{ aspectRatio: `${settings.width} / ${settings.height}` }} />
+      <div className={`preview-stage${panoClip ? ' pano' : ''}${dragging ? ' dragging' : ''}`}>
+        <canvas ref={canvasRef} style={{ aspectRatio: `${settings.width} / ${settings.height}` }} onPointerDown={onPointerDown} onWheel={onWheel} />
         {!hasClips && <div className="preview-empty">{t.preview.empty}</div>}
+        {panoClip && <div className="preview-badge">360° · ziehen = umschauen · Mausrad = zoomen</div>}
       </div>
       <div className="transport">
         <Timecode />

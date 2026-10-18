@@ -13,7 +13,7 @@ export function NewProjectDialog(): React.ReactElement {
   const preset = PROJECT_PRESETS.find((p) => p.id === presetId) ?? PROJECT_PRESETS[0];
 
   const create = () => {
-    createNewProject(name.trim() || 'Unbenanntes Projekt', preset.width, preset.height, fps);
+    createNewProject(name.trim() || 'Unbenanntes Projekt', preset.width, preset.height, fps, preset.id === 'pano');
     close();
   };
 

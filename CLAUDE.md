@@ -31,10 +31,20 @@ fertige Installer über GitHub Releases.
 
 ## Fahrplan
 
-0.2: 360°-Stitching (.insv, zwei Fisheye-Streams → Equirectangular, FFmpeg `v360`), Neuausrichtung/Keyframes, Reframing;
-Übergänge (`xfade`/`acrossfade`); Titel; Stabilisierung (`vidstabdetect/vidstabtransform`); Untertitel (whisper.cpp).
-0.3: Tracking (OpenCV), Chroma Key (`chromakey`/`colorkey`), KI-Masken (Segmentierung), Freistellen.
-0.4: Effekt-/Animations-Bibliothek, eigene Effekte, Audio-Ducking.
+0.2 ✅: 360° (`stitch.ts`, `panogl.ts` = WebGL-Spiegel von v360, Keyframes via `sendcmd`), Übergänge (xfade auf einem
+Fenster um den Schnitt, Vorschau-Näherung im Canvas), Titel (drawtext / Canvas-Text), Untertitel (whisper.cpp als
+extraResource, Modell-Download nach `userData/models`; Export via ASS/libass), Stabilisierung (vidstab 2-Pass, Proxy-
+Variante für die Vorschau), Export-Größenlimit (2-Pass x264/x265), 360°-Metadaten (`spherical.ts`).
+0.3: „KI-Info“-Button: Personen/Tiere/Objekte erkennen (lokales Detektionsmodell, ONNX Runtime) und über das Video
+tracken; KI-Masken (Segmentierung, z. B. MobileSAM/EfficientSAM per ONNX), nachbesserbar; Chroma Key (`chromakey`/`colorkey`);
+Freistellen; Bausteine an getrackte Objekte heften (Text, Untertitel/Übersetzung, Bilder); freigestellte Objekte
+kopieren und in andere Videos legen; Projekt-Mediathek für kopierte Objekte (lokal pro Projekt) mit optionaler eigener
+Cloud (Nextcloud/WebDAV, S3-kompatibel) – alles ohne Drittanbieter-Abo.
+0.4: Effekt-/Animations-Bibliothek, eigene Effekte, Audio-Ducking, Mehrkamera; Elgato Stream Deck (Plugin/Hotkeys);
+KI-Bildverbesserung („natürlich schön“) nur auf Wunsch; Nachbearbeitung einzelner Clips/Bilder; Übersetzung von
+Untertiteln (lokales Modell). Wenn der Bild-/Objektteil zu groß wird: zweites Programm (wie Photoshop neben Premiere),
+gleiche Codebasis (`src/shared`).
+Leistung: muss auf einem MacBook Air (M-Serie, 2024) flüssig laufen – Proxys, WebGL, Hintergrund-Jobs mit niedriger Priorität.
 
 ## Lokale Prüfung ohne npm
 

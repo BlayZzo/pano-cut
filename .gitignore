@@ -7,3 +7,6 @@ Thumbs.db
 .vscode/
 .idea/
 *.tmp
+wcpp/
+resources/whisper/*/whisper-cli
+resources/whisper/*/whisper-cli.exe

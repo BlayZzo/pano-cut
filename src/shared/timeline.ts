@@ -1,4 +1,4 @@
-import type { Clip, ColorGrade, MediaItem, Project, Track, Transform } from './types';
+import type { Clip, ColorGrade, MediaItem, Project, TitleStyle, Track, Transform } from './types';
 
 export const MIN_CLIP_DURATION = 0.04;
 export const DEFAULT_IMAGE_DURATION = 5;
@@ -96,6 +96,38 @@ export function createClip(media: MediaItem, trackId: string, start: number): Cl
     transform: defaultTransform(),
     color: defaultColor(),
   };
+}
+
+export const DEFAULT_TITLE_DURATION = 4;
+
+export function createTitleClip(trackId: string, start: number, title: TitleStyle, duration = DEFAULT_TITLE_DURATION): Clip {
+  return {
+    id: makeId('clip'),
+    trackId,
+    mediaId: '',
+    name: title.text.split('\n')[0] || 'Titel',
+    start,
+    in: 0,
+    out: duration,
+    speed: 1,
+    reverse: false,
+    volume: 1,
+    muted: false,
+    fadeIn: 0,
+    fadeOut: 0,
+    opacity: 1,
+    fit: 'contain',
+    transform: defaultTransform(),
+    color: defaultColor(),
+    kind: 'title',
+    title,
+  };
+}
+
+/** Maximale Quelllänge eines Clips (Bilder und Titel sind beliebig lang). */
+export function sourceLimit(clip: Clip, media: MediaItem | undefined): number {
+  if (clip.kind === 'title' || media?.type === 'image') return Number.POSITIVE_INFINITY;
+  return media?.info.duration ?? clip.out;
 }
 
 export function createTrack(kind: Track['kind'], index: number): Track {

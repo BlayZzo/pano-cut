@@ -13,6 +13,8 @@ import { ExportJob } from './exporter';
 import { killAll } from './ffmpeg';
 import { buildMenu } from './menu';
 import { checkForUpdates, downloadUpdate, initUpdater, installUpdate } from './updater';
+import { downloadModel, transcribe, whisperStatus } from './whisper';
+import type { WhisperModel, WhisperProgress } from '@shared/types';
 
 log.transports.file.level = 'info';
 log.initialize();
@@ -202,7 +204,7 @@ ipcMain.handle(IPC.importMedia, async (_e, paths: string[]) => {
 
 // Vorbereitung läuft nacheinander (Warteschlange), damit der Rechner nicht überlastet wird.
 let prepareQueue: Promise<void> = Promise.resolve();
-ipcMain.handle(IPC.prepareMedia, (_e, item: MediaItem, options?: { reversed?: boolean }) => {
+ipcMain.handle(IPC.prepareMedia, (_e, item: MediaItem, options?: { reversed?: boolean; stabilized?: number }) => {
   const run = async () => {
     const settings = loadSettings();
     await prepareMedia(item, (updated) => sendToWindow(IPC.mediaUpdate, updated), settings.proxyHeight, options);
@@ -210,6 +212,27 @@ ipcMain.handle(IPC.prepareMedia, (_e, item: MediaItem, options?: { reversed?: bo
   prepareQueue = prepareQueue.then(run, run);
   return prepareQueue;
 });
+
+// ---- Untertitel ----
+
+let transcribeController: AbortController | null = null;
+ipcMain.handle(IPC.whisperStatus, () => whisperStatus());
+ipcMain.handle(IPC.downloadWhisperModel, async (_e, model: WhisperModel) => {
+  await downloadModel(model, (p: WhisperProgress) => sendToWindow(IPC.whisperProgress, p));
+});
+ipcMain.handle(IPC.transcribe, async (_e, req: { mediaPath: string; start: number; duration: number; language: string; model: WhisperModel; maxChars: number }) => {
+  transcribeController?.abort();
+  transcribeController = new AbortController();
+  try {
+    return await transcribe(req, (p) => sendToWindow(IPC.whisperProgress, p), transcribeController.signal);
+  } catch (err) {
+    sendToWindow(IPC.whisperProgress, { phase: 'error', percent: 0, message: (err as Error).message } satisfies WhisperProgress);
+    throw err;
+  } finally {
+    transcribeController = null;
+  }
+});
+ipcMain.handle(IPC.cancelTranscribe, () => { transcribeController?.abort(); });
 
 // ---- Projekt ----
 

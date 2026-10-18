@@ -34,6 +34,12 @@ const api: PanoCutApi = {
   prepareMedia: (item, options) => ipcRenderer.invoke(IPC.prepareMedia, item, options),
   onMediaUpdate: subscribe(IPC.mediaUpdate),
 
+  whisperStatus: () => ipcRenderer.invoke(IPC.whisperStatus),
+  downloadWhisperModel: (m) => ipcRenderer.invoke(IPC.downloadWhisperModel, m),
+  transcribe: (req) => ipcRenderer.invoke(IPC.transcribe, req),
+  cancelTranscribe: () => ipcRenderer.invoke(IPC.cancelTranscribe),
+  onWhisperProgress: subscribe(IPC.whisperProgress),
+
   newProjectDialog: () => ipcRenderer.invoke(IPC.newProjectDialog),
   saveProject: (project, p) => ipcRenderer.invoke(IPC.saveProject, project, p),
   openProject: () => ipcRenderer.invoke(IPC.openProject),

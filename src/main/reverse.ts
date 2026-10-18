@@ -12,6 +12,7 @@ export interface ReverseOptions {
   start?: number;         // Quell-Startpunkt (Sekunden)
   duration?: number;      // Länge (Sekunden)
   videoFilter?: string;   // optionaler Filter vor dem Umkehren (z. B. Skalierung)
+  complexInputs?: string[]; // Eingangs-Labels, wenn der Filter mehrere Streams braucht (360°-Stitching)
   fps?: number;
   hasAudio: boolean;
   width: number;          // ungefähre Bildgröße zur Wahl der Segmentlänge
@@ -35,11 +36,15 @@ export async function reverseVideo(input: string, output: string, opts: ReverseO
     const splitArgs: string[] = [];
     if (opts.start !== undefined) splitArgs.push('-ss', opts.start.toFixed(4));
     if (opts.duration !== undefined) splitArgs.push('-t', opts.duration.toFixed(4));
-    splitArgs.push('-i', input, '-map', '0:v:0');
-    if (opts.hasAudio) splitArgs.push('-map', '0:a:0?');
+    splitArgs.push('-i', input);
     const vf = [opts.videoFilter, `fps=${fps}`].filter(Boolean).join(',');
+    if (opts.complexInputs && opts.complexInputs.length > 1) {
+      splitArgs.push('-filter_complex', `${opts.complexInputs.join('')}${vf}[v]`, '-map', '[v]');
+    } else {
+      splitArgs.push('-map', '0:v:0', '-vf', vf);
+    }
+    if (opts.hasAudio) splitArgs.push('-map', '0:a:0?');
     splitArgs.push(
-      '-vf', vf,
       '-c:v', 'libx264', '-preset', 'faster', '-crf', String(crf), '-pix_fmt', 'yuv420p',
       '-force_key_frames', `expr:gte(t,n_forced*${segSec.toFixed(3)})`,
       '-c:a', 'pcm_s16le',

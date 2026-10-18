@@ -46,7 +46,7 @@ jobs:
         run: |
           v="${{ steps.decide.outputs.version }}"
           gh release view "v$v" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
-            gh release create "v$v" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "PanoCut $v" --notes-file RELEASE_NOTES.md
+            gh release create "v$v" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "PanoCut $v" --notes-file RELEASE_NOTES.md --draft
       # Titel/Beschreibung eines bestehenden Releases nachtragen, falls leer
       - if: steps.decide.outputs.publish != 'true'
         env:
@@ -69,10 +69,8 @@ jobs:
         include:
           - os: macos-14
             name: macOS (Apple Silicon + Intel)
-            args: --mac --arm64 --x64
           - os: windows-latest
             name: Windows
-            args: --win --x64
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -80,11 +78,57 @@ jobs:
           node-version: 22
       - run: npm install --no-audit --no-fund
       - run: npm run build
-      - name: Installer bauen und veröffentlichen
+
+      # Untertitel-Modul (whisper.cpp) für das jeweilige System bauen. Schlägt der Build fehl,
+      # wird der Installer trotzdem gebaut – dann ohne automatische Untertitel.
+      - name: whisper.cpp bauen (macOS)
+        if: runner.os == 'macOS'
+        continue-on-error: true
+        run: |
+          mkdir -p resources/whisper/mac-arm64 resources/whisper/mac-x64
+          git clone --depth 1 --branch v1.7.4 https://github.com/ggerganov/whisper.cpp wcpp
+          cmake -S wcpp -B wcpp/build-arm64 -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF -DCMAKE_OSX_ARCHITECTURES=arm64 -DGGML_NATIVE=OFF -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON
+          cmake --build wcpp/build-arm64 --config Release -j 4 --target whisper-cli
+          cp wcpp/build-arm64/bin/whisper-cli resources/whisper/mac-arm64/
+          cmake -S wcpp -B wcpp/build-x64 -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF -DCMAKE_OSX_ARCHITECTURES=x86_64 -DGGML_NATIVE=OFF -DGGML_METAL=OFF -DGGML_ACCELERATE=ON
+          cmake --build wcpp/build-x64 --config Release -j 4 --target whisper-cli
+          cp wcpp/build-x64/bin/whisper-cli resources/whisper/mac-x64/
+          ls -la resources/whisper/*
+      - name: whisper.cpp bauen (Windows)
+        if: runner.os == 'Windows'
+        continue-on-error: true
+        shell: bash
+        run: |
+          mkdir -p resources/whisper/win-x64
+          git clone --depth 1 --branch v1.7.4 https://github.com/ggerganov/whisper.cpp wcpp
+          cmake -S wcpp -B wcpp/build -DBUILD_SHARED_LIBS=OFF -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF -DGGML_NATIVE=OFF
+          cmake --build wcpp/build --config Release --target whisper-cli -j 4
+          cp wcpp/build/bin/Release/whisper-cli.exe resources/whisper/win-x64/
+          ls -la resources/whisper/win-x64
+
+      - name: Installer bauen und veröffentlichen (Windows)
+        if: runner.os == 'Windows'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --win --x64 --publish always
+
+      # Mac: Apple Silicon und Intel getrennt bauen, damit jede Variante das passende FFmpeg bekommt
+      - name: Installer bauen und veröffentlichen (macOS Apple Silicon)
+        if: runner.os == 'macOS'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: npx electron-builder ${{ matrix.args }} --publish always
+        run: |
+          npm_config_arch=arm64 node node_modules/ffmpeg-static/install.js
+          npx electron-builder --mac --arm64 --publish always
+      - name: Installer bauen und veröffentlichen (macOS Intel)
+        if: runner.os == 'macOS'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          npm_config_arch=x64 node node_modules/ffmpeg-static/install.js
+          npx electron-builder --mac --x64 --publish always
       - uses: actions/upload-artifact@v4
         with:
           name: panocut-${{ matrix.os }}
@@ -94,3 +138,19 @@ jobs:
             release/*.zip
             release/*.yml
           if-no-files-found: ignore
+
+  # Erst wenn beide Installer hochgeladen sind, wird das Release sichtbar – so bekommt
+  # niemand ein Update angeboten, das noch nicht vollständig ist.
+  publish:
+    name: Release veröffentlichen
+    needs: [check, build]
+    if: needs.check.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          v="${{ needs.check.outputs.version }}"
+          gh release view "v$v" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name'
+          gh release edit "v$v" --repo "$GITHUB_REPOSITORY" --draft=false --latest

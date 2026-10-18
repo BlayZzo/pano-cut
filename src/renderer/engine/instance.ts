@@ -14,6 +14,9 @@ engine.onEnded = () => useUi.getState().setPlaying(false);
 engine.onNeedReversed = (media) => {
   void window.panocut.prepareMedia(media, { reversed: true });
 };
+engine.onNeedStabilized = (media, strength) => {
+  void window.panocut.prepareMedia(media, { stabilized: strength });
+};
 
 useUi.subscribe((s, prev) => {
   if (s.loop !== prev.loop) engine.loop = s.loop;

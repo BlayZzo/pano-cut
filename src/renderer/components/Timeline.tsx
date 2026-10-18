@@ -1,13 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Clip, MediaItem, Project, Track } from '@shared/types';
-import { clipDuration, clipEnd, DEFAULT_IMAGE_DURATION, formatTime, MIN_CLIP_DURATION, overlaps, projectDuration } from '@shared/timeline';
+import { clipDuration, clipEnd, DEFAULT_IMAGE_DURATION, DEFAULT_TITLE_DURATION, formatTime, MIN_CLIP_DURATION, overlaps, projectDuration, sourceLimit } from '@shared/timeline';
 import { useProject } from '../store/project';
 import { useUi, type DragState } from '../store/ui';
 import { engine, stopPlayback } from '../engine/instance';
-import { deleteSelection, duplicateSelection, splitAtPlayhead, zoomBy, zoomToFit } from '../actions';
+import { addTitleToTimeline, applyTransitionToClip, deleteSelection, duplicateSelection, splitAtPlayhead, zoomBy, zoomToFit } from '../actions';
+import type { TransitionType } from '@shared/types';
+import { TITLE_TEMPLATES } from '@shared/pano';
 import { t } from '../i18n/de';
 import { cssUrl } from '../utils/dom';
-import { DRAG_MIME, getDraggingMedia } from '../utils/dnd';
+import { DRAG_MIME, DRAG_TITLE, DRAG_TRANSITION, getDragging, getDraggingMedia } from '../utils/dnd';
 import { ContextMenu, type MenuEntry } from './ContextMenu';
 import { IconEye, IconEyeOff, IconFit, IconLock, IconMagnet, IconMute, IconPlus, IconScissors, IconTrash, IconUnlock, IconVolume, IconZoomIn, IconZoomOut } from './Icons';
 
@@ -79,7 +81,7 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
   const scrollRef = useRef<HTMLDivElement>(null);
   const headersRef = useRef<HTMLDivElement>(null);
   const [snapLine, setSnapLine] = useState<number | null>(null);
-  const [dropPreview, setDropPreview] = useState<{ trackId: string; time: number; media: MediaItem } | null>(null);
+  const [dropPreview, setDropPreview] = useState<{ trackId: string; time: number; media: MediaItem | null; title?: string; transitionClip?: string } | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; entries: MenuEntry[] } | null>(null);
 
   const offsets = useMemo(() => trackOffsets(project.tracks), [project.tracks]);
@@ -218,7 +220,7 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
         }
         // Grenzen: Mindestlänge und Quelllänge
         const media = project.media[clip.mediaId];
-        const srcMax = media?.type === 'image' ? Number.POSITIVE_INFINITY : (media?.info.duration ?? clip.out);
+        const srcMax = sourceLimit(clip, media);
         if (side === 'start') {
           const maxStart = clipEnd(clip) - MIN_CLIP_DURATION;
           const minStartSrc = clip.reverse ? clip.start - ((srcMax - clip.out) / clip.speed) : clip.start - clip.in / clip.speed;
@@ -258,30 +260,55 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
 
   // ---------- Drop aus der Mediathek ----------
   const onDragOver = (e: React.DragEvent) => {
-    if (!e.dataTransfer.types.includes(DRAG_MIME)) return;
+    const types = e.dataTransfer.types;
+    if (!types.includes(DRAG_MIME) && !types.includes(DRAG_TITLE) && !types.includes(DRAG_TRANSITION)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
     const track = trackAtClientY(e.clientY);
     if (!track || track.locked) { setDropPreview(null); return; }
-    // getData ist in dragover in Chromium leer – die Medien-ID kommt aus dem Drag-Hilfsmodul
-    const id = getDraggingMedia();
-    const m = id ? project.media[id] : undefined;
+    // getData ist in dragover in Chromium leer – die Daten kommen aus dem Drag-Hilfsmodul
+    const payload = getDragging();
+    if (!payload) return;
+    let time = timeAtClientX(e.clientX);
+    if (payload.kind === 'transition') {
+      const target = Object.values(project.clips).find((c) => c.trackId === track.id && time >= c.start && time < clipEnd(c) && c.kind !== 'title');
+      setDropPreview(target ? { trackId: track.id, time, media: null, transitionClip: target.id } : null);
+      return;
+    }
+    if (useUi.getState().snapping) time = snapValue(time, snapTargets(project, new Set(), useUi.getState().playhead), SNAP_PX / zoom).value;
+    if (payload.kind === 'title') {
+      if (track.kind !== 'video') { setDropPreview(null); return; }
+      setDropPreview({ trackId: track.id, time, media: null, title: payload.templateId });
+      return;
+    }
+    const m = project.media[payload.id];
     if (!m) return;
     if ((track.kind === 'audio' && m.type === 'image') || (track.kind === 'video' && m.type === 'audio')) { setDropPreview(null); return; }
-    let time = timeAtClientX(e.clientX);
-    if (useUi.getState().snapping) time = snapValue(time, snapTargets(project, new Set(), useUi.getState().playhead), SNAP_PX / zoom).value;
     setDropPreview({ trackId: track.id, time, media: m });
   };
   const onDrop = (e: React.DragEvent) => {
-    const id = e.dataTransfer.getData(DRAG_MIME) || getDraggingMedia();
-    if (!id) return;
+    const payload = getDragging();
+    const mediaId = e.dataTransfer.getData(DRAG_MIME) || getDraggingMedia();
+    const titleId = e.dataTransfer.getData(DRAG_TITLE) || (payload?.kind === 'title' ? payload.templateId : '');
+    const trType = e.dataTransfer.getData(DRAG_TRANSITION) || (payload?.kind === 'transition' ? payload.type : '');
+    if (!mediaId && !titleId && !trType) return;
     e.preventDefault();
     const preview = dropPreview;
     setDropPreview(null);
     const track = trackAtClientY(e.clientY);
     if (!track) return;
     const time = preview?.time ?? timeAtClientX(e.clientX);
-    const clip = addClip(id, track.id, time);
+    if (trType) {
+      const target = preview?.transitionClip ?? Object.values(project.clips).find((c) => c.trackId === track.id && time >= c.start && time < clipEnd(c))?.id;
+      if (target) applyTransitionToClip(target, trType as TransitionType);
+      return;
+    }
+    if (titleId) {
+      addTitleToTimeline(titleId, time, track.id);
+      return;
+    }
+    if (!mediaId) return;
+    const clip = addClip(mediaId, track.id, time);
     if (clip) select([clip.id]);
   };
 
@@ -430,7 +457,7 @@ interface LaneProps {
   zoom: number;
   selection: string[];
   drag: DragState | null;
-  dropPreview: { trackId: string; time: number; media: MediaItem } | null;
+  dropPreview: { trackId: string; time: number; media: MediaItem | null; title?: string; transitionClip?: string } | null;
   onClipPointerDown: (e: React.PointerEvent, clip: Clip, kind: DragState['kind']) => void;
   onClipContextMenu: (clip: Clip, x: number, y: number) => void;
 }
@@ -450,7 +477,7 @@ const Lane = React.memo(function Lane({ track, top, height, project, zoom, selec
             clip={clip}
             media={project.media[clip.mediaId]}
             zoom={zoom}
-            selected={selection.includes(clip.id)}
+            selected={selection.includes(clip.id) || dropPreview?.transitionClip === clip.id}
             drag={inDrag}
             movedAway={!!inDrag && inDrag.kind === 'move' && !!inDrag.trackId && inDrag.trackId !== track.id && !inDrag.copy}
             onPointerDown={onClipPointerDown}
@@ -463,16 +490,17 @@ const Lane = React.memo(function Lane({ track, top, height, project, zoom, selec
           <div className="clip-label">{clip.name}</div>
         </div>
       ))}
-      {dropPreview && (
-        <div className="clip ghost" style={{ left: dropPreview.time * zoom, width: (dropPreview.media.type === 'image' ? DEFAULT_IMAGE_DURATION : dropPreview.media.info.duration) * zoom }}>
-          <div className="clip-label">{dropPreview.media.name}</div>
+      {dropPreview && !dropPreview.transitionClip && (
+        <div className={`clip ghost${dropPreview.title ? ' title' : ''}`} style={{ left: dropPreview.time * zoom, width: (dropPreview.title ? DEFAULT_TITLE_DURATION : dropPreview.media ? (dropPreview.media.type === 'image' ? DEFAULT_IMAGE_DURATION : dropPreview.media.info.duration) : 1) * zoom }}>
+          <div className="clip-label">{dropPreview.title ? (TITLE_TEMPLATES.find((x) => x.id === dropPreview.title)?.name ?? 'Titel') : dropPreview.media?.name}</div>
         </div>
       )}
     </div>
   );
 });
 
-function clipClass(media: MediaItem | undefined): string {
+function clipClass(media: MediaItem | undefined, clip?: Clip): string {
+  if (clip?.kind === 'title') return 'title';
   if (!media) return '';
   return media.type === 'audio' ? 'audio' : media.type === 'image' ? 'image' : '';
 }
@@ -519,20 +547,26 @@ const TimelineClip = React.memo(function TimelineClip({ clip, media, zoom, selec
   if (clip.speed !== 1) tags.push(`${clip.speed < 1 ? clip.speed.toFixed(2).replace(/0+$/, '').replace(/\.$/, '') : Math.round(clip.speed * 100) / 100}×`);
   if (clip.reverse) tags.push('◀');
   if (clip.muted) tags.push('🔇');
+  if (clip.stabilize?.enabled) tags.push('⟲');
+  if (clip.subtitles?.enabled && clip.subtitles.segments.length) tags.push('CC');
 
   return (
     <div
-      className={`clip ${clipClass(media)}${selected ? ' selected' : ''}${drag ? ' dragging' : ''}${drag && !drag.valid ? ' invalid' : ''}`}
+      className={`clip ${clipClass(media, clip)}${selected ? ' selected' : ''}${drag ? ' dragging' : ''}${drag && !drag.valid ? ' invalid' : ''}`}
       style={{ left, width, visibility: movedAway ? 'hidden' : undefined }}
       onPointerDown={(e) => onPointerDown(e, clip, 'move')}
       onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); onContextMenu(clip, e.clientX, e.clientY); }}
       title={clip.name}
     >
       <div className="clip-label">
-        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{clip.name}</span>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{clip.kind === 'title' ? 'T' : clip.name}</span>
         {tags.map((tg, i) => <span className="tag" key={i}>{tg}</span>)}
       </div>
-      <div className={media?.type === 'audio' ? 'clip-wave' : 'clip-thumbs'} style={strip} />
+      {clip.kind === 'title'
+        ? <div className="clip-text">{clip.title?.text}</div>
+        : <div className={media?.type === 'audio' ? 'clip-wave' : 'clip-thumbs'} style={strip} />}
+      {clip.transition && <div className="transition-mark" title="Übergang" />}
+      {media?.info.is360 && clip.pano && <div className="pano-mark">360° {clip.pano.mode === 'flat' ? 'Ausschnitt' : clip.pano.mode === 'equirect' ? 'Panorama' : 'Planet'}</div>}
       <div className="handle l" onPointerDown={(e) => onPointerDown(e, clip, 'trimStart')} />
       <div className="handle r" onPointerDown={(e) => onPointerDown(e, clip, 'trimEnd')} />
     </div>

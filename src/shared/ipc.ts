@@ -1,4 +1,4 @@
-import type { AppInfo, ExportOptions, ExportProgress, MediaItem, Project, ProjectFile, Settings, UpdateStatus } from './types';
+import type { AppInfo, ExportOptions, ExportProgress, MediaItem, Project, ProjectFile, Settings, SubtitleSegment, UpdateStatus, WhisperModel, WhisperProgress } from './types';
 
 /** Die API, die das Preload-Skript der Oberfläche als `window.panocut` bereitstellt. */
 export interface PanoCutApi {
@@ -17,8 +17,15 @@ export interface PanoCutApi {
   // Medien
   selectMediaFiles(): Promise<string[]>;
   importMedia(paths: string[]): Promise<MediaItem[]>;
-  prepareMedia(item: MediaItem, options?: { reversed?: boolean }): Promise<void>;
+  prepareMedia(item: MediaItem, options?: { reversed?: boolean; stabilized?: number }): Promise<void>;
   onMediaUpdate(cb: (item: MediaItem) => void): () => void;
+
+  // Untertitel
+  whisperStatus(): Promise<{ available: boolean; models: Record<WhisperModel, boolean> }>;
+  downloadWhisperModel(model: WhisperModel): Promise<void>;
+  transcribe(req: { mediaPath: string; start: number; duration: number; language: string; model: WhisperModel; maxChars: number }): Promise<SubtitleSegment[]>;
+  cancelTranscribe(): Promise<void>;
+  onWhisperProgress(cb: (p: WhisperProgress) => void): () => void;
 
   // Projekt
   newProjectDialog(): Promise<boolean>;
@@ -62,6 +69,12 @@ export const IPC = {
   openProject: 'project:open',
   loadProject: 'project:load',
   menuAction: 'menu:action',
+
+  whisperStatus: 'subs:status',
+  downloadWhisperModel: 'subs:download',
+  transcribe: 'subs:transcribe',
+  cancelTranscribe: 'subs:cancel',
+  whisperProgress: 'subs:progress',
 
   selectExportPath: 'export:selectPath',
   startExport: 'export:start',

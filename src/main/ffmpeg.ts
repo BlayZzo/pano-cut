@@ -206,3 +206,24 @@ export async function availableEncoders(): Promise<Set<string>> {
     child.on('error', () => resolve(new Set()));
   });
 }
+
+/** Liste der verfügbaren Filter der mitgelieferten FFmpeg-Version. */
+let filterCache: Set<string> | null = null;
+export async function availableFilters(): Promise<Set<string>> {
+  if (filterCache) return filterCache;
+  return new Promise((resolve) => {
+    const child = spawn(getFfmpegPath(), ['-hide_banner', '-filters'], { windowsHide: true });
+    let out = '';
+    child.stdout.on('data', (d) => (out += d.toString()));
+    child.on('close', () => {
+      const set = new Set<string>();
+      for (const line of out.split('\n')) {
+        const m = line.match(/^\s*[TSC.]{3}\s+([a-zA-Z0-9_]+)\s+[A-Z|N]+->/);
+        if (m) set.add(m[1]);
+      }
+      filterCache = set;
+      resolve(set);
+    });
+    child.on('error', () => resolve(new Set()));
+  });
+}

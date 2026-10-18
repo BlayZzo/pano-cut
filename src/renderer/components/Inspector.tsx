@@ -1,10 +1,13 @@
-import React, { useState } from 'react';
+import React from 'react';
 import type { Clip, ColorGrade, FitMode, Transform } from '@shared/types';
 import { clipDuration, defaultColor, defaultTransform, formatDuration, formatTime } from '@shared/timeline';
 import { beginTransaction, endTransaction, useProject } from '../store/project';
 import { useUi } from '../store/ui';
 import { fmt, t } from '../i18n/de';
-import { IconChevron } from './Icons';
+import { Section, Slider } from './InspectorBits';
+import { InspectorPano } from './InspectorPano';
+import { InspectorTitle } from './InspectorTitle';
+import { InspectorStabilize, InspectorSubtitles, InspectorTransition } from './InspectorExtras';
 
 export function Inspector(): React.ReactElement {
   const selection = useUi((s) => s.selection);
@@ -28,68 +31,19 @@ export function Inspector(): React.ReactElement {
   );
 }
 
-function Section({ title, children, defaultOpen = true, onReset }: { title: string; children: React.ReactNode; defaultOpen?: boolean; onReset?: () => void }): React.ReactElement {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="section">
-      <div className="section-title" onClick={() => setOpen(!open)}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><IconChevron open={open} /> {title}</span>
-        {onReset && open && <button className="btn sm ghost" onClick={(e) => { e.stopPropagation(); onReset(); }}>{t.inspector.reset}</button>}
-      </div>
-      {open && <div className="section-body">{children}</div>}
-    </div>
-  );
-}
-
-interface SliderProps {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  unit?: string;
-  display?: (v: number) => string;
-  onChange: (v: number) => void;
-}
-
-function Slider({ label, value, min, max, step, unit = '', display, onChange }: SliderProps): React.ReactElement {
-  const shown = display ? display(value) : `${Number.isInteger(step) ? value : value.toFixed(2)}${unit}`;
-  return (
-    <div className="field">
-      <label title={label}>{label}</label>
-      <input
-        type="range" min={min} max={max} step={step} value={value}
-        onPointerDown={beginTransaction}
-        onPointerUp={endTransaction}
-        onKeyDown={beginTransaction}
-        onKeyUp={endTransaction}
-        onChange={(e) => onChange(parseFloat(e.target.value))}
-        onDoubleClick={() => onChange(min < 0 && max > 0 ? 0 : (min === 0 && max >= 1 && step < 1 ? 1 : min))}
-      />
-      <input
-        type="number" className="num" value={Number.isInteger(step) ? value : Math.round(value * 100) / 100} min={min} max={max} step={step}
-        onChange={(e) => { const v = parseFloat(e.target.value); if (!isNaN(v)) onChange(Math.min(max, Math.max(min, v))); }}
-        title={shown}
-      />
-    </div>
-  );
-}
-
 function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count: number }): React.ReactElement {
   const updateClips = useProject((s) => s.updateClips);
   const updateClip = useProject((s) => s.updateClip);
   const setClipSpeed = useProject((s) => s.setSpeed);
   const media = useProject((s) => s.project.media[clip.mediaId]);
   const fps = useProject((s) => s.project.settings.fps);
+  const isTitle = clip.kind === 'title';
   const isAudioOnly = media?.type === 'audio';
   const isImage = media?.type === 'image';
 
   const patch = (p: Partial<Clip>) => updateClips(ids, p);
   const patchTransform = (p: Partial<Transform>) => patch({ transform: { ...clip.transform, ...p } });
   const patchColor = (p: Partial<ColorGrade>) => patch({ color: { ...clip.color, ...p } });
-
-  // Beim Ändern des Tempos bleibt der Quellbereich gleich; die Timeline-Länge ändert sich
-  // (und wird notfalls gekürzt, damit der nächste Clip nicht überlappt).
   const setSpeed = (speed: number) => setClipSpeed(ids, speed);
 
   return (
@@ -101,12 +55,16 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
         </div>
         <dl className="kv">
           <dt>{t.inspector.duration}</dt><dd>{formatTime(clipDuration(clip), fps)} ({formatDuration(clipDuration(clip))})</dd>
-          <dt>{t.inspector.source}</dt><dd title={media?.path}>{media?.name ?? '–'}</dd>
+          {!isTitle && <><dt>{t.inspector.source}</dt><dd title={media?.path}>{media?.name ?? '–'}</dd></>}
           {media?.info.width ? <><dt>Größe</dt><dd>{media.info.width}×{media.info.height}{media.info.fps ? ` · ${Math.round(media.info.fps * 100) / 100} fps` : ''}{media.info.is360 ? ' · 360°' : ''}</dd></> : null}
         </dl>
       </Section>
 
-      {!isImage && (
+      {isTitle && <InspectorTitle clip={clip} />}
+      {!isTitle && media?.info.is360 && media.type === 'video' && <InspectorPano clip={clip} media={media} />}
+      {!isTitle && !isAudioOnly && <InspectorTransition clip={clip} />}
+
+      {!isImage && !isTitle && (
         <Section title={t.inspector.sectionSpeed} onReset={() => { beginTransaction(); setSpeed(1); patch({ reverse: false }); endTransaction(); }}>
           <div className="speed-presets">
             <button className={`chip${clip.speed === 0.25 ? ' active' : ''}`} onClick={() => setSpeed(0.25)}>¼×</button>
@@ -125,7 +83,7 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
         </Section>
       )}
 
-      {!isImage && media?.info.hasAudio && (
+      {!isImage && !isTitle && media?.info.hasAudio && (
         <Section title={t.inspector.sectionAudio} onReset={() => patch({ volume: 1, muted: false, fadeIn: 0, fadeOut: 0 })}>
           <Slider label={t.inspector.volume} value={clip.volume} min={0} max={2} step={0.01} display={(v) => `${Math.round(v * 100)} %`} onChange={(v) => patch({ volume: v })} />
           <label className="toggle">
@@ -137,7 +95,10 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
         </Section>
       )}
 
-      {!isAudioOnly && (
+      {!isTitle && media?.type === 'video' && <InspectorStabilize clip={clip} media={media} />}
+      {!isTitle && media?.type === 'video' && media.info.hasAudio && <InspectorSubtitles clip={clip} media={media} />}
+
+      {!isAudioOnly && !isTitle && (
         <Section title={t.inspector.sectionTransform} onReset={() => patch({ transform: defaultTransform(), opacity: 1, fit: 'contain' })}>
           <div className="field">
             <label>{t.inspector.fit}</label>
@@ -155,7 +116,13 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
         </Section>
       )}
 
-      {!isAudioOnly && (
+      {isTitle && (
+        <Section title={t.inspector.sectionTransform} defaultOpen={false} onReset={() => patch({ opacity: 1 })}>
+          <Slider label={t.inspector.opacity} value={clip.opacity} min={0} max={1} step={0.01} display={(v) => `${Math.round(v * 100)} %`} onChange={(v) => patch({ opacity: v })} />
+        </Section>
+      )}
+
+      {!isAudioOnly && !isTitle && (
         <Section title={t.inspector.sectionColor} onReset={() => patch({ color: defaultColor() })}>
           <Slider label={t.inspector.brightness} value={clip.color.brightness} min={-1} max={1} step={0.01} onChange={(v) => patchColor({ brightness: v })} />
           <Slider label={t.inspector.contrast} value={clip.color.contrast} min={0} max={2} step={0.01} onChange={(v) => patchColor({ contrast: v })} />

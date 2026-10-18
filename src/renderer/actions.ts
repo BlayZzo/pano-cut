@@ -1,6 +1,7 @@
 // Zentrale Aktionen – von Menü, Tastenkürzeln und Buttons gemeinsam genutzt.
-import type { MediaItem, Project } from '@shared/types';
+import type { MediaItem, Project, TransitionType } from '@shared/types';
 import { clipEnd, clipsOnTrack, projectDuration } from '@shared/timeline';
+import { TITLE_TEMPLATES, defaultTitle, defaultTransition } from '@shared/pano';
 import { clearHistory, isDirty, redo, setDirty, undo, untracked, useProject } from './store/project';
 import { useUi } from './store/ui';
 import { engine, seekTo, stopPlayback } from './engine/instance';
@@ -53,6 +54,34 @@ export function addMediaToTimeline(media: MediaItem, at?: number): void {
   }
   const clip = store.addClip(media.id, track.id, start);
   if (clip) useUi.getState().select([clip.id]);
+}
+
+/** Titel-Vorlage als neuen Clip auf die oberste freie Videospur legen. */
+export function addTitleToTimeline(templateId: string, at?: number, trackId?: string): void {
+  const store = useProject.getState();
+  const project = store.project;
+  const tpl = TITLE_TEMPLATES.find((x) => x.id === templateId) ?? TITLE_TEMPLATES[0];
+  const videoTracks = project.tracks.filter((tr) => tr.kind === 'video' && !tr.locked);
+  const track = trackId ? project.tracks.find((tr) => tr.id === trackId) : videoTracks[0];
+  if (!track) return;
+  const title = { ...defaultTitle(), ...tpl.style };
+  const clip = store.addTitleClip(track.id, at ?? useUi.getState().playhead, title);
+  if (clip) useUi.getState().select([clip.id]);
+}
+
+/** Übergang auf einen Clip anwenden (Übergang vom vorherigen Clip in diesen). */
+export function applyTransitionToClip(clipId: string, type: TransitionType): boolean {
+  const store = useProject.getState();
+  const clip = store.project.clips[clipId];
+  if (!clip) return false;
+  const prev = clipsOnTrack(store.project, clip.trackId).find((c) => c.id !== clip.id && Math.abs(clipEnd(c) - clip.start) < 1 / 30);
+  if (!prev) {
+    useUi.getState().toast(t.transition.needsNeighbor, 'error');
+    return false;
+  }
+  store.setTransition(clipId, { ...(clip.transition ?? defaultTransition()), type });
+  useUi.getState().select([clipId]);
+  return true;
 }
 
 // ---------- Projekt ----------
@@ -108,9 +137,10 @@ export async function newProjectFlow(): Promise<void> {
   useUi.getState().openDialog('newProject');
 }
 
-export function createNewProject(name: string, width: number, height: number, fps: number): void {
+export function createNewProject(name: string, width: number, height: number, fps: number, is360 = false): void {
   stopPlayback();
   useProject.getState().newProject(name, width, height, fps);
+  if (is360) useProject.getState().updateSettings({ is360: true });
   clearHistory();
   setDirty(false);
   const ui = useUi.getState();

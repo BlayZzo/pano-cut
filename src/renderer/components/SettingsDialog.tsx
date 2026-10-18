@@ -32,7 +32,7 @@ export function SettingsDialog(): React.ReactElement {
           <div className="panel-header" style={{ padding: '0 0 6px', border: 'none' }}>{t.settings.project}</div>
           <div className="form-grid">
             <label>{t.settings.projectSize}</label>
-            <select value={presetId} onChange={(e) => { const p = PROJECT_PRESETS.find((x) => x.id === e.target.value); if (p) updateSettings({ width: p.width, height: p.height }); }}>
+            <select value={presetId} onChange={(e) => { const p = PROJECT_PRESETS.find((x) => x.id === e.target.value); if (p) updateSettings({ width: p.width, height: p.height, is360: p.id === 'pano' }); }}>
               {PROJECT_PRESETS.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
               {presetId === 'custom' && <option value="custom">{project.width}×{project.height}</option>}
             </select>
