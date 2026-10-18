@@ -3,8 +3,10 @@ import { clamp, clipAt, clipDuration, clipEnd, clipsOnTrack, projectDuration, so
 import { panoViewAt } from '@shared/pano';
 import { maskAt, trackBoxAt } from '@shared/ai';
 import type { Attachment } from '@shared/types';
-import { PanoGL } from './panogl';
-import { ChromaGL } from './chromagl';
+import { sharedPanoGL } from './panogl';
+import { sharedChromaGL } from './chromagl';
+import { sharedColorGL } from './colorgl';
+import { motionAt } from '@shared/effects';
 import { drawStyledText } from './text';
 
 type MediaEl = HTMLVideoElement | HTMLAudioElement | HTMLImageElement;
@@ -15,8 +17,6 @@ interface Slot {
   isVideo: boolean;
   isImage: boolean;
   lastSeek: number;
-  pano?: PanoGL;
-  chroma?: ChromaGL;
   work?: HTMLCanvasElement;   // Zwischen-Canvas für Freistellen
 }
 
@@ -265,6 +265,18 @@ export class PlaybackEngine {
     return gain;
   }
 
+  /** Läuft gerade anderer Ton (z. B. Sprache), wegen dem die Musik leiser werden soll? */
+  private otherAudioActive(clip: Clip, t: number): boolean {
+    for (const c of Object.values(this.project.clips)) {
+      if (c.id === clip.id || c.ducking?.enabled || c.muted || c.kind === 'title') continue;
+      if (t < c.start || t >= clipEnd(c)) continue;
+      const m = this.project.media[c.mediaId];
+      const tr = this.project.tracks.find((x) => x.id === c.trackId);
+      if (m?.info.hasAudio && !tr?.muted && c.volume > 0.05) return true;
+    }
+    return false;
+  }
+
   private syncMedia(slot: Slot, clip: Clip, media: MediaItem, track: Track, t: number, unclamped = false): void {
     const m = slot.el as HTMLMediaElement;
     const { reversedFile } = this.desiredSrc(clip, media);
@@ -286,6 +298,7 @@ export class PlaybackEngine {
     if (clip.fadeIn > 0 && local < clip.fadeIn) gain *= clamp(local / clip.fadeIn, 0, 1);
     if (clip.fadeOut > 0 && dur - local < clip.fadeOut) gain *= clamp((dur - local) / clip.fadeOut, 0, 1);
     gain *= this.transitionGain(clip, t);
+    if (clip.ducking?.enabled && this.otherAudioActive(clip, t)) gain *= 1 - 0.75 * clamp(clip.ducking.amount, 0, 1);
     m.volume = clamp(gain, 0, 1);
     const outside = local < 0 || local > dur;
     m.muted = this.muted || clip.muted || track.muted || needsSeekMode || outside;
@@ -318,25 +331,36 @@ export class PlaybackEngine {
     if (!vw || !vh) return;
 
     // 360°: Ansicht per WebGL berechnen
+    const localT = extra.localT ?? (this.current - clip.start);
     if (media.info.is360 && clip.pano) {
-      if (!slot.pano) slot.pano = new PanoGL();
-      if (slot.pano.available) {
-        const localT = extra.localT ?? (this.current - clip.start);
+      const pgl = sharedPanoGL();
+      if (pgl.available) {
         const view = panoViewAt(clip.pano, localT);
         const mode = clip.pano.mode;
         const outW = mode === 'equirect' ? Math.min(vw, 2048) : W;
         const outH = mode === 'equirect' ? Math.round(outW / 2) : H;
         const srcTime = slot.isVideo ? (slot.el as HTMLVideoElement).currentTime : 0;
-        const out = slot.pano.render(source as TexImageSource, outW, outH, mode, view, srcTime);
+        const out = pgl.render(source as TexImageSource, outW, outH, mode, view, srcTime);
         if (out) { source = out; vw = outW; vh = outH; }
       }
     }
 
+    // Zuschnitt, Spiegeln, Farbe (LUT) und Vignette – wie im Export
+    const cr = clip.crop;
+    const crop = cr && cr.left + cr.right + cr.top + cr.bottom > 0.01
+      ? { x: cr.left / 100, y: cr.top / 100, w: Math.max(0.05, 1 - (cr.left + cr.right) / 100), h: Math.max(0.05, 1 - (cr.top + cr.bottom) / 100) }
+      : null;
+    const cgl = sharedColorGL();
+    if (cgl.available) {
+      const out = cgl.render(source as TexImageSource, vw, vh, clip.color, clip.fx?.vignette ?? 0, crop, !!clip.fx?.mirror, !!clip.fx?.flip, () => { if (!this.playing) this.render(this.current); });
+      if (out) { source = out; vw = out.width; vh = out.height; }
+    }
+
     // Green Screen (WebGL)
     if (clip.chroma?.enabled) {
-      if (!slot.chroma) slot.chroma = new ChromaGL();
-      if (slot.chroma.available) {
-        const out = slot.chroma.render(source as TexImageSource, Math.min(vw, 1920), Math.round((Math.min(vw, 1920) * vh) / vw), clip.chroma.color, clip.chroma.similarity, clip.chroma.blend, clip.chroma.despill);
+      const kgl = sharedChromaGL();
+      if (kgl.available) {
+        const out = kgl.render(source as TexImageSource, Math.min(vw, 1920), Math.round((Math.min(vw, 1920) * vh) / vw), clip.chroma.color, clip.chroma.similarity, clip.chroma.blend, clip.chroma.despill);
         if (out) { source = out; vw = out.width; vh = out.height; }
       }
     }
@@ -344,7 +368,6 @@ export class PlaybackEngine {
     const cut = clip.cutout;
     const track = cut?.enabled ? clip.objects?.find((tr) => tr.id === cut.trackId) : undefined;
     if (cut && track?.masks?.length) {
-      const localT = extra.localT ?? (this.current - clip.start);
       const m = maskAt(track, localT);
       if (m) {
         const img = maskImage(m.path, () => { if (!this.playing) this.render(this.current); });
@@ -361,7 +384,12 @@ export class PlaybackEngine {
           wctx.drawImage(source, 0, 0, cw, chh);
           wctx.globalCompositeOperation = cut.invert ? 'destination-out' : 'destination-in';
           if (cut.feather > 0) wctx.filter = `blur(${(cut.feather / 2) * (cw / Math.max(1, img.naturalWidth))}px)`;
-          wctx.drawImage(img, 0, 0, cw, chh);
+          // Maske genauso zuschneiden und spiegeln wie das Bild
+          const mw = img.naturalWidth, mh = img.naturalHeight;
+          const mc = crop ?? { x: 0, y: 0, w: 1, h: 1 };
+          wctx.translate(clip.fx?.mirror ? cw : 0, clip.fx?.flip ? chh : 0);
+          wctx.scale(clip.fx?.mirror ? -1 : 1, clip.fx?.flip ? -1 : 1);
+          wctx.drawImage(img, mc.x * mw, mc.y * mh, mc.w * mw, mc.h * mh, 0, 0, cw, chh);
           wctx.restore();
           source = wc; vw = cw; vh = chh;
         }
@@ -369,19 +397,15 @@ export class PlaybackEngine {
     }
 
     const tr = clip.transform;
-    const col = clip.color;
+    const mo = motionAt(clip.motion, localT);
     ctx.save();
     if (extra.clipPath) extra.clipPath(ctx);
-    ctx.globalAlpha = clamp(clip.opacity, 0, 1) * (extra.alpha ?? 1);
-    const filters: string[] = [];
-    if (Math.abs(col.brightness) > 1e-4) filters.push(`brightness(${1 + col.brightness})`);
-    if (Math.abs(col.contrast - 1) > 1e-4) filters.push(`contrast(${col.contrast})`);
-    if (Math.abs(col.saturation - 1) > 1e-4) filters.push(`saturate(${col.saturation})`);
-    if (Math.abs(col.hue) > 1e-4) filters.push(`hue-rotate(${col.hue}deg)`);
-    ctx.filter = filters.length ? filters.join(' ') : 'none';
-    ctx.translate(W / 2 + (tr.x / 100) * W + (extra.dx ?? 0), H / 2 + (tr.y / 100) * H + (extra.dy ?? 0));
-    ctx.rotate((tr.rotation * Math.PI) / 180);
-    const sc = Math.max(0.01, tr.scale);
+    ctx.globalAlpha = clamp(clip.opacity * mo.opacity, 0, 1) * (extra.alpha ?? 1);
+    // Weichzeichnen (gleiche Stärke relativ zur Bildhöhe wie im Export)
+    ctx.filter = clip.fx && clip.fx.blur > 0.01 ? `blur(${clip.fx.blur * 0.02 * H}px)` : 'none';
+    ctx.translate(W / 2 + ((tr.x + mo.x) / 100) * W + (extra.dx ?? 0), H / 2 + ((tr.y + mo.y) / 100) * H + (extra.dy ?? 0));
+    ctx.rotate(((tr.rotation + mo.rotation) * Math.PI) / 180);
+    const sc = Math.max(0.01, tr.scale * mo.scale);
     if (clip.fit === 'cover') {
       const s = Math.max(W / vw, H / vh);
       const sw = W / s, sh = H / s;
@@ -427,9 +451,14 @@ export class PlaybackEngine {
     const local = t - clip.start;
     const pos = this.attachedPosition(subs.attach, t);
     const style = pos ? { ...subs.style, x: pos.x, y: pos.y } : subs.style;
+    const showTr = !!subs.showTranslation;
+    const trColor = subs.translationColor ?? '#ffe066';
     for (const seg of subs.segments) {
       if (local >= seg.start && local < seg.end && seg.text.trim()) {
-        drawStyledText(ctx, style, seg.text, W, H, { localT: 0, duration: 1, animate: false });
+        // gleiche Regeln wie im Export (exporter.ts: mainText/secondText)
+        const main = showTr && subs.translationOnly && seg.translation ? seg.translation : seg.text;
+        const second = showTr && !subs.translationOnly && seg.translation ? { text: seg.translation, color: trColor } : undefined;
+        drawStyledText(ctx, style, main, W, H, { localT: 0, duration: 1, animate: false }, second);
       }
     }
   }

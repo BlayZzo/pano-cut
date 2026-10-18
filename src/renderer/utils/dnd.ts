@@ -3,8 +3,9 @@
 export const DRAG_MIME = 'application/x-panocut-media';
 export const DRAG_TRANSITION = 'application/x-panocut-transition';
 export const DRAG_TITLE = 'application/x-panocut-title';
+export const DRAG_EFFECT = 'application/x-panocut-effect';
 
-export type DragPayload = { kind: 'media'; id: string } | { kind: 'transition'; type: string } | { kind: 'title'; templateId: string };
+export type DragPayload = { kind: 'media'; id: string } | { kind: 'transition'; type: string } | { kind: 'title'; templateId: string } | { kind: 'effect'; id: string };
 
 let current: DragPayload | null = null;
 

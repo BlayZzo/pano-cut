@@ -90,3 +90,10 @@ export class ChromaGL {
     return this.canvas;
   }
 }
+
+let chromaInstance: ChromaGL | null = null;
+/** Für die Vorschau gemeinsam genutzte Instanz (spart WebGL-Kontexte). */
+export function sharedChromaGL(): ChromaGL {
+  if (!chromaInstance) chromaInstance = new ChromaGL();
+  return chromaInstance;
+}

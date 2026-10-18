@@ -114,6 +114,7 @@ export interface SubtitleSegment {
   start: number;   // Sekunden relativ zum Clip-Anfang (Timeline)
   end: number;
   text: string;
+  translation?: string;  // Übersetzung (wird darunter angezeigt)
 }
 
 export type WhisperModel = 'base' | 'small';
@@ -222,6 +223,76 @@ export interface ColorGrade {
   contrast: number;    // 0..2 (1 = neutral)
   saturation: number;  // 0..3 (1 = neutral)
   hue: number;         // Grad -180..180
+  // ab 0.4 (optional, neutral = undefined)
+  exposure?: number;     // Blenden -3..3
+  temperature?: number;  // -100..100 (kalt ↔ warm)
+  tint?: number;         // -100..100 (grün ↔ magenta)
+  highlights?: number;   // -100..100
+  shadows?: number;      // -100..100
+  whites?: number;       // -100..100
+  blacks?: number;       // -100..100
+  vibrance?: number;     // -100..100
+  gamma?: number;        // 0.3..3 (Mitteltöne)
+  fade?: number;         // 0..100 (verblasst/matt)
+  dehaze?: number;       // 0..100 (Dunst entfernen)
+  splitShadow?: number;  // -100..100 (Tiefen einfärben)
+  splitHighlight?: number; // -100..100 (Lichter einfärben)
+  look?: string;         // Look-ID (siehe LOOKS)
+  lookStrength?: number; // 0..1
+  lut?: string;          // Pfad zu einer eigenen .cube-Datei
+  lutStrength?: number;  // 0..1
+}
+
+/** Bild-Effekte, die nicht nur die Farbe betreffen. */
+export interface ImageFx {
+  vignette: number;   // 0..1
+  sharpen: number;    // 0..1
+  denoise: number;    // 0..1
+  blur: number;       // 0..1
+  grain: number;      // 0..1
+  mirror: boolean;    // horizontal spiegeln
+  flip: boolean;      // vertikal spiegeln
+}
+
+/** Zuschnitt in Prozent je Rand (vor dem Einpassen). */
+export interface Crop { left: number; right: number; top: number; bottom: number }
+
+export interface MotionKeyframe {
+  t: number;         // Clip-lokale Zeit (Sekunden)
+  x: number;         // zusätzliche Verschiebung in % der Bildbreite
+  y: number;         // in % der Bildhöhe
+  scale: number;     // Faktor (1 = unverändert)
+  rotation: number;  // Grad
+  opacity: number;   // 0..1
+}
+
+export type MotionPreset =
+  | 'kenburns' | 'zoomin' | 'zoomout' | 'slidein-left' | 'slidein-right' | 'slidein-up' | 'slidein-down'
+  | 'slideout-left' | 'slideout-right' | 'pop' | 'pulse' | 'shake' | 'spin' | 'fadein' | 'fadeout' | 'float' | 'custom';
+
+export interface Motion {
+  preset: MotionPreset;
+  intensity: number;   // 0..2
+  smooth: boolean;
+  keyframes: MotionKeyframe[];
+  osc?: { kind: 'shake' | 'pulse' | 'float'; amp: number };  // gleichmäßige Schwingung (wird zu den Keyframes addiert)
+}
+
+export interface Ducking {
+  enabled: boolean;
+  amount: number;      // 0..1 (wie stark leiser)
+}
+
+/** Eigener Effekt: gespeicherte Kombination aus Farbe, Bild-Effekten, Zuschnitt und Animation. */
+export interface UserEffect {
+  id: string;
+  name: string;
+  color?: ColorGrade;
+  fx?: ImageFx;
+  crop?: Crop;
+  motion?: Motion;
+  motionDuration?: number;  // Clip-Länge beim Speichern (Animationen werden auf neue Clips umgerechnet)
+  createdAt: number;
 }
 
 export type FitMode = 'contain' | 'cover' | 'stretch';
@@ -249,7 +320,11 @@ export interface Clip {
   pano?: PanoSettings;          // nur 360°-Clips
   transition?: Transition;      // Übergang VOM vorherigen Clip der Spur in diesen Clip
   stabilize?: Stabilization;
-  subtitles?: { segments: SubtitleSegment[]; style: Omit<TitleStyle, 'text'>; enabled: boolean; attach?: Attachment };
+  subtitles?: { segments: SubtitleSegment[]; style: Omit<TitleStyle, 'text'>; enabled: boolean; attach?: Attachment; showTranslation?: boolean; translationColor?: string; translationOnly?: boolean };
+  fx?: ImageFx;                 // Vignette, Schärfen, Entrauschen, Weichzeichnen, Körnung, Spiegeln
+  crop?: Crop;                  // Zuschnitt
+  motion?: Motion;              // Animation (Bewegung/Zoom/Drehen/Deckkraft über die Zeit)
+  ducking?: Ducking;            // Musik automatisch leiser, wenn gesprochen wird
   objects?: ObjectTrack[];      // erkannte/getrackte Objekte dieses Clips
   cutout?: Cutout;              // Freistellen anhand einer Objektmaske
   chroma?: ChromaKey;           // Green Screen
@@ -347,6 +422,11 @@ export interface AppInfo {
 
 export interface Settings {
   cloud?: CloudSettings;
+  translateUrl?: string;      // eigener LibreTranslate-Server (optional)
+  translateKey?: string;
+  remoteControl?: boolean;    // Fernsteuerung (Stream Deck) erlauben
+  remotePort?: number;
+  userEffects?: UserEffect[];  // eigene Effekte (Bibliothek „Effekte“ → „Eigene“)
   aiDetectModel?: AiDetectModel;
   aiSegmentModel?: AiSegmentModel;
   lastProject?: string;

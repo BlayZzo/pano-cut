@@ -1,6 +1,6 @@
 import React from 'react';
-import type { Clip, ColorGrade, FitMode, Transform } from '@shared/types';
-import { clipDuration, defaultColor, defaultTransform, formatDuration, formatTime } from '@shared/timeline';
+import type { Clip, FitMode, Transform } from '@shared/types';
+import { clipDuration, defaultTransform, formatDuration, formatTime } from '@shared/timeline';
 import { beginTransaction, endTransaction, useProject } from '../store/project';
 import { useUi } from '../store/ui';
 import { fmt, t } from '../i18n/de';
@@ -9,6 +9,7 @@ import { InspectorPano } from './InspectorPano';
 import { InspectorTitle } from './InspectorTitle';
 import { InspectorStabilize, InspectorSubtitles, InspectorTransition } from './InspectorExtras';
 import { InspectorChroma, InspectorObjects } from './InspectorAi';
+import { DuckingFields, InspectorColor, InspectorFx, InspectorMotion, SaveEffectButton } from './InspectorLook';
 
 export function Inspector(): React.ReactElement {
   const selection = useUi((s) => s.selection);
@@ -44,7 +45,6 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
 
   const patch = (p: Partial<Clip>) => updateClips(ids, p);
   const patchTransform = (p: Partial<Transform>) => patch({ transform: { ...clip.transform, ...p } });
-  const patchColor = (p: Partial<ColorGrade>) => patch({ color: { ...clip.color, ...p } });
   const setSpeed = (speed: number) => setClipSpeed(ids, speed);
 
   return (
@@ -85,7 +85,7 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
       )}
 
       {!isImage && !isTitle && media?.info.hasAudio && (
-        <Section title={t.inspector.sectionAudio} onReset={() => patch({ volume: 1, muted: false, fadeIn: 0, fadeOut: 0 })}>
+        <Section title={t.inspector.sectionAudio} onReset={() => patch({ volume: 1, muted: false, fadeIn: 0, fadeOut: 0, ducking: undefined })}>
           <Slider label={t.inspector.volume} value={clip.volume} min={0} max={2} step={0.01} display={(v) => `${Math.round(v * 100)} %`} onChange={(v) => patch({ volume: v })} />
           <label className="toggle">
             <input type="checkbox" checked={clip.muted} onChange={(e) => patch({ muted: e.target.checked })} />
@@ -93,6 +93,7 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
           </label>
           <Slider label={t.inspector.fadeIn} value={clip.fadeIn} min={0} max={10} step={0.1} unit=" s" onChange={(v) => patch({ fadeIn: v })} />
           <Slider label={t.inspector.fadeOut} value={clip.fadeOut} min={0} max={10} step={0.1} unit=" s" onChange={(v) => patch({ fadeOut: v })} />
+          <DuckingFields clip={clip} ids={ids} />
         </Section>
       )}
 
@@ -125,14 +126,10 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
         </Section>
       )}
 
-      {!isAudioOnly && !isTitle && (
-        <Section title={t.inspector.sectionColor} onReset={() => patch({ color: defaultColor() })}>
-          <Slider label={t.inspector.brightness} value={clip.color.brightness} min={-1} max={1} step={0.01} onChange={(v) => patchColor({ brightness: v })} />
-          <Slider label={t.inspector.contrast} value={clip.color.contrast} min={0} max={2} step={0.01} onChange={(v) => patchColor({ contrast: v })} />
-          <Slider label={t.inspector.saturation} value={clip.color.saturation} min={0} max={3} step={0.01} onChange={(v) => patchColor({ saturation: v })} />
-          <Slider label={t.inspector.hue} value={clip.color.hue} min={-180} max={180} step={1} unit="°" onChange={(v) => patchColor({ hue: v })} />
-        </Section>
-      )}
+      {!isAudioOnly && !isTitle && <InspectorColor clip={clip} ids={ids} />}
+      {!isAudioOnly && !isTitle && <InspectorFx clip={clip} ids={ids} />}
+      {!isAudioOnly && !isTitle && <InspectorMotion clip={clip} ids={ids} />}
+      {!isAudioOnly && !isTitle && count === 1 && <SaveEffectButton clip={clip} />}
     </>
   );
 }

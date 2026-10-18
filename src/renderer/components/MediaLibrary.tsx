@@ -2,13 +2,16 @@ import React, { useMemo, useState } from 'react';
 import type { MediaItem } from '@shared/types';
 import { untracked, useProject } from '../store/project';
 import { useUi } from '../store/ui';
-import { addMediaToTimeline, addTitleToTimeline, applyTransitionToClip, importDialog, importFiles } from '../actions';
+import { addMediaToTimeline, addTitleToTimeline, applyEffectToClips, applyTransitionToClip, deleteUserEffect, importDialog, importFiles } from '../actions';
 import { t } from '../i18n/de';
 import { IconImport } from './Icons';
 import { MediaCard } from './MediaCard';
 import { ContextMenu, type MenuEntry } from './ContextMenu';
 import { TITLE_TEMPLATES, TRANSITIONS, defaultTitle } from '@shared/pano';
-import { DRAG_TITLE, DRAG_TRANSITION, setDragging } from '../utils/dnd';
+import { DRAG_EFFECT, DRAG_TITLE, DRAG_TRANSITION, setDragging } from '../utils/dnd';
+import { EFFECT_BLOCKS } from '@shared/effects';
+import { defaultColor } from '@shared/timeline';
+import { effectiveGrade, gradePixel } from '@shared/color';
 import { drawStyledText } from '../engine/text';
 
 type Filter = 'all' | 'video' | 'audio' | 'image';
@@ -71,11 +74,7 @@ export function MediaLibrary(): React.ReactElement {
       ) : tab === 'titles' ? (
         <TitleLibrary />
       ) : tab === 'effects' ? (
-        <div className="coming-soon">
-          <div className="big">🚧</div>
-          <strong>{t.library.tabEffects}</strong>
-          <div>Kommt in Version 0.4</div>
-        </div>
+        <EffectLibrary />
       ) : (
         <>
           <div className="library-toolbar">
@@ -168,6 +167,72 @@ function TransitionIcon({ type }: { type: string }): React.ReactElement {
     inner = <><defs><linearGradient id={`g-${type}`} x1="0" x2="1"><stop offset="0" stopColor={a} /><stop offset="1" stopColor={b} /></linearGradient></defs><rect x="0" y="0" width="56" height="32" fill={`url(#g-${type})`} /></>;
   }
   return <svg {...common} style={{ borderRadius: 4 }}>{inner}</svg>;
+}
+
+// ---------- Effekte & Animationen ----------
+
+/** Beispielfarben (Himmel, Haut, Grün, Schatten, Licht) durch einen Look geschickt – als Farbstreifen auf der Kachel. */
+const SWATCH = [[0.42, 0.62, 0.86], [0.86, 0.66, 0.54], [0.36, 0.56, 0.3], [0.16, 0.16, 0.2], [0.92, 0.9, 0.85]];
+function lookSwatch(lookId: string): string {
+  const e = effectiveGrade({ ...defaultColor(), look: lookId, lookStrength: 1 });
+  const stops = SWATCH.map(([r, g, b], i) => {
+    const [rr, gg, bb] = gradePixel(r, g, b, e);
+    return `rgb(${Math.round(rr * 255)},${Math.round(gg * 255)},${Math.round(bb * 255)}) ${i * 25}%`;
+  });
+  return `linear-gradient(90deg, ${stops.join(', ')})`;
+}
+
+const NO_EFFECTS: never[] = [];
+
+function EffectLibrary(): React.ReactElement {
+  const selection = useUi((s) => s.selection);
+  const userEffects = useUi((s) => s.settings.userEffects) ?? NO_EFFECTS;
+  const swatches = useMemo(() => Object.fromEntries(EFFECT_BLOCKS.filter((b) => b.kind === 'look').map((b) => [b.id, lookSwatch(b.id.slice(2))])), []);
+  const tile = (id: string, name: string, icon: React.ReactNode, extra?: React.ReactNode, cls = '') => (
+    <div
+      key={id}
+      className={`effect-tile ${cls}`}
+      draggable
+      onDragStart={(e) => { e.dataTransfer.setData(DRAG_EFFECT, id); e.dataTransfer.effectAllowed = 'copy'; setDragging({ kind: 'effect', id }); }}
+      onDragEnd={() => setDragging(null)}
+      onDoubleClick={() => { if (selection.length) applyEffectToClips(id, selection); else useUi.getState().toast(t.effects.needClip, 'error'); }}
+      title={name}
+    >
+      {icon}
+      <span>{name}</span>
+      {extra}
+    </div>
+  );
+  const groups: Array<{ kind: 'motion' | 'look' | 'fx'; title: string }> = [
+    { kind: 'motion', title: t.effects.groupAnimation },
+    { kind: 'look', title: t.effects.groupLook },
+    { kind: 'fx', title: t.effects.groupFx },
+  ];
+  return (
+    <div className="panel-body" style={{ padding: '8px 10px' }}>
+      <div className="hint" style={{ marginBottom: 8 }}>{t.effects.hint}</div>
+      {groups.map((g) => (
+        <div key={g.kind} className="effect-group">
+          <div className="effect-group-title">{g.title}</div>
+          <div className="effect-grid">
+            {EFFECT_BLOCKS.filter((b) => b.kind === g.kind).map((b) =>
+              b.kind === 'look'
+                ? tile(b.id, b.name, <div className="effect-swatch" style={{ background: swatches[b.id] }} />, undefined, 'look-tile')
+                : tile(b.id, b.name, <span className="effect-icon">{b.icon}</span>))}
+          </div>
+        </div>
+      ))}
+      <div className="effect-group">
+        <div className="effect-group-title">{t.effects.groupOwn}</div>
+        {userEffects.length === 0 ? <div className="hint">{t.effects.ownEmpty}</div> : (
+          <div className="effect-grid">
+            {userEffects.map((u) => tile(u.id, u.name, <span className="effect-icon">☆</span>,
+              <button className="effect-del" title={t.effects.deleteOwn} onClick={(e) => { e.stopPropagation(); void deleteUserEffect(u.id); }}>×</button>))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 /** Titel-Vorlagen: auf eine Videospur ziehen oder doppelklicken. */

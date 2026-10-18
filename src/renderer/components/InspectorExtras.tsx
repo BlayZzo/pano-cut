@@ -52,6 +52,13 @@ export function InspectorStabilize({ clip, media }: { clip: Clip; media: MediaIt
 
 // ---------- Untertitel ----------
 
+const TRANSLATE_TARGETS = [
+  { value: 'en', label: 'Englisch' }, { value: 'de', label: 'Deutsch' }, { value: 'fr', label: 'Französisch' },
+  { value: 'es', label: 'Spanisch' }, { value: 'it', label: 'Italienisch' }, { value: 'tr', label: 'Türkisch' },
+  { value: 'pl', label: 'Polnisch' }, { value: 'nl', label: 'Niederländisch' }, { value: 'pt', label: 'Portugiesisch' },
+  { value: 'ru', label: 'Russisch' }, { value: 'uk', label: 'Ukrainisch' }, { value: 'ar', label: 'Arabisch' },
+];
+
 export function InspectorSubtitles({ clip, media }: { clip: Clip; media: MediaItem }): React.ReactElement {
   const setSubtitles = useProject((s) => s.setSubtitles);
   const setAttach = useProject((s) => s.setAttach);
@@ -63,6 +70,10 @@ export function InspectorSubtitles({ clip, media }: { clip: Clip; media: MediaIt
   const [maxChars, setMaxChars] = useState(38);
   const [progress, setProgress] = useState<WhisperProgress | null>(null);
   const [busy, setBusy] = useState(false);
+  const [target, setTarget] = useState('en');
+  const [trBusy, setTrBusy] = useState(false);
+  const setSubtitleOptions = useProject((s) => s.setSubtitleOptions);
+  const translateUrl = useUi((s) => s.settings.translateUrl);
   const subs = clip.subtitles;
 
   useEffect(() => {
@@ -92,6 +103,58 @@ export function InspectorSubtitles({ clip, media }: { clip: Clip; media: MediaIt
       toast((err as Error).message, 'error');
     } finally {
       setBusy(false);
+    }
+  };
+
+  /** Quell-Bereich des Clips (für whisper). */
+  const sourceSpan = () => {
+    const srcA = sourceTimeAt(clip, clip.start);
+    const srcB = sourceTimeAt(clip, clipEnd(clip));
+    return { start: Math.min(srcA, srcB), duration: Math.abs(srcB - srcA) };
+  };
+
+  const translate = async () => {
+    if (!subs || subs.segments.length === 0) return;
+    setTrBusy(true);
+    try {
+      let texts: string[];
+      if (target === 'en' && !translateUrl) {
+        // Lokal: whisper übersetzt direkt aus dem Ton ins Englische; Zuordnung zu den Zeilen über die Zeit
+        setProgress({ phase: 'extract', percent: 0, message: t.subtitles.translating });
+        const { start, duration } = sourceSpan();
+        const segs = await window.panocut.transcribe({ mediaPath: media.path, start, duration, language: language === 'en' ? 'auto' : language, model, maxChars: 200, translate: true });
+        const mapped = segs.map((x) => ({
+          a: clip.reverse ? (duration - x.end) / clip.speed : x.start / clip.speed,
+          b: clip.reverse ? (duration - x.start) / clip.speed : x.end / clip.speed,
+          text: x.text,
+        }));
+        const buckets: string[][] = subs.segments.map(() => []);
+        for (const m of mapped) {
+          let best = -1, bestOv = 0;
+          subs.segments.forEach((sg, i) => {
+            const ov = Math.min(sg.end, m.b) - Math.max(sg.start, m.a);
+            if (ov > bestOv) { bestOv = ov; best = i; }
+          });
+          if (best < 0) {
+            // keine Überlappung: nächstgelegene Zeile
+            let d = Infinity;
+            subs.segments.forEach((sg, i) => { const dd = Math.abs((sg.start + sg.end) / 2 - (m.a + m.b) / 2); if (dd < d) { d = dd; best = i; } });
+          }
+          if (best >= 0) buckets[best].push(m.text.trim());
+        }
+        texts = buckets.map((b) => b.join(' '));
+      } else {
+        if (!translateUrl) throw new Error(t.subtitles.translateServerHint);
+        texts = await window.panocut.translateTexts(subs.segments.map((x) => x.text), language === 'auto' ? 'auto' : language, target);
+      }
+      setSubtitles(clip.id, subs.segments.map((x, i) => ({ ...x, translation: texts[i] ?? x.translation })));
+      setSubtitleOptions(clip.id, { showTranslation: true });
+      toast(t.subtitles.translated, 'success');
+    } catch (err) {
+      toast((err as Error).message, 'error');
+    } finally {
+      setTrBusy(false);
+      setProgress(null);
     }
   };
 
@@ -135,6 +198,9 @@ export function InspectorSubtitles({ clip, media }: { clip: Clip; media: MediaIt
                 <input type="number" className="num" value={Math.round(s.start * 100) / 100} step={0.1} min={0} onChange={(e) => updateSeg(s.id, { start: Math.max(0, Number(e.target.value)) })} title="Start (s)" />
                 <input type="number" className="num" value={Math.round(s.end * 100) / 100} step={0.1} min={0} onChange={(e) => updateSeg(s.id, { end: Math.max(0, Number(e.target.value)) })} title="Ende (s)" />
                 <button className="btn sm ghost" onClick={() => setSubtitles(clip.id, subs.segments.filter((x) => x.id !== s.id))} title={t.common.delete}>×</button>
+                {subs.showTranslation && (
+                  <input type="text" className="subtitle-translation" placeholder={t.subtitles.translationPlaceholder} value={s.translation ?? ''} onChange={(e) => updateSeg(s.id, { translation: e.target.value })} onFocus={beginTransaction} onBlur={endTransaction} spellCheck={false} />
+                )}
               </div>
             ))}
             {subs.segments.length === 0 && <div className="hint">{t.subtitles.empty}</div>}
@@ -147,6 +213,30 @@ export function InspectorSubtitles({ clip, media }: { clip: Clip; media: MediaIt
             }}>{t.subtitles.add}</button>
             <button className="btn sm danger" onClick={() => setSubtitles(clip.id, null)}>{t.subtitles.delete}</button>
           </div>
+          <div className="panel-header" style={{ padding: '6px 0 2px', border: 'none' }}>{t.subtitles.translation}</div>
+          <SelectField label={t.subtitles.translateTo} value={target} onChange={setTarget}
+            options={TRANSLATE_TARGETS.filter((x) => x.value === 'en' || translateUrl).map((x) => ({ value: x.value, label: x.value === 'en' && !translateUrl ? `${x.label} (${t.subtitles.local})` : x.label }))} />
+          {trBusy ? (
+            <div>
+              <div style={{ marginBottom: 6 }}>{progress?.message ?? t.subtitles.translating}</div>
+              <div className="progress"><div style={{ width: `${progress?.percent ?? 0}%` }} /></div>
+            </div>
+          ) : (
+            <button className="btn" onClick={() => void translate()} disabled={busy || (target === 'en' && !translateUrl && !status?.available)}>{t.subtitles.translate}</button>
+          )}
+          <div className="hint">{translateUrl ? t.subtitles.translateServerOn : t.subtitles.translateLocalHint}</div>
+          <Toggle label={t.subtitles.showTranslation} checked={!!subs.showTranslation} onChange={(v) => setSubtitleOptions(clip.id, { showTranslation: v })} />
+          {subs.showTranslation && (
+            <>
+              <Toggle label={t.subtitles.translationOnly} checked={!!subs.translationOnly} onChange={(v) => setSubtitleOptions(clip.id, { translationOnly: v })} />
+              {!subs.translationOnly && (
+                <div className="field">
+                  <label>{t.subtitles.translationColor}</label>
+                  <input type="color" value={subs.translationColor ?? '#ffe066'} onChange={(e) => setSubtitleOptions(clip.id, { translationColor: e.target.value })} style={{ gridColumn: '2 / span 2' }} />
+                </div>
+              )}
+            </>
+          )}
           <div className="panel-header" style={{ padding: '6px 0 2px', border: 'none' }}>{t.subtitles.style}</div>
           <TextStyleFields style={subs.style} onChange={(p) => setSubtitles(clip.id, subs.segments, p)} withAnimation={false} />
           <AttachFields clip={clip} attach={subs.attach} onChange={(a) => setAttach(clip.id, a, 'subtitles')} />

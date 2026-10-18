@@ -42,10 +42,16 @@ im Export per concat-Bildsequenz + alphamerge, in der Vorschau per Canvas `desti
 `chromakey` ↔ `chromagl.ts`. Anheften: Export per Stützstellen-Ausdrücken (drawtext) bzw. ASS `\move`. Objekte als
 VP9-WebM mit Alpha (`objects.ts`), Cloud per WebDAV (`cloud.ts`). Test lokal: Python-onnxruntime als Shim für
 onnxruntime-node (siehe Scratch-Tests), CI prüft mit YOLOX-`dog.jpg`.
-0.4: Effekt-/Animations-Bibliothek, eigene Effekte, Audio-Ducking, Mehrkamera; Elgato Stream Deck (Plugin/Hotkeys);
-KI-Bildverbesserung („natürlich schön“) nur auf Wunsch; Nachbearbeitung einzelner Clips/Bilder; Übersetzung von
-Untertiteln (lokales Modell). Wenn der Bild-/Objektteil zu groß wird: zweites Programm (wie Photoshop neben Premiere),
-gleiche Codebasis (`src/shared`).
+0.4 ✅: Farbe als eine Mathematik (`shared/color.ts`: `gradePixel` → 3D-LUT; Export `lut3d` mit .cube-Datei 33³,
+Vorschau `colorgl.ts` mit LUT-Textur 25³), Looks, eigene .cube-LUTs, „Natürlich schön“ (`frameStats`/`autoEnhance` aus
+`engine.grabFrame`). Bild-Effekte/Zuschnitt (`ImageFx`, `Crop`). Animationen (`shared/effects.ts`: Keyframes + Schwingung
+`osc`; Export per `perspective`-Filter mit transparentem Rand, `motionExpr.ts`, Deckkraft per `sendcmd`/`colorchannelmixer`).
+Effekt-Bibliothek (`EFFECT_BLOCKS`, eigene Effekte in den Einstellungen `userEffects`). Ducking (`sidechaincompress`,
+Vorschau ≈ Pegelabsenkung). Übersetzung: whisper `-tr` (nur Englisch) bzw. eigener LibreTranslate-Server (`translate.ts`).
+Fernsteuerung `remote.ts` (127.0.0.1:51888, nur POST ohne Origin) + Stream-Deck-Plugin `streamdeck/` (SDK 2, Node ohne
+Abhängigkeiten, `generate.py` erzeugt Manifest + Symbole; Release-Job packt `PanoCut.streamDeckPlugin`).
+0.5: Mehrkamera, Blackmagic RAW, Übersetzung in weitere Sprachen ohne Server; bei Bedarf zweites Programm für
+Bild/Objekte (gleiche Codebasis `src/shared`).
 Leistung: muss auf einem MacBook Air (M-Serie, 2024) flüssig laufen – Proxys, WebGL, Hintergrund-Jobs mit niedriger Priorität.
 
 ## Lokale Prüfung ohne npm

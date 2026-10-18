@@ -105,6 +105,38 @@ export function SettingsDialog(): React.ReactElement {
             </div>
           </div>
         </div>
+        <div className="modal-body" style={{ paddingTop: 0 }}>
+          <div className="panel-header" style={{ padding: '0 0 6px', border: 'none' }}>{t.translateSettings.section}</div>
+          <div className="form-grid">
+            <label>{t.translateSettings.url}</label>
+            <input type="text" value={settings.translateUrl ?? ''} placeholder="http://localhost:5000" onChange={(e) => void patch({ translateUrl: e.target.value.trim() || undefined })} spellCheck={false} />
+            <label />
+            <div className="hint">{t.translateSettings.urlHint}</div>
+            {settings.translateUrl && (
+              <>
+                <label>{t.translateSettings.key}</label>
+                <input type="password" value={settings.translateKey ?? ''} onChange={(e) => void patch({ translateKey: e.target.value || undefined })} />
+              </>
+            )}
+          </div>
+        </div>
+        <div className="modal-body" style={{ paddingTop: 0 }}>
+          <div className="panel-header" style={{ padding: '0 0 6px', border: 'none' }}>{t.remote.section}</div>
+          <div className="form-grid">
+            <label />
+            <label className="toggle"><input type="checkbox" checked={settings.remoteControl !== false} onChange={(e) => void patch({ remoteControl: e.target.checked })} /> {t.remote.enable}</label>
+            {settings.remoteControl !== false && (
+              <>
+                <label>{t.remote.test}</label>
+                <span className="hint" style={{ fontFamily: 'var(--mono)' }}>http://127.0.0.1:{settings.remotePort ?? 51888}/action/…</span>
+              </>
+            )}
+            <label />
+            <div className="hint">{t.remote.hint}</div>
+            <label />
+            <div className="hint">{t.remote.hotkeyHint}</div>
+          </div>
+        </div>
         <div className="modal-footer">
           <button className="btn danger" onClick={() => void window.panocut.uninstall()}>{t.settings.uninstall}</button>
           <div className="spacer" />

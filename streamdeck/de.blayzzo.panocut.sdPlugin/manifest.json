@@ -1,0 +1,384 @@
+{
+  "Name": "PanoCut",
+  "Version": "0.4.0.0",
+  "Author": "BlayZzo",
+  "Description": "Steuert den Videoeditor PanoCut: Abspielen, Schneiden, Markieren, Rückgängig, Export, KI und mehr.",
+  "URL": "https://github.com/BlayZzo/pano-cut",
+  "Icon": "imgs/marketplace",
+  "Category": "PanoCut",
+  "CategoryIcon": "imgs/category",
+  "CodePath": "bin/plugin.js",
+  "Nodejs": {
+    "Version": "20",
+    "Debug": "disabled"
+  },
+  "SDKVersion": 2,
+  "Software": {
+    "MinimumVersion": "6.4"
+  },
+  "OS": [
+    {
+      "Platform": "mac",
+      "MinimumVersion": "12"
+    },
+    {
+      "Platform": "windows",
+      "MinimumVersion": "10"
+    }
+  ],
+  "UUID": "de.blayzzo.panocut",
+  "Actions": [
+    {
+      "UUID": "de.blayzzo.panocut.playpause",
+      "Name": "Abspielen / Pause",
+      "Tooltip": "Wiedergabe starten oder anhalten",
+      "Icon": "imgs/actions/playpause",
+      "States": [
+        {
+          "Image": "imgs/actions/playpause-key",
+          "ShowTitle": false
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "de.blayzzo.panocut.split",
+      "Name": "Schneiden",
+      "Tooltip": "Clip an der Abspielposition schneiden",
+      "Icon": "imgs/actions/split",
+      "States": [
+        {
+          "Image": "imgs/actions/split-key",
+          "ShowTitle": false
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "de.blayzzo.panocut.delete",
+      "Name": "Löschen",
+      "Tooltip": "Ausgewählte Clips löschen",
+      "Icon": "imgs/actions/delete",
+      "States": [
+        {
+          "Image": "imgs/actions/delete-key",
+          "ShowTitle": false
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "de.blayzzo.panocut.undo",
+      "Name": "Rückgängig",
+      "Tooltip": "Letzten Schritt rückgängig machen",
+      "Icon": "imgs/actions/undo",
+      "States": [
+        {
+          "Image": "imgs/actions/undo-key",
+          "ShowTitle": false
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "de.blayzzo.panocut.redo",
+      "Name": "Wiederholen",
+      "Tooltip": "Rückgängig gemachten Schritt wiederholen",
+      "Icon": "imgs/actions/redo",
+      "States": [
+        {
+          "Image": "imgs/actions/redo-key",
+          "ShowTitle": false
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "de.blayzzo.panocut.markin",
+      "Name": "Anfang markieren",
+      "Tooltip": "Anfang des Bereichs setzen (wie Taste I)",
+      "Icon": "imgs/actions/markin",
+      "States": [
+        {
+          "Image": "imgs/actions/markin-key",
+          "ShowTitle": false
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "de.blayzzo.panocut.markout",
+      "Name": "Ende markieren",
+      "Tooltip": "Ende des Bereichs setzen (wie Taste O)",
+      "Icon": "imgs/actions/markout",
+      "States": [
+        {
+          "Image": "imgs/actions/markout-key",
+          "ShowTitle": false
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "de.blayzzo.panocut.clearrange",
+      "Name": "Markierung löschen",
+      "Tooltip": "Bereichsmarkierung entfernen",
+      "Icon": "imgs/actions/clearrange",
+      "States": [
+        {
+          "Image": "imgs/actions/clearrange-key",
+          "ShowTitle": false
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "de.blayzzo.panocut.prevframe",
+      "Name": "Bild zurück",
+      "Tooltip": "Ein Einzelbild zurück",
+      "Icon": "imgs/actions/prevframe",
+      "States": [
+        {
+          "Image": "imgs/actions/prevframe-key",
+          "ShowTitle": false
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "de.blayzzo.panocut.nextframe",
+      "Name": "Bild vor",
+      "Tooltip": "Ein Einzelbild vor",
+      "Icon": "imgs/actions/nextframe",
+      "States": [
+        {
+          "Image": "imgs/actions/nextframe-key",
+          "ShowTitle": false
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "de.blayzzo.panocut.gostart",
+      "Name": "Zum Anfang",
+      "Tooltip": "Abspielkopf zum Anfang",
+      "Icon": "imgs/actions/gostart",
+      "States": [
+        {
+          "Image": "imgs/actions/gostart-key",
+          "ShowTitle": false
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "de.blayzzo.panocut.goend",
+      "Name": "Zum Ende",
+      "Tooltip": "Abspielkopf zum Ende",
+      "Icon": "imgs/actions/goend",
+      "States": [
+        {
+          "Image": "imgs/actions/goend-key",
+          "ShowTitle": false
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "de.blayzzo.panocut.loop",
+      "Name": "Schleife",
+      "Tooltip": "Wiedergabe wiederholen an/aus",
+      "Icon": "imgs/actions/loop",
+      "States": [
+        {
+          "Image": "imgs/actions/loop-key",
+          "ShowTitle": false
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "de.blayzzo.panocut.duplicate",
+      "Name": "Duplizieren",
+      "Tooltip": "Ausgewählte Clips duplizieren",
+      "Icon": "imgs/actions/duplicate",
+      "States": [
+        {
+          "Image": "imgs/actions/duplicate-key",
+          "ShowTitle": false
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "de.blayzzo.panocut.zoomin",
+      "Name": "Timeline vergrößern",
+      "Tooltip": "Timeline vergrößern",
+      "Icon": "imgs/actions/zoomin",
+      "States": [
+        {
+          "Image": "imgs/actions/zoomin-key",
+          "ShowTitle": false
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "de.blayzzo.panocut.zoomout",
+      "Name": "Timeline verkleinern",
+      "Tooltip": "Timeline verkleinern",
+      "Icon": "imgs/actions/zoomout",
+      "States": [
+        {
+          "Image": "imgs/actions/zoomout-key",
+          "ShowTitle": false
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "de.blayzzo.panocut.zoomfit",
+      "Name": "Timeline einpassen",
+      "Tooltip": "Ganze Timeline anzeigen",
+      "Icon": "imgs/actions/zoomfit",
+      "States": [
+        {
+          "Image": "imgs/actions/zoomfit-key",
+          "ShowTitle": false
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "de.blayzzo.panocut.autoenhance",
+      "Name": "Natürlich schön",
+      "Tooltip": "Bild des ausgewählten Clips automatisch verbessern",
+      "Icon": "imgs/actions/autoenhance",
+      "States": [
+        {
+          "Image": "imgs/actions/autoenhance-key",
+          "ShowTitle": false
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "de.blayzzo.panocut.ai",
+      "Name": "KI-Info",
+      "Tooltip": "KI-Bereich öffnen (Objekte erkennen)",
+      "Icon": "imgs/actions/ai",
+      "States": [
+        {
+          "Image": "imgs/actions/ai-key",
+          "ShowTitle": false
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "de.blayzzo.panocut.import",
+      "Name": "Importieren",
+      "Tooltip": "Medien importieren",
+      "Icon": "imgs/actions/import",
+      "States": [
+        {
+          "Image": "imgs/actions/import-key",
+          "ShowTitle": false
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "de.blayzzo.panocut.save",
+      "Name": "Speichern",
+      "Tooltip": "Projekt speichern",
+      "Icon": "imgs/actions/save",
+      "States": [
+        {
+          "Image": "imgs/actions/save-key",
+          "ShowTitle": false
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "de.blayzzo.panocut.export",
+      "Name": "Exportieren",
+      "Tooltip": "Export-Fenster öffnen",
+      "Icon": "imgs/actions/export",
+      "States": [
+        {
+          "Image": "imgs/actions/export-key",
+          "ShowTitle": false
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true
+    }
+  ]
+}

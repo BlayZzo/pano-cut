@@ -15,7 +15,8 @@ import { onDirtyChange, untracked, useProject, isDirty } from './store/project';
 import { useKeyboard } from './hooks/useKeyboard';
 import {
   deleteSelection, doRedo, doUndo, duplicateSelection, goEnd, goStart, importDialog, loadProjectPath, newProjectFlow,
-  openProject, saveProject, selectAll, splitAtPlayhead, zoomBy,
+  openProject, saveProject, selectAll, splitAtPlayhead, zoomBy, setRangeIn, setRangeOut, clearRange, stepFrames,
+  toggleLoop, toggleAiPanel, autoEnhanceClips,
 } from './actions';
 import { playPause } from './engine/instance';
 import { isEditingText } from './utils/dom';
@@ -68,6 +69,14 @@ export function App(): React.ReactElement {
         case 'zoomIn': zoomBy(1.3); break;
         case 'zoomOut': zoomBy(1 / 1.3); break;
         case 'zoomFit': zoomFitRef.current(); break;
+        case 'markIn': setRangeIn(); break;
+        case 'markOut': setRangeOut(); break;
+        case 'clearRange': clearRange(); break;
+        case 'prevFrame': stepFrames(-1); break;
+        case 'nextFrame': stepFrames(1); break;
+        case 'toggleLoop': toggleLoop(); break;
+        case 'ai': toggleAiPanel(); break;
+        case 'autoEnhance': void autoEnhanceClips(); break;
       }
     });
     return () => { offMedia(); offExport(); offUpdate(); offDirty(); offMenu(); };

@@ -264,6 +264,7 @@ select { padding-right: 24px; }
 .subtitle-row input[type="text"] { height: 26px; min-width: 0; }
 .subtitle-row input[type="number"] { height: 26px; width: 52px; padding: 2px 4px; font-size: 11px; }
 .subtitle-row .btn { height: 26px; padding: 0 4px; font-family: var(--mono); font-size: 10.5px; }
+.subtitle-row .subtitle-translation { grid-column: 2 / span 4; height: 24px; font-size: 11.5px; color: #ffe8a3; margin-bottom: 3px; }
 textarea { background: var(--panel-2); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); padding: 6px 8px; color: var(--text); outline: none; font-family: inherit; }
 textarea:focus { border-color: var(--accent); }
 .preview-stage.pano canvas { cursor: grab; }
@@ -279,3 +280,21 @@ textarea:focus { border-color: var(--accent); }
 .preview-overlay { position: absolute; pointer-events: none; }
 .preview-stage.picking canvas { cursor: crosshair; }
 .object-card .media-thumb { background-image: linear-gradient(45deg, #333 25%, transparent 25%), linear-gradient(-45deg, #333 25%, transparent 25%), linear-gradient(45deg, transparent 75%, #333 75%), linear-gradient(-45deg, transparent 75%, #333 75%); background-size: 16px 16px; background-position: 0 0, 0 8px, 8px -8px, -8px 0; background-color: #222; }
+
+/* v0.4: Looks, Keyframes, Effekt-Bibliothek */
+.look-grid { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.key-table { display: flex; flex-direction: column; gap: 3px; margin-bottom: 6px; }
+.key-row { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)) 22px; gap: 3px; align-items: center; }
+.key-row input.num { width: 100%; height: 24px; padding: 2px 3px; font-size: 10.5px; }
+.key-row.key-head span { font-size: 10px; color: var(--text-faint); text-align: center; }
+.key-row .btn { height: 24px; padding: 0 2px; }
+.effect-group { margin-bottom: 10px; }
+.effect-group-title { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.04em; margin: 4px 0 6px; }
+.effect-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(82px, 1fr)); gap: 6px; }
+.effect-tile { position: relative; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; height: 64px; padding: 4px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--panel-2); cursor: grab; user-select: none; text-align: center; font-size: 11px; color: var(--text); }
+.effect-tile:hover { border-color: var(--accent); background: var(--panel-3); }
+.effect-tile .effect-icon { font-size: 20px; line-height: 1; }
+.effect-tile .effect-del { position: absolute; top: 2px; right: 2px; width: 16px; height: 16px; padding: 0; line-height: 14px; font-size: 11px; border-radius: 50%; border: none; background: transparent; color: var(--text-faint); cursor: pointer; }
+.effect-tile .effect-del:hover { color: var(--danger); }
+.effect-tile.look-tile .effect-swatch { width: 100%; height: 22px; border-radius: 3px; }
+.clip.effect-drop { outline: 2px solid var(--accent); outline-offset: -2px; }

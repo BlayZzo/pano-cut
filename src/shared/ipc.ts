@@ -27,7 +27,10 @@ export interface PanoCutApi {
   // Untertitel
   whisperStatus(): Promise<{ available: boolean; models: Record<WhisperModel, boolean> }>;
   downloadWhisperModel(model: WhisperModel): Promise<void>;
-  transcribe(req: { mediaPath: string; start: number; duration: number; language: string; model: WhisperModel; maxChars: number }): Promise<SubtitleSegment[]>;
+  transcribe(req: { mediaPath: string; start: number; duration: number; language: string; model: WhisperModel; maxChars: number; translate?: boolean }): Promise<SubtitleSegment[]>;
+  translateTexts(texts: string[], source: string, target: string): Promise<string[]>;
+  readTextFile(path: string): Promise<string | null>;
+  selectFile(title: string, extensions: string[]): Promise<string | null>;
   cancelTranscribe(): Promise<void>;
   onWhisperProgress(cb: (p: WhisperProgress) => void): () => void;
 
@@ -96,6 +99,9 @@ export const IPC = {
   downloadWhisperModel: 'subs:download',
   transcribe: 'subs:transcribe',
   cancelTranscribe: 'subs:cancel',
+  translateTexts: 'subs:translate',
+  readTextFile: 'fs:readText',
+  selectFile: 'fs:selectFile',
   whisperProgress: 'subs:progress',
 
   aiStatus: 'ai:status',

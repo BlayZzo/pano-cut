@@ -148,3 +148,10 @@ export class PanoGL {
     return this.canvas;
   }
 }
+
+let panoInstance: PanoGL | null = null;
+/** Für die Vorschau gemeinsam genutzte Instanz (spart WebGL-Kontexte). */
+export function sharedPanoGL(): PanoGL {
+  if (!panoInstance) panoInstance = new PanoGL();
+  return panoInstance;
+}

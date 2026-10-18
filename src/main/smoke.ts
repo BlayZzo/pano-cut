@@ -7,6 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { createClip, createProject, createTitleClip } from '@shared/timeline';
 import { defaultSubtitleStyle, defaultTitle } from '@shared/pano';
+import { createMotion } from '@shared/effects';
 import type { ExportOptions, MediaItem } from '@shared/types';
 import { availableFilters, probeFile, runFfmpeg } from './ffmpeg';
 import { prepareMedia, probeMedia } from './media';
@@ -118,6 +119,40 @@ export async function runSmokeTest(): Promise<number> {
     await new ExportJob(project, { ...options, outputPath: gif, format: 'gif', codec: 'gif', width: 320, height: 180, fps: 10, range: { start: 0, end: 1 } }, () => {}).run();
     if (!fs.existsSync(gif) || fs.statSync(gif).size < 1000) throw new Error('GIF-Export fehlgeschlagen');
     log('GIF ok');
+
+    // v0.4: Farb-Look + eigene LUT, Bild-Effekte, Zuschnitt, Animation (Bewegung + Deckkraft), Ducking, Übersetzung
+    const lutFile = path.join(dir, 'test.cube');
+    fs.writeFileSync(lutFile, 'LUT_3D_SIZE 2\n1 1 1\n0 1 1\n1 0 1\n0 0 1\n1 1 0\n0 1 0\n1 0 0\n0 0 0\n'); // invertiert
+    const fxProject = createProject('SmokeFx', 640, 360, 30);
+    for (const it of [vid, img, mus]) fxProject.media[it.id] = it;
+    const fv = fxProject.tracks.filter((t) => t.kind === 'video');
+    const fa = fxProject.tracks.filter((t) => t.kind === 'audio');
+    const e1 = createClip(vid, fv[1].id, 0); e1.out = 2;
+    e1.color = { ...e1.color, look: 'cinema', exposure: 0.3, temperature: 20, lut: lutFile, lutStrength: 0.5 };
+    e1.fx = { vignette: 0.6, sharpen: 0.4, denoise: 0.3, blur: 0, grain: 0.3, mirror: true, flip: false };
+    e1.crop = { left: 5, right: 5, top: 5, bottom: 5 };
+    e1.motion = createMotion('kenburns', 2, 1);
+    e1.subtitles = { enabled: true, style: defaultSubtitleStyle(), showTranslation: true, segments: [{ id: 't1', start: 0.1, end: 1.9, text: 'Hallo', translation: 'Hello' }] };
+    const e2 = createClip(img, fv[0].id, 0); e2.out = 2; e2.transform = { x: 25, y: 0, scale: 0.4, rotation: 0 };
+    e2.motion = createMotion('slidein-left', 2, 1); e2.motion.keyframes[0].opacity = 0;
+    const e3 = createClip(mus, fa[0].id, 0); e3.out = 2; e3.ducking = { enabled: true, amount: 0.8 };
+    for (const c of [e1, e2, e3]) fxProject.clips[c.id] = c;
+    const outFx = path.join(dir, 'export_fx.mp4');
+    await new ExportJob(fxProject, { ...options, outputPath: outFx }, (p) => { if (p.phase === 'error') log(' Fehler:', p.message); }).run();
+    const probeFx = await probeFile(outFx);
+    if (Math.abs((probeFx.format.duration ?? 0) - 2) > 0.2) throw new Error(`Effekt-Export: falsche Länge ${probeFx.format.duration}`);
+    // Das rote Bild muss nach dem Hereinschieben rechts der Mitte stehen (x = 50 % + 25 %), am Anfang noch nicht
+    const pixelAt = async (t: number, x: number, y: number): Promise<number[]> => {
+      const rawPx = path.join(dir, `px_${t}.rgb`);
+      await runFfmpeg(['-ss', String(t), '-i', outFx, '-frames:v', '1', '-vf', `crop=4:4:${x}:${y}`, '-f', 'rawvideo', '-pix_fmt', 'rgb24', rawPx]);
+      return [...fs.readFileSync(rawPx).subarray(0, 3)];
+    };
+    const late = await pixelAt(1.2, 478, 178);
+    const early = await pixelAt(0.03, 478, 178);
+    log(`Animation: Pixel bei 1,2 s = ${late.join(',')}, bei 0 s = ${early.join(',')}`);
+    if (!(late[0] > 150 && late[1] < 90 && late[2] < 90)) throw new Error('Animation: Bild steht nicht an der Zielposition');
+    if (early[0] > 150 && early[1] < 90 && early[2] < 90) throw new Error('Animation: Bild ist am Anfang schon sichtbar');
+    log('Effekte ok');
 
     // KI: Erkennung und Maske. In der CI liegt ein Testbild (Hund, Fahrrad, Auto) unter PANOCUT_TEST_IMAGE.
     if (aiAvailable()) {

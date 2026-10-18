@@ -1,8 +1,10 @@
 // Zentrale Aktionen – von Menü, Tastenkürzeln und Buttons gemeinsam genutzt.
-import type { MediaItem, Project, TransitionType } from '@shared/types';
-import { clipEnd, clipsOnTrack, projectDuration } from '@shared/timeline';
+import type { Clip, MediaItem, Project, TransitionType, UserEffect } from '@shared/types';
+import { clipDuration, clipEnd, clipsOnTrack, makeId, projectDuration } from '@shared/timeline';
+import { autoEnhance, frameStats, type FrameStats } from '@shared/color';
+import { EFFECT_BLOCKS, applyUserEffect, userEffectFromClip } from '@shared/effects';
 import { TITLE_TEMPLATES, defaultTitle, defaultTransition } from '@shared/pano';
-import { clearHistory, isDirty, redo, setDirty, undo, untracked, useProject } from './store/project';
+import { beginTransaction, clearHistory, endTransaction, isDirty, redo, setDirty, undo, untracked, useProject } from './store/project';
 import { useUi } from './store/ui';
 import { engine, seekTo, stopPlayback } from './engine/instance';
 import { fmt, t } from './i18n/de';
@@ -250,6 +252,89 @@ export function zoomToFit(availableWidth: number): void {
   if (dur <= 0 || availableWidth <= 0) return;
   useUi.getState().setZoom((availableWidth - 40) / dur);
   useUi.getState().setScrollX(0);
+}
+
+// ---------- Effekte & Bildverbesserung ----------
+
+function selectedMediaClips(ids?: string[]): Clip[] {
+  const { project } = useProject.getState();
+  return (ids ?? useUi.getState().selection).map((id) => project.clips[id]).filter((c): c is Clip => !!c && c.kind !== 'title' && project.media[c.mediaId]?.type !== 'audio');
+}
+
+let enhancing = false;
+/** „Natürlich schön“: analysiert ein paar Bilder des Clips und stellt Belichtung, Weißabgleich, Kontrast und Dynamik ein. */
+export async function autoEnhanceClips(ids?: string[]): Promise<void> {
+  const clips = selectedMediaClips(ids);
+  const ui = useUi.getState();
+  if (clips.length === 0) { ui.toast(t.look.autoNoClip, 'error'); return; }
+  if (enhancing) return;
+  enhancing = true;
+  ui.toast(t.look.autoWorking, 'info');
+  beginTransaction();
+  try {
+    for (const clip of clips) {
+      const media = useProject.getState().project.media[clip.mediaId];
+      if (!media) continue;
+      const dur = clipDuration(clip);
+      const times = media.type === 'image' ? [0] : [0.12, 0.5, 0.88].map((f) => f * dur);
+      const stats: FrameStats[] = [];
+      for (const lt of times) {
+        const img = await engine.grabFrame(clip, media, lt, 320);
+        if (img) stats.push(frameStats(img.data));
+      }
+      if (stats.length === 0) continue;
+      const current = useProject.getState().project.clips[clip.id];
+      if (current) useProject.getState().updateClip(clip.id, { color: { ...current.color, ...autoEnhance(stats) } });
+    }
+    useUi.getState().toast(t.look.autoDone, 'success');
+  } catch (err) {
+    useUi.getState().toast((err as Error).message, 'error');
+  } finally {
+    endTransaction();
+    enhancing = false;
+  }
+}
+
+/** Effekt-Baustein (oder eigenen Effekt) auf Clips anwenden. */
+export function applyEffectToClips(effectId: string, ids?: string[]): boolean {
+  const clips = selectedMediaClips(ids);
+  if (clips.length === 0) { useUi.getState().toast(t.effects.needClip, 'error'); return false; }
+  const block = EFFECT_BLOCKS.find((b) => b.id === effectId);
+  const user = useUi.getState().settings.userEffects?.find((u) => u.id === effectId);
+  if (!block && !user) return false;
+  beginTransaction();
+  for (const c of clips) {
+    const patch = block ? block.apply(c, clipDuration(c)) : applyUserEffect(c, user as UserEffect, clipDuration(c));
+    useProject.getState().updateClip(c.id, patch);
+  }
+  endTransaction();
+  useUi.getState().toast(`${block?.name ?? user?.name}: ${t.effects.applied}`, 'success');
+  return true;
+}
+
+/** Aktuelle Einstellungen eines Clips als eigenen Effekt speichern. */
+export async function saveClipAsEffect(clip: Clip, name: string): Promise<void> {
+  const ue = userEffectFromClip(clip, name.trim() || t.effects.ownDefaultName, clipDuration(clip), makeId('fx'));
+  const current = useUi.getState().settings.userEffects ?? [];
+  const next = await api().setSettings({ userEffects: [...current, ue] });
+  useUi.getState().setSettings(next);
+  useUi.getState().toast(t.effects.saved, 'success');
+}
+
+export async function deleteUserEffect(id: string): Promise<void> {
+  const current = useUi.getState().settings.userEffects ?? [];
+  const next = await api().setSettings({ userEffects: current.filter((u) => u.id !== id) });
+  useUi.getState().setSettings(next);
+}
+
+export function toggleLoop(): void {
+  const ui = useUi.getState();
+  ui.setLoop(!ui.loop);
+}
+
+export function toggleAiPanel(): void {
+  const ui = useUi.getState();
+  ui.setAiPanel(!ui.aiPanel);
 }
 
 export { engine };

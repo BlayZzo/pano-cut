@@ -84,6 +84,7 @@ export interface TranscribeRequest {
   language: string;    // 'de', 'en', 'auto', …
   model: WhisperModel;
   maxChars: number;    // Zeichen pro Untertitel-Segment (Social-Media-Stil: kurz)
+  translate?: boolean; // direkt ins Englische übersetzen (whisper kann nur → Englisch)
 }
 
 /** Transkribiert einen Abschnitt und liefert Segmente relativ zum Abschnittsanfang (Quellzeit). */
@@ -101,6 +102,7 @@ export async function transcribe(req: TranscribeRequest, onProgress: (p: Whisper
     const args = ['-m', modelPath(req.model), '-f', wav, '-oj', '-of', outBase, '-pp', '-t', String(Math.max(2, Math.min(8, os.cpus().length - 1))), '-ml', String(Math.max(10, req.maxChars)), '-sow'];
     if (req.language && req.language !== 'auto') args.push('-l', req.language);
     else args.push('-l', 'auto');
+    if (req.translate) args.push('-tr');
     await new Promise<void>((resolve, reject) => {
       const child = spawn(bin, args, { windowsHide: true });
       let err = '';

@@ -155,5 +155,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           v="${{ needs.check.outputs.version }}"
+          # Stream-Deck-Plugin: Ordner als Zip mit der Endung .streamDeckPlugin (Doppelklick installiert es)
+          node -e "const f='streamdeck/de.blayzzo.panocut.sdPlugin/manifest.json';const m=require('./'+f);m.Version='$v.0';require('fs').writeFileSync(f,JSON.stringify(m,null,2)+'\n')"
+          (cd streamdeck && zip -qr ../PanoCut.streamDeckPlugin de.blayzzo.panocut.sdPlugin)
+          gh release upload "v$v" PanoCut.streamDeckPlugin --repo "$GITHUB_REPOSITORY" --clobber
           gh release view "v$v" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name'
           gh release edit "v$v" --repo "$GITHUB_REPOSITORY" --draft=false --latest

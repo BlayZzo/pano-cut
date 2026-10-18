@@ -38,6 +38,9 @@ const api: PanoCutApi = {
   downloadWhisperModel: (m) => ipcRenderer.invoke(IPC.downloadWhisperModel, m),
   transcribe: (req) => ipcRenderer.invoke(IPC.transcribe, req),
   cancelTranscribe: () => ipcRenderer.invoke(IPC.cancelTranscribe),
+  translateTexts: (texts, source, target) => ipcRenderer.invoke(IPC.translateTexts, texts, source, target),
+  readTextFile: (p) => ipcRenderer.invoke(IPC.readTextFile, p),
+  selectFile: (title, ext) => ipcRenderer.invoke(IPC.selectFile, title, ext),
   onWhisperProgress: subscribe(IPC.whisperProgress),
 
   aiStatus: () => ipcRenderer.invoke(IPC.aiStatus),

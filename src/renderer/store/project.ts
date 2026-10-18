@@ -40,6 +40,7 @@ export interface ProjectState {
   setTransition(id: string, transition: Transition | undefined): void;
   setStabilize(id: string, s: Stabilization | undefined): void;
   setSubtitles(id: string, segments: SubtitleSegment[] | null, style?: Partial<Omit<TitleStyle, 'text'>>, enabled?: boolean): void;
+  setSubtitleOptions(id: string, patch: { showTranslation?: boolean; translationColor?: string; translationOnly?: boolean }): void;
   updateMediaStitch(mediaId: string, patch: Partial<StitchSettings>): void;
 
   addObjectTrack(clipId: string, track: ObjectTrack): void;
@@ -286,12 +287,18 @@ export const useProject = create<ProjectState>()(
         if (segments === null) { delete next.subtitles; }
         else {
           next.subtitles = {
+            ...(c.subtitles ?? {}),
             segments,
             style: { ...(c.subtitles?.style ?? defaultSubtitleStyle()), ...(style ?? {}) },
             enabled: enabled ?? c.subtitles?.enabled ?? true,
           };
         }
         return { project: { ...s.project, clips: { ...s.project.clips, [id]: next } } };
+      }),
+      setSubtitleOptions: (id, patch) => set((s) => {
+        const c = s.project.clips[id];
+        if (!c?.subtitles) return {};
+        return { project: { ...s.project, clips: { ...s.project.clips, [id]: { ...c, subtitles: { ...c.subtitles, ...patch } } } } };
       }),
       updateMediaStitch: (mediaId, patch) => set((s) => {
         const m = s.project.media[mediaId];

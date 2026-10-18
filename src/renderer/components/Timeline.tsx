@@ -4,12 +4,12 @@ import { clipDuration, clipEnd, DEFAULT_IMAGE_DURATION, DEFAULT_TITLE_DURATION, 
 import { useProject } from '../store/project';
 import { useUi, type DragState } from '../store/ui';
 import { engine, stopPlayback } from '../engine/instance';
-import { addTitleToTimeline, applyTransitionToClip, deleteSelection, duplicateSelection, splitAtPlayhead, zoomBy, zoomToFit } from '../actions';
+import { addTitleToTimeline, applyEffectToClips, applyTransitionToClip, deleteSelection, duplicateSelection, splitAtPlayhead, zoomBy, zoomToFit } from '../actions';
 import type { TransitionType } from '@shared/types';
 import { TITLE_TEMPLATES } from '@shared/pano';
 import { t } from '../i18n/de';
 import { cssUrl } from '../utils/dom';
-import { DRAG_MIME, DRAG_TITLE, DRAG_TRANSITION, getDragging, getDraggingMedia } from '../utils/dnd';
+import { DRAG_EFFECT, DRAG_MIME, DRAG_TITLE, DRAG_TRANSITION, getDragging, getDraggingMedia } from '../utils/dnd';
 import { ContextMenu, type MenuEntry } from './ContextMenu';
 import { IconEye, IconEyeOff, IconFit, IconLock, IconMagnet, IconMute, IconPlus, IconScissors, IconTrash, IconUnlock, IconVolume, IconZoomIn, IconZoomOut } from './Icons';
 
@@ -261,7 +261,7 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
   // ---------- Drop aus der Mediathek ----------
   const onDragOver = (e: React.DragEvent) => {
     const types = e.dataTransfer.types;
-    if (!types.includes(DRAG_MIME) && !types.includes(DRAG_TITLE) && !types.includes(DRAG_TRANSITION)) return;
+    if (!types.includes(DRAG_MIME) && !types.includes(DRAG_TITLE) && !types.includes(DRAG_TRANSITION) && !types.includes(DRAG_EFFECT)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'copy';
     const track = trackAtClientY(e.clientY);
@@ -270,8 +270,8 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
     const payload = getDragging();
     if (!payload) return;
     let time = timeAtClientX(e.clientX);
-    if (payload.kind === 'transition') {
-      const target = Object.values(project.clips).find((c) => c.trackId === track.id && time >= c.start && time < clipEnd(c) && c.kind !== 'title');
+    if (payload.kind === 'transition' || payload.kind === 'effect') {
+      const target = Object.values(project.clips).find((c) => c.trackId === track.id && time >= c.start && time < clipEnd(c) && c.kind !== 'title' && project.media[c.mediaId]?.type !== 'audio');
       setDropPreview(target ? { trackId: track.id, time, media: null, transitionClip: target.id } : null);
       return;
     }
@@ -291,13 +291,19 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
     const mediaId = e.dataTransfer.getData(DRAG_MIME) || getDraggingMedia();
     const titleId = e.dataTransfer.getData(DRAG_TITLE) || (payload?.kind === 'title' ? payload.templateId : '');
     const trType = e.dataTransfer.getData(DRAG_TRANSITION) || (payload?.kind === 'transition' ? payload.type : '');
-    if (!mediaId && !titleId && !trType) return;
+    const effectId = e.dataTransfer.getData(DRAG_EFFECT) || (payload?.kind === 'effect' ? payload.id : '');
+    if (!mediaId && !titleId && !trType && !effectId) return;
     e.preventDefault();
     const preview = dropPreview;
     setDropPreview(null);
     const track = trackAtClientY(e.clientY);
     if (!track) return;
     const time = preview?.time ?? timeAtClientX(e.clientX);
+    if (effectId) {
+      const target = preview?.transitionClip ?? Object.values(project.clips).find((c) => c.trackId === track.id && time >= c.start && time < clipEnd(c) && c.kind !== 'title')?.id;
+      if (target && applyEffectToClips(effectId, [target])) select([target]);
+      return;
+    }
     if (trType) {
       const target = preview?.transitionClip ?? Object.values(project.clips).find((c) => c.trackId === track.id && time >= c.start && time < clipEnd(c))?.id;
       if (target) applyTransitionToClip(target, trType as TransitionType);

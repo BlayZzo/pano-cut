@@ -14,6 +14,8 @@ import { killAll } from './ffmpeg';
 import { buildMenu } from './menu';
 import { checkForUpdates, downloadUpdate, initUpdater, installUpdate } from './updater';
 import { downloadModel, transcribe, whisperStatus } from './whisper';
+import { translateTexts } from './translate';
+import { startRemote, stopRemote } from './remote';
 import { aiAvailable, aiModelStatus, detectObjects, segmentObject } from './ai';
 import { maskDir, renderObject } from './objects';
 import { cloudDownload, cloudList, cloudTest, cloudUpload } from './cloud';
@@ -105,6 +107,16 @@ function createWindow(): void {
   mainWindow.on('closed', () => (mainWindow = null));
 }
 
+/** Fernsteuerung (Stream Deck) je nach Einstellung starten/stoppen. */
+function applyRemoteSetting(): void {
+  const st = loadSettings();
+  if (st.remoteControl === false) { stopRemote(); return; }
+  startRemote(st.remotePort ?? 51888, (action) => {
+    if (mainWindow?.isMinimized()) mainWindow.restore();
+    sendToWindow(IPC.menuAction, action);
+  }, () => ({ version: app.getVersion() }));
+}
+
 function refreshMenu(): void {
   buildMenu(() => mainWindow, () => loadSettings().recentProjects.filter((p) => fs.existsSync(p)), () => {});
 }
@@ -122,7 +134,11 @@ ipcMain.handle(IPC.getAppInfo, (): AppInfo => ({
 }));
 
 ipcMain.handle(IPC.getSettings, () => loadSettings());
-ipcMain.handle(IPC.setSettings, (_e, patch: Partial<Settings>) => saveSettings(patch));
+ipcMain.handle(IPC.setSettings, (_e, patch: Partial<Settings>) => {
+  const next = saveSettings(patch);
+  if ('remoteControl' in patch || 'remotePort' in patch) applyRemoteSetting();
+  return next;
+});
 ipcMain.handle(IPC.openExternal, (_e, url: string) => shell.openExternal(url));
 ipcMain.handle(IPC.showInFolder, (_e, p: string) => shell.showItemInFolder(p));
 ipcMain.on(IPC.setDirty, (_e, d: boolean) => {
@@ -225,7 +241,7 @@ ipcMain.handle(IPC.whisperStatus, () => whisperStatus());
 ipcMain.handle(IPC.downloadWhisperModel, async (_e, model: WhisperModel) => {
   await downloadModel(model, (p: WhisperProgress) => sendToWindow(IPC.whisperProgress, p));
 });
-ipcMain.handle(IPC.transcribe, async (_e, req: { mediaPath: string; start: number; duration: number; language: string; model: WhisperModel; maxChars: number }) => {
+ipcMain.handle(IPC.transcribe, async (_e, req: { mediaPath: string; start: number; duration: number; language: string; model: WhisperModel; maxChars: number; translate?: boolean }) => {
   transcribeController?.abort();
   transcribeController = new AbortController();
   try {
@@ -238,6 +254,18 @@ ipcMain.handle(IPC.transcribe, async (_e, req: { mediaPath: string; start: numbe
   }
 });
 ipcMain.handle(IPC.cancelTranscribe, () => { transcribeController?.abort(); });
+ipcMain.handle(IPC.translateTexts, async (_e, texts: string[], source: string, target: string) => {
+  const s = loadSettings();
+  if (!s.translateUrl) throw new Error('Kein Übersetzungs-Server eingerichtet (Einstellungen → Übersetzung).');
+  return translateTexts(texts, source, target, s.translateUrl, s.translateKey);
+});
+ipcMain.handle(IPC.readTextFile, (_e, p: string) => {
+  try { return fs.readFileSync(p, 'utf8'); } catch { return null; }
+});
+ipcMain.handle(IPC.selectFile, async (_e, title: string, extensions: string[]) => {
+  const res = await dialog.showOpenDialog(mainWindow!, { title, properties: ['openFile'], filters: [{ name: extensions.join(', ').toUpperCase(), extensions }] });
+  return res.canceled ? null : res.filePaths[0] ?? null;
+});
 
 // ---- KI ----
 
@@ -396,6 +424,7 @@ app.whenReady().then(async () => {
   installMediaProtocol();
   createWindow();
   refreshMenu();
+  applyRemoteSetting();
   initUpdater((s: UpdateStatus) => sendToWindow(IPC.updateStatus, s));
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -410,5 +439,6 @@ ipcMain.on(IPC.quitApp, () => {
 
 app.on('window-all-closed', () => {
   killAll();
+  stopRemote();
   app.quit();
 });

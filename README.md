@@ -50,15 +50,27 @@ Außerdem: **Hilfe → Nach Updates suchen …**
 2. **Hover-Vorschau** – mit der Maus über eine Kachel fahren, um den Clip grob durchzuspulen.
 3. **In die Timeline ziehen** – Clips auf die Video- oder Audiospuren ziehen. Sie rasten an anderen Clips und am Abspielkopf ein.
 4. **Schneiden** – Abspielkopf setzen und **S** drücken (oder die Schere). Ränder ziehen zum Trimmen.
-5. **Bearbeiten** – im Inspektor rechts: **Tempo** (Zeitlupe/Zeitraffer), **Rückwärts**, **Lautstärke** mit Ein-/Ausblenden, **Position & Größe**, **Deckkraft**, **Helligkeit/Kontrast/Sättigung/Farbton**.
-6. **360°** – Insta360-Dateien werden beim Import zusammengesetzt. Clip auswählen und in der Vorschau mit der Maus **umschauen** (Mausrad = zoomen). Im Inspektor die Ansicht wählen (Ausschnitt, ganzes Panorama, Little Planet) und mit **Keyframes** eine Kamerafahrt anlegen.
-7. **Übergänge & Titel** – im Reiter „Übergänge“ einen Übergang auf einen Clip ziehen; im Reiter „Titel“ eine Vorlage auf eine Videospur ziehen und den Text im Inspektor ändern.
-8. **Untertitel** – Clip auswählen → Inspektor → „Untertitel automatisch erzeugen“. Das Sprachmodell wird beim ersten Mal geladen; alles läuft auf deinem Rechner.
-9. **KI** – in der Vorschau auf **✦ KI** klicken: „Objekte erkennen“ → beim gewünschten Objekt „Verfolgen“ → „Maske berechnen“. Danach ist der Clip freigestellt (Inspektor → „Objekte (KI)“). Mit „In Objekt-Mediathek kopieren“ landet das Objekt im Reiter **Objekte** und lässt sich über andere Videos legen. Titel und Untertitel können im Inspektor **an ein Objekt geheftet** werden.
-10. **Green Screen** – Clip auswählen → Inspektor → „Green Screen“ → „Aus Vorschau wählen“ und auf den Hintergrund klicken.
-11. **Exportieren** – **⌘/Strg + E**: Preset wählen (Handy 9:16, Quadrat, Full HD, 4K, WhatsApp, ProRes, GIF, 360°), Qualität oder **maximale Dateigröße** einstellen, fertig. Auf dem Mac danach direkt **„In Fotos importieren“** – und von dort per WhatsApp teilen.
+5. **Bearbeiten** – im Inspektor rechts: **Tempo** (Zeitlupe/Zeitraffer), **Rückwärts**, **Lautstärke** mit Ein-/Ausblenden, **Position & Größe**, **Deckkraft**.
+6. **Bild** – **✦ Natürlich schön** verbessert das Bild automatisch (nur wenn du klickst). Dazu Looks (Kino, Warm, Teal & Orange, Drohne …), Belichtung, Lichter/Tiefen, Weißabgleich, Dynamik, Verblassen, Dunst entfernen und eigene **LUTs (.cube)** – z. B. für DJI D-Log oder Blackmagic Film.
+7. **Effekte & Animationen** – im Reiter **Effekte** einen Baustein (Ken Burns, Hereinschieben, Aufploppen, Wackeln, Looks, Vignette, Filmkorn …) auf einen Clip ziehen. Im Inspektor lassen sich Stärke und eigene **Keyframes** einstellen; mit „Als eigenen Effekt speichern“ entstehen **eigene Bausteine**.
+8. **360°** – Insta360-Dateien werden beim Import zusammengesetzt. Clip auswählen und in der Vorschau mit der Maus **umschauen** (Mausrad = zoomen). Im Inspektor die Ansicht wählen (Ausschnitt, ganzes Panorama, Little Planet) und mit **Keyframes** eine Kamerafahrt anlegen.
+9. **Übergänge & Titel** – im Reiter „Übergänge“ einen Übergang auf einen Clip ziehen; im Reiter „Titel“ eine Vorlage auf eine Videospur ziehen und den Text im Inspektor ändern.
+10. **Untertitel** – Clip auswählen → Inspektor → „Untertitel automatisch erzeugen“. Das Sprachmodell wird beim ersten Mal geladen; alles läuft auf deinem Rechner. **Übersetzen** ins Englische geht ebenfalls lokal (die Übersetzung steht in eigener Farbe darunter); für weitere Sprachen kann ein eigener, kostenloser Übersetzungs-Server (LibreTranslate) eingetragen werden.
+11. **KI** – in der Vorschau auf **✦ KI** klicken: „Objekte erkennen“ → beim gewünschten Objekt „Verfolgen“ → „Maske berechnen“. Danach ist der Clip freigestellt (Inspektor → „Objekte (KI)“). Mit „In Objekt-Mediathek kopieren“ landet das Objekt im Reiter **Objekte** und lässt sich über andere Videos legen. Titel und Untertitel können im Inspektor **an ein Objekt geheftet** werden.
+12. **Green Screen** – Clip auswählen → Inspektor → „Green Screen“ → „Aus Vorschau wählen“ und auf den Hintergrund klicken.
+13. **Exportieren** – **⌘/Strg + E**: Preset wählen (Handy 9:16, Quadrat, Full HD, 4K, WhatsApp, ProRes, GIF, 360°), Qualität oder **maximale Dateigröße** einstellen, fertig. Auf dem Mac danach direkt **„In Fotos importieren“** – und von dort per WhatsApp teilen.
+
+**Musik leiser beim Sprechen (Ducking):** Musik-Clip auswählen → Inspektor → Ton → „Leiser, wenn gesprochen wird“.
 
 **Rückgängig** mit ⌘/Strg + Z, so oft du willst. Alle Tastenkürzel unter **Hilfe → Tastenkürzel**.
+
+### Elgato Stream Deck
+
+1. In den Downloads der aktuellen Version **`PanoCut.streamDeckPlugin`** laden und doppelt anklicken – die Stream-Deck-App installiert das Plugin.
+2. In der Stream-Deck-App gibt es dann die Kategorie **PanoCut** mit 22 Tasten: Abspielen/Pause, Schneiden, Löschen, Rückgängig, Wiederholen, Anfang/Ende markieren, Bild vor/zurück, Zum Anfang/Ende, Schleife, Duplizieren, Zoom, **Natürlich schön**, **KI**, Importieren, Speichern, Exportieren.
+3. PanoCut muss laufen. Die Verbindung bleibt auf deinem Rechner (Einstellungen → „Stream Deck & Fernsteuerung“).
+
+Ohne Plugin geht es auch mit der Stream-Deck-Aktion **„Tastenkombination“** – z. B. ⌘B / Strg+B (Schneiden), ⌘⇧E / Strg+Umschalt+E (Natürlich schön), ⌘L / Strg+L (Schleife), ⌘⇧K / Strg+Umschalt+K (KI).
 
 ### Unterstützte Dateien
 
@@ -82,7 +94,8 @@ In den Einstellungen lässt sich eine WebDAV-Adresse eintragen (z. B. Nextcloud:
 | **0.1** ✅ | Mediathek mit Hover-Vorschau, Timeline (Spuren, Schneiden, Trimmen, Einrasten), Tempo/Zeitlupe/Zeitraffer, Rückwärts, Bild- und Tonbearbeitung, Export-Presets, Fotos-Import (Mac), Auto-Update, Installer/Deinstaller |
 | **0.2** ✅ | 360°: Stitching der Insta360-Rohdateien, Umschauen in der Vorschau, Kamerafahrten mit Keyframes, Little Planet, 360°-Export mit Metadaten · 20 Übergänge · Titel-Vorlagen · Stabilisierung · automatische Untertitel (lokal) · Export mit Größenlimit |
 | **0.3** ✅ | KI-Button: Personen, Tiere und Objekte erkennen und verfolgen · KI-Masken · Freistellen · Green Screen · Titel/Untertitel an Objekte heften · Objekt-Mediathek · eigene Cloud (Nextcloud/WebDAV) |
-| **0.4** | Effekt- und Animations-Bibliothek · eigene Effekte · Audio-Ducking · Mehrkamera · Elgato Stream Deck · KI-Bildverbesserung auf Wunsch · Übersetzung von Untertiteln |
+| **0.4** ✅ | Effekt- und Animations-Bibliothek · eigene Effekte · Keyframes · Looks und LUTs · „Natürlich schön“ (automatische Bildverbesserung auf Wunsch) · Zuschneiden/Spiegeln · Audio-Ducking · Übersetzung von Untertiteln · Elgato Stream Deck |
+| **0.5** | Mehrkamera-Schnitt · Blackmagic RAW · Übersetzung in weitere Sprachen ohne eigenen Server · bei Bedarf ein zweites Programm für Bild-/Objektbearbeitung (wie Photoshop neben Premiere) |
 
 Alles läuft lokal auf deinem Rechner – ohne Abo, ohne Cloud-Zwang.
 
