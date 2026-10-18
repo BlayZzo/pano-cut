@@ -27,6 +27,9 @@ publish:
 
 mac:
   category: public.app-category.video
+  files:
+    - "!node_modules/ffprobe-static/bin/win32/**"
+    - "!node_modules/ffprobe-static/bin/linux/**"
   target:
     - target: dmg
     - target: zip
@@ -56,6 +59,10 @@ dmg:
     height: 400
 
 win:
+  files:
+    - "!node_modules/ffprobe-static/bin/darwin/**"
+    - "!node_modules/ffprobe-static/bin/linux/**"
+    - "!node_modules/ffprobe-static/bin/win32/ia32/**"
   target:
     - target: nsis
       arch: [x64]
@@ -78,6 +85,10 @@ nsis:
   license: build/LICENSE-de.txt
 
 linux:
+  files:
+    - "!node_modules/ffprobe-static/bin/darwin/**"
+    - "!node_modules/ffprobe-static/bin/win32/**"
+    - "!node_modules/ffprobe-static/bin/linux/ia32/**"
   target:
     - AppImage
   icon: build/icon.png
