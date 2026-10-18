@@ -78,3 +78,16 @@ declare module 'vite/client' {}
 declare module '*.svg' { const src: string; export default src; }
 declare module '*.png' { const src: string; export default src; }
 declare module '*.css' {}
+declare module 'onnxruntime-node' {
+  export class Tensor { constructor(type: string, data: Float32Array | Uint8Array | number[], dims: number[]); data: Float32Array | Uint8Array; dims: readonly number[]; type: string; }
+  export namespace InferenceSession {
+    type SessionOptions = { executionProviders?: unknown; graphOptimizationLevel?: string };
+    type OnnxValueMapType = { [name: string]: Tensor };
+  }
+  export class InferenceSession {
+    static create(path: string, options?: InferenceSession.SessionOptions): Promise<InferenceSession>;
+    run(feeds: { [name: string]: Tensor }): Promise<{ [name: string]: Tensor }>;
+    readonly inputNames: readonly string[];
+    readonly outputNames: readonly string[];
+  }
+}

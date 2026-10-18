@@ -54,7 +54,9 @@ Außerdem: **Hilfe → Nach Updates suchen …**
 6. **360°** – Insta360-Dateien werden beim Import zusammengesetzt. Clip auswählen und in der Vorschau mit der Maus **umschauen** (Mausrad = zoomen). Im Inspektor die Ansicht wählen (Ausschnitt, ganzes Panorama, Little Planet) und mit **Keyframes** eine Kamerafahrt anlegen.
 7. **Übergänge & Titel** – im Reiter „Übergänge“ einen Übergang auf einen Clip ziehen; im Reiter „Titel“ eine Vorlage auf eine Videospur ziehen und den Text im Inspektor ändern.
 8. **Untertitel** – Clip auswählen → Inspektor → „Untertitel automatisch erzeugen“. Das Sprachmodell wird beim ersten Mal geladen; alles läuft auf deinem Rechner.
-9. **Exportieren** – **⌘/Strg + E**: Preset wählen (Handy 9:16, Quadrat, Full HD, 4K, WhatsApp, ProRes, GIF, 360°), Qualität oder **maximale Dateigröße** einstellen, fertig. Auf dem Mac danach direkt **„In Fotos importieren“** – und von dort per WhatsApp teilen.
+9. **KI** – in der Vorschau auf **✦ KI** klicken: „Objekte erkennen“ → beim gewünschten Objekt „Verfolgen“ → „Maske berechnen“. Danach ist der Clip freigestellt (Inspektor → „Objekte (KI)“). Mit „In Objekt-Mediathek kopieren“ landet das Objekt im Reiter **Objekte** und lässt sich über andere Videos legen. Titel und Untertitel können im Inspektor **an ein Objekt geheftet** werden.
+10. **Green Screen** – Clip auswählen → Inspektor → „Green Screen“ → „Aus Vorschau wählen“ und auf den Hintergrund klicken.
+11. **Exportieren** – **⌘/Strg + E**: Preset wählen (Handy 9:16, Quadrat, Full HD, 4K, WhatsApp, ProRes, GIF, 360°), Qualität oder **maximale Dateigröße** einstellen, fertig. Auf dem Mac danach direkt **„In Fotos importieren“** – und von dort per WhatsApp teilen.
 
 **Rückgängig** mit ⌘/Strg + Z, so oft du willst. Alle Tastenkürzel unter **Hilfe → Tastenkürzel**.
 
@@ -69,13 +71,17 @@ Außerdem: **Hilfe → Nach Updates suchen …**
 
 ---
 
+### Eigene Cloud
+
+In den Einstellungen lässt sich eine WebDAV-Adresse eintragen (z. B. Nextcloud: `https://deine-cloud.de/remote.php/dav/files/NAME/PanoCut`). Dann können Objekte gesichert/geholt und Exporte direkt hochgeladen werden. Es werden keine fremden Dienste benutzt.
+
 ## Fahrplan
 
 | Version | Inhalt |
 |---|---|
 | **0.1** ✅ | Mediathek mit Hover-Vorschau, Timeline (Spuren, Schneiden, Trimmen, Einrasten), Tempo/Zeitlupe/Zeitraffer, Rückwärts, Bild- und Tonbearbeitung, Export-Presets, Fotos-Import (Mac), Auto-Update, Installer/Deinstaller |
 | **0.2** ✅ | 360°: Stitching der Insta360-Rohdateien, Umschauen in der Vorschau, Kamerafahrten mit Keyframes, Little Planet, 360°-Export mit Metadaten · 20 Übergänge · Titel-Vorlagen · Stabilisierung · automatische Untertitel (lokal) · Export mit Größenlimit |
-| **0.3** | KI-Info-Button: Personen, Tiere und Objekte erkennen und tracken · KI-Masken (nachbesserbar) · Green Screen / Chroma Key · Freistellen · Bausteine (Text, Untertitel) an getrackte Objekte heften · kopierte Objekte in einer Projekt-Mediathek, optional mit eigener Cloud (Nextcloud/WebDAV, S3) |
+| **0.3** ✅ | KI-Button: Personen, Tiere und Objekte erkennen und verfolgen · KI-Masken · Freistellen · Green Screen · Titel/Untertitel an Objekte heften · Objekt-Mediathek · eigene Cloud (Nextcloud/WebDAV) |
 | **0.4** | Effekt- und Animations-Bibliothek · eigene Effekte · Audio-Ducking · Mehrkamera · Elgato Stream Deck · KI-Bildverbesserung auf Wunsch · Übersetzung von Untertiteln |
 
 Alles läuft lokal auf deinem Rechner – ohne Abo, ohne Cloud-Zwang.

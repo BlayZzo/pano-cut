@@ -8,6 +8,7 @@ import { Section, Slider } from './InspectorBits';
 import { InspectorPano } from './InspectorPano';
 import { InspectorTitle } from './InspectorTitle';
 import { InspectorStabilize, InspectorSubtitles, InspectorTransition } from './InspectorExtras';
+import { InspectorChroma, InspectorObjects } from './InspectorAi';
 
 export function Inspector(): React.ReactElement {
   const selection = useUi((s) => s.selection);
@@ -95,6 +96,8 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
         </Section>
       )}
 
+      {!isTitle && media && media.type !== 'audio' && <InspectorObjects clip={clip} media={media} />}
+      {!isTitle && media && media.type !== 'audio' && <InspectorChroma clip={clip} />}
       {!isTitle && media?.type === 'video' && <InspectorStabilize clip={clip} media={media} />}
       {!isTitle && media?.type === 'video' && media.info.hasAudio && <InspectorSubtitles clip={clip} media={media} />}
 

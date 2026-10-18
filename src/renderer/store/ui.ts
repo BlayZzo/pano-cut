@@ -36,7 +36,10 @@ export interface UiState {
   toasts: Toast[];
   exportProgress: ExportProgress | null;
   updateStatus: UpdateStatus;
-  libraryTab: 'media' | 'effects' | 'transitions' | 'titles';
+  libraryTab: 'media' | 'effects' | 'transitions' | 'titles' | 'objects';
+  aiPanel: boolean;
+  aiBusy: { percent: number; message: string } | null;
+  pickColor: boolean;   // Green-Screen-Farbe in der Vorschau wählen
   dirty: boolean;
   historyVersion: number;
 
@@ -59,6 +62,9 @@ export interface UiState {
   setExportProgress(p: ExportProgress | null): void;
   setUpdateStatus(s: UpdateStatus): void;
   setLibraryTab(tab: UiState['libraryTab']): void;
+  setAiPanel(open: boolean): void;
+  setAiBusy(b: UiState['aiBusy']): void;
+  setPickColor(p: boolean): void;
   setDirty(d: boolean): void;
   bumpHistory(): void;
 }
@@ -83,6 +89,9 @@ export const useUi = create<UiState>()((set, get) => ({
   exportProgress: null,
   updateStatus: { state: 'idle' },
   libraryTab: 'media',
+  aiPanel: false,
+  aiBusy: null,
+  pickColor: false,
   dirty: false,
   historyVersion: 0,
 
@@ -109,6 +118,9 @@ export const useUi = create<UiState>()((set, get) => ({
   setExportProgress: (exportProgress) => set({ exportProgress }),
   setUpdateStatus: (updateStatus) => set({ updateStatus }),
   setLibraryTab: (libraryTab) => set({ libraryTab }),
+  setAiPanel: (aiPanel) => set({ aiPanel }),
+  setAiBusy: (aiBusy) => set({ aiBusy }),
+  setPickColor: (pickColor) => set({ pickColor }),
   setDirty: (dirty) => set({ dirty }),
   bumpHistory: () => set((s) => ({ historyVersion: s.historyVersion + 1 })),
 }));

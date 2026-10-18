@@ -34,6 +34,17 @@ export function ExportDialog(): React.ReactElement {
   const [outputPath, setOutputPath] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
   const [photosState, setPhotosState] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
+  const [cloudState, setCloudState] = useState<'idle' | 'busy' | 'done'>('idle');
+  const uploadToCloud = async () => {
+    if (!settings.cloud?.url || !progress?.outputPath) { toast(t.cloud.notConfigured, 'error'); return; }
+    setCloudState('busy');
+    try {
+      const name = progress.outputPath.split(/[\\/]/).pop() ?? 'export.mp4';
+      await window.panocut.cloudUpload(settings.cloud, progress.outputPath, `exporte/${name}`);
+      setCloudState('done');
+      toast(t.cloud.uploaded, 'success');
+    } catch (err) { setCloudState('idle'); toast((err as Error).message, 'error'); }
+  };
 
   const selectPreset = (id: string) => {
     const p = EXPORT_PRESETS.find((x) => x.id === id);
@@ -204,6 +215,9 @@ export function ExportDialog(): React.ReactElement {
               <div className="path">{progress.outputPath}</div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button className="btn" onClick={() => void window.panocut.showInFolder(progress.outputPath!)}>{t.export.showInFolder}</button>
+                <button className="btn" onClick={() => void uploadToCloud()} disabled={cloudState !== 'idle' || !settings.cloud?.url} title={settings.cloud?.url ? '' : t.cloud.notConfigured}>
+                  {cloudState === 'busy' ? <span className="spinner" /> : '☁︎'} {cloudState === 'done' ? t.cloud.uploaded : t.cloud.upload}
+                </button>
                 {appInfo?.platform === 'darwin' && (
                   <button className="btn" onClick={() => void importToPhotos()} disabled={photosState === 'busy' || photosState === 'done'}>
                     {photosState === 'busy' ? <span className="spinner" /> : null} {photosState === 'done' ? t.export.photosDone : t.export.importToPhotos}

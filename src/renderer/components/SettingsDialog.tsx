@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import type { CloudSettings } from '@shared/types';
 import { PROJECT_PRESETS } from '@shared/presets';
 import { useProject } from '../store/project';
 import { useUi } from '../store/ui';
@@ -13,6 +14,14 @@ export function SettingsDialog(): React.ReactElement {
   const project = useProject((s) => s.project.settings);
   const updateSettings = useProject((s) => s.updateSettings);
   const updateStatus = useUi((s) => s.updateStatus);
+  const [cloud, setCloud] = useState<CloudSettings>(settings.cloud ?? { type: 'webdav', url: '', username: '', password: '' });
+  const [cloudMsg, setCloudMsg] = useState<string | null>(null);
+  const saveCloud = (c: CloudSettings) => { setCloud(c); void patch({ cloud: c }); };
+  const testCloud = async () => {
+    setCloudMsg('…');
+    const r = await window.panocut.cloudTest(cloud);
+    setCloudMsg(r.ok ? (r.message ?? t.cloud.ok) : (r.message ?? 'Fehler'));
+  };
 
   const patch = async (p: Partial<typeof settings>) => {
     const next = await window.panocut.setSettings(p);
@@ -75,6 +84,24 @@ export function SettingsDialog(): React.ReactElement {
               {updateStatus.state === 'not-available' && t.update.notAvailable}
               {updateStatus.state === 'available' && `Version ${updateStatus.version} ist verfügbar – siehe Hinweis oben im Fenster.`}
               {updateStatus.state === 'error' && `Fehler: ${updateStatus.message}`}
+            </div>
+          </div>
+        </div>
+        <div className="modal-body" style={{ paddingTop: 0 }}>
+          <div className="panel-header" style={{ padding: '0 0 6px', border: 'none' }}>{t.cloud.section}</div>
+          <div className="form-grid">
+            <label>{t.cloud.url}</label>
+            <input type="text" value={cloud.url} placeholder="https://…" onChange={(e) => saveCloud({ ...cloud, url: e.target.value })} spellCheck={false} />
+            <label />
+            <div className="hint">{t.cloud.urlHint}</div>
+            <label>{t.cloud.user}</label>
+            <input type="text" value={cloud.username} onChange={(e) => saveCloud({ ...cloud, username: e.target.value })} spellCheck={false} />
+            <label>{t.cloud.password}</label>
+            <input type="password" value={cloud.password} onChange={(e) => saveCloud({ ...cloud, password: e.target.value })} />
+            <label />
+            <div className="inline">
+              <button className="btn sm" onClick={() => void testCloud()} disabled={!cloud.url}>{t.cloud.test}</button>
+              {cloudMsg && <span className="hint">{cloudMsg}</span>}
             </div>
           </div>
         </div>

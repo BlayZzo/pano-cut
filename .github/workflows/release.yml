@@ -77,6 +77,8 @@ jobs:
         with:
           node-version: 22
       - run: npm install --no-audit --no-fund
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
       - run: npm run build
 
       # Untertitel-Modul (whisper.cpp) für das jeweilige System bauen. Schlägt der Build fehl,

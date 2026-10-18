@@ -2,7 +2,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import log from 'electron-log';
-import type { Clip, ExportOptions, ExportProgress, MediaItem, Project, TitleStyle, Track } from '@shared/types';
+import type { Attachment, Clip, ExportOptions, ExportProgress, MediaItem, Project, TitleStyle, Track } from '@shared/types';
 import { clipDuration, clipEnd, projectDuration, sourceTimeAt, videoTracksBottomUp } from '@shared/timeline';
 import { fontDef, panoViewAt, stereographicVfov, titleAnimationAt, verticalFov } from '@shared/pano';
 import { availableEncoders, availableFilters, FfmpegError, runFfmpeg } from './ffmpeg';
@@ -10,6 +10,8 @@ import { reverseVideo } from './reverse';
 import { needsStitching, stitchChain } from './stitch';
 import { escapeFilterPath, fontFamilyName, resolveFontFile } from './fonts';
 import { injectSphericalMetadata } from './spherical';
+import { maskChain, writeMaskList } from './objects';
+import { trackBoxAt } from '@shared/ai';
 
 type ProgressFn = (p: Omit<ExportProgress, 'jobId'>) => void;
 
@@ -30,6 +32,8 @@ interface Segment {
   inputIndex: number;
   reversedFile: boolean;
   stabFile?: string;         // vidstab-Transformdatei
+  maskInput?: number;        // Eingabe-Index der Maskensequenz (Freistellen)
+  maskList?: string;
 }
 
 interface TransitionSeg {
@@ -86,6 +90,7 @@ export class ExportJob {
   private tempDir: string;
   private tmpCounter = 0;
   private filters = new Set<string>();
+  private currentSegments: Segment[] = [];
 
   constructor(private project: Project, private options: ExportOptions, private onProgress: ProgressFn) {
     this.tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'panocut-export-'));
@@ -327,6 +332,16 @@ export class ExportJob {
    * `untilFit`: nur bis zur Einpassung (für die Stabilisierungs-Analyse).
    */
   private videoChainPrefix(seg: Segment, opts: { untilFit?: boolean; localOffset?: number; pad?: { start: number; end: number }; forTransition?: boolean } = {}): string[] {
+    const parts = this.videoChainParts(seg, opts);
+    if (opts.untilFit) return parts.pre;
+    return [...parts.pre, ...parts.color, ...parts.post];
+  }
+
+  /**
+   * Videokette in drei Teilen: `pre` (bis Einpassen), `color` (Farbkorrektur), `post` (Transformation/Deckkraft).
+   * Zwischen `color` und `post` werden Freistellen (alphamerge) und Green Screen eingefügt.
+   */
+  private videoChainParts(seg: Segment, opts: { untilFit?: boolean; localOffset?: number; pad?: { start: number; end: number }; forTransition?: boolean } = {}): { pre: string[]; color: string[]; post: string[] } {
     const { width: W, height: H, fps } = this.options;
     const c = seg.clip;
     const media = seg.media!;
@@ -349,31 +364,77 @@ export class ExportJob {
     if (c.fit === 'cover') chain.push(`scale=w=${W}:h=${H}:force_original_aspect_ratio=increase,crop=${W}:${H}`);
     else if (c.fit === 'stretch') chain.push(`scale=${W}:${H}`);
     else chain.push(`scale=w=${W}:h=${H}:force_original_aspect_ratio=decrease:force_divisible_by=2`);
-    if (opts.untilFit) return chain;
+    const pre = chain;
+    if (opts.untilFit) return { pre, color: [], post: [] };
+    const color: string[] = [];
     // Stabilisierung
     if (c.stabilize?.enabled && !opts.forTransition) {
       const st = c.stabilize;
       if (seg.stabFile) {
-        chain.push(`vidstabtransform=input='${escapeFilterPath(seg.stabFile)}':smoothing=${Math.round(5 + st.strength * 3)}:zoom=${fnum(st.zoom)}:optzoom=${st.zoom > 0 ? 0 : 1}:interpol=bicubic,unsharp=5:5:0.6:3:3:0`);
+        color.push(`vidstabtransform=input='${escapeFilterPath(seg.stabFile)}':smoothing=${Math.round(5 + st.strength * 3)}:zoom=${fnum(st.zoom)}:optzoom=${st.zoom > 0 ? 0 : 1}:interpol=bicubic,unsharp=5:5:0.6:3:3:0`);
       } else if (this.filters.has('deshake')) {
-        chain.push(`deshake=rx=${Math.round(16 + st.strength * 2)}:ry=${Math.round(16 + st.strength * 2)}:edge=mirror`);
+        color.push(`deshake=rx=${Math.round(16 + st.strength * 2)}:ry=${Math.round(16 + st.strength * 2)}:edge=mirror`);
       }
     }
-    // Farbe
+    // Farbe (vor dem Freistellen, weil eq/hue keinen Alphakanal durchreichen)
     const col = c.color;
     const eqParts: string[] = [];
     if (Math.abs(col.brightness) > 1e-4) eqParts.push(`brightness=${fnum(col.brightness)}`);
     if (Math.abs(col.contrast - 1) > 1e-4) eqParts.push(`contrast=${fnum(col.contrast)}`);
     if (Math.abs(col.saturation - 1) > 1e-4) eqParts.push(`saturation=${fnum(col.saturation)}`);
-    if (eqParts.length) chain.push(`eq=${eqParts.join(':')}`);
-    if (Math.abs(col.hue) > 1e-4) chain.push(`hue=h=${fnum(col.hue)}`);
-    chain.push('format=rgba');
+    if (eqParts.length) color.push(`eq=${eqParts.join(':')}`);
+    if (Math.abs(col.hue) > 1e-4) color.push(`hue=h=${fnum(col.hue)}`);
+    // Green Screen
+    if (c.chroma?.enabled && !opts.forTransition) {
+      const ch = c.chroma;
+      const hex = ch.color.replace('#', '');
+      color.push(`format=yuva420p`, `chromakey=color=0x${hex}:similarity=${fnum(Math.max(0.01, ch.similarity))}:blend=${fnum(Math.max(0, ch.blend))}`);
+      if (ch.despill) {
+        const r = parseInt(hex.slice(0, 2), 16), g = parseInt(hex.slice(2, 4), 16), b = parseInt(hex.slice(4, 6), 16);
+        color.push(`despill=type=${g >= b && g >= r ? 'green' : 'blue'}:mix=0.5:expand=0`);
+      }
+    }
+    const post: string[] = ['format=rgba'];
     // Transformation
     const t = c.transform;
-    if (Math.abs(t.scale - 1) > 1e-4) chain.push(`scale=w=trunc(iw*${fnum(t.scale)}/2)*2:h=trunc(ih*${fnum(t.scale)}/2)*2:flags=bicubic`);
-    if (Math.abs(t.rotation) > 1e-4) chain.push(`rotate=a=${fnum(t.rotation)}*PI/180:ow=ceil(hypot(iw\\,ih)/2)*2:oh=ow:c=none`);
-    if (c.opacity < 0.999) chain.push(`colorchannelmixer=aa=${fnum(Math.max(0, c.opacity))}`);
-    return chain;
+    if (Math.abs(t.scale - 1) > 1e-4) post.push(`scale=w=trunc(iw*${fnum(t.scale)}/2)*2:h=trunc(ih*${fnum(t.scale)}/2)*2:flags=bicubic`);
+    if (Math.abs(t.rotation) > 1e-4) post.push(`rotate=a=${fnum(t.rotation)}*PI/180:ow=ceil(hypot(iw\\,ih)/2)*2:oh=ow:c=none`);
+    if (c.opacity < 0.999) post.push(`colorchannelmixer=aa=${fnum(Math.max(0, c.opacity))}`);
+    return { pre, color, post };
+  }
+
+  /** Position eines Elements, das an ein getracktes Objekt geheftet ist, als FFmpeg-Ausdruck in t (Pixel). */
+  private attachmentExpr(att: Attachment, segs: Segment[], rangeStart: number): { x: string; y: string; xAt: (t: number) => number; yAt: (t: number) => number } | null {
+    const { width: W, height: H } = this.options;
+    const objSeg = segs.find((sg) => sg.clip.id === att.clipId);
+    const objClip = objSeg?.clip ?? this.project.clips[att.clipId];
+    const track = objClip?.objects?.find((tr) => tr.id === att.trackId);
+    if (!objClip || !track || track.boxes.length === 0) return null;
+    const clipStart = objClip.start - rangeStart;
+    const pos = (t: number) => {
+      const b = trackBoxAt(track, t - clipStart);
+      if (!b) return { x: W / 2, y: H / 2 };
+      const cx = (b.x + b.w / 2) * W + (att.dx / 100) * W;
+      let cy = (b.y + b.h / 2) * H;
+      if (att.anchor === 'above') cy = b.y * H - 0.02 * H;
+      else if (att.anchor === 'below') cy = (b.y + b.h) * H + 0.02 * H;
+      return { x: cx, y: cy + (att.dy / 100) * H };
+    };
+    // Stützstellen (max. 120) → verschachtelte if()-Ausdrücke
+    const times = track.boxes.map((b) => b.t + clipStart);
+    const step = Math.max(1, Math.ceil(times.length / 120));
+    const pts = times.filter((_, i) => i % step === 0 || i === times.length - 1).map((t) => ({ t, ...pos(t) }));
+    const piece = (key: 'x' | 'y') => {
+      if (pts.length === 1) return fnum(pts[0][key]);
+      let expr = fnum(pts[pts.length - 1][key]);
+      for (let i = pts.length - 2; i >= 0; i--) {
+        const a = pts[i], b = pts[i + 1];
+        const span = Math.max(1e-3, b.t - a.t);
+        expr = `if(lt(t\\,${fnum(b.t)})\\,${fnum(a[key])}+(${fnum(b[key] - a[key])})*(t-${fnum(a.t)})/${fnum(span)}\\,${expr})`;
+      }
+      return expr;
+    };
+    return { x: piece('x'), y: piece('y'), xAt: (t) => pos(t).x, yAt: (t) => pos(t).y };
   }
 
   /** 360°-Ansicht (v360) inkl. Keyframe-Animation über sendcmd. */
@@ -432,14 +493,15 @@ export class ExportJob {
   }
 
   /** drawtext-Filter für einen Titel (oder Untertitel-Segment). */
-  private drawText(style: TitleStyle, text: string, start: number, end: number, animate: boolean): string[] {
+  private drawText(style: TitleStyle, text: string, start: number, end: number, animate: boolean, pos?: { x: string; y: string }): string[] {
     const { width: W, height: H } = this.options;
     const fontSize = Math.max(4, Math.round((style.size / 100) * H));
     const def = fontDef(style.font);
     const fontFile = resolveFontFile(style.font);
     const fontOpt = fontFile ? `fontfile='${escapeFilterPath(fontFile)}'` : `font='${esc(fontFamilyName(def.key))}'`;
     const dur = end - start;
-    const xExpr = style.align === 'left' ? `w*${fnum(style.x / 100)}` : style.align === 'right' ? `w*${fnum(style.x / 100)}-text_w` : `w*${fnum(style.x / 100)}-text_w/2`;
+    const xBase = pos ? `(${pos.x})` : `w*${fnum(style.x / 100)}`;
+    const xExpr = style.align === 'left' ? xBase : style.align === 'right' ? `${xBase}-text_w` : `${xBase}-text_w/2`;
     const common: string[] = [fontOpt, `fontsize=${fontSize}`, `fontcolor=${ffColor(style.color, 1)}`, `x=${xExpr}`, 'line_spacing=4'];
     if (style.background) common.push('box=1', `boxcolor=${ffColor(style.background, style.backgroundOpacity)}`, `boxborderw=${Math.round(fontSize * 0.35)}`);
     if (style.shadow) common.push('shadowcolor=0x000000@0.6', `shadowx=${Math.max(1, Math.round(fontSize * 0.04))}`, `shadowy=${Math.max(1, Math.round(fontSize * 0.04))}`);
@@ -453,7 +515,7 @@ export class ExportJob {
       fs.writeFileSync(f, s.replace(/%/g, '%%'));
       return `textfile='${escapeFilterPath(f)}'`;
     };
-    const yBase = `h*${fnum(style.y / 100)}-text_h/2`;
+    const yBase = pos ? `(${pos.y})-text_h/2` : `h*${fnum(style.y / 100)}-text_h/2`;
     if (animate && style.animation === 'typewriter') {
       const chars = Array.from(text);
       const n = Math.min(chars.length, 80);
@@ -478,51 +540,81 @@ export class ExportJob {
     return filters;
   }
 
+  /**
+   * ASS-Untertiteldatei (libass) für Text-Einblendungen – wird für Untertitel benutzt und für Titel,
+   * wenn FFmpeg kein drawtext hat (z. B. Linux-Build).
+   */
+  private assFilter(events: Array<{ a: number; b: number; text: string; animation?: TitleStyle['animation']; from?: { x: number; y: number }; to?: { x: number; y: number } }>, style: Omit<TitleStyle, 'text'>, name: string): string | null {
+    if (!this.filters.has('subtitles') || events.length === 0) return null;
+    const { width: W, height: H } = this.options;
+    const toAss = (hex: string, alpha: number) => {
+      const h = hex.replace('#', '').padEnd(6, '0');
+      const a = Math.round((1 - alpha) * 255).toString(16).padStart(2, '0').toUpperCase();
+      return `&H${a}${h.slice(4, 6)}${h.slice(2, 4)}${h.slice(0, 2)}`.toUpperCase();
+    };
+    const fontSize = Math.max(4, Math.round((style.size / 100) * H));
+    const align = style.align === 'left' ? 4 : style.align === 'right' ? 6 : 5; // mittlere Zeile, Anker links/mitte/rechts
+    const borderStyle = style.background ? 3 : 1;
+    const outline = style.outline ? Math.max(1, Math.round(fontSize * 0.08)) : style.background ? Math.round(fontSize * 0.3) : 0;
+    const shadow = style.shadow ? Math.max(1, Math.round(fontSize * 0.04)) : 0;
+    const backColor = style.background ? toAss(style.background, style.backgroundOpacity) : '&H80000000';
+    const outlineColor = style.background ? backColor : '&H00000000';
+    const fmt = (t: number) => {
+      const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), sec = t % 60;
+      return `${h}:${m.toString().padStart(2, '0')}:${sec.toFixed(2).padStart(5, '0')}`;
+    };
+    const header = [
+      '[Script Info]', 'ScriptType: v4.00+', `PlayResX: ${W}`, `PlayResY: ${H}`, 'WrapStyle: 2', 'ScaledBorderAndShadow: yes', '',
+      '[V4+ Styles]',
+      'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
+      `Style: PanoCut,${fontFamilyName(style.font)},${fontSize},${toAss(style.color, 1)},&H000000FF,${outlineColor},${backColor},${style.bold ? -1 : 0},0,0,0,100,100,0,0,${borderStyle},${outline},${shadow},${align},0,0,0,1`,
+      '', '[Events]', 'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
+    ];
+    const x = Math.round((style.x / 100) * W), y = Math.round((style.y / 100) * H);
+    const clean = (t: string) => t.replace(/\r?\n/g, '\\N').replace(/[{}]/g, '');
+    const lines: string[] = [];
+    for (const ev of events) {
+      const dur = ev.b - ev.a;
+      const inMs = Math.round(Math.min(0.6, dur / 3) * 1000), outMs = inMs;
+      let tag = `{\\pos(${x},${y})}`;
+      if (ev.from && ev.to) tag = `{\\move(${Math.round(ev.from.x)},${Math.round(ev.from.y)},${Math.round(ev.to.x)},${Math.round(ev.to.y)})${ev.animation === 'fade' ? `\\fad(${inMs},${outMs})` : ''}}`;
+      else if (ev.animation === 'fade') tag = `{\\pos(${x},${y})\\fad(${inMs},${outMs})}`;
+      else if (ev.animation === 'slideup') tag = `{\\move(${x},${Math.round(y + H * 0.06)},${x},${y},0,${inMs})\\fad(${inMs},${outMs})}`;
+      if (ev.animation === 'typewriter') {
+        const chars = Array.from(ev.text);
+        const n = Math.min(chars.length, 80);
+        for (let k = 1; k <= n; k++) {
+          const t0 = ev.a + (k - 1) * 0.06;
+          const t1 = k === n ? ev.b : Math.min(ev.b, ev.a + k * 0.06);
+          if (t0 >= ev.b) break;
+          const tg = k === n ? `{\\pos(${x},${y})\\fad(0,${outMs})}` : `{\\pos(${x},${y})}`;
+          lines.push(`Dialogue: 0,${fmt(t0)},${fmt(t1)},PanoCut,,0,0,0,,${tg}${clean(chars.slice(0, k).join(''))}`);
+        }
+        continue;
+      }
+      lines.push(`Dialogue: 0,${fmt(ev.a)},${fmt(ev.b)},PanoCut,,0,0,0,,${tag}${clean(ev.text)}`);
+    }
+    const file = this.tmpFile(`${name}.ass`);
+    fs.writeFileSync(file, header.concat(lines).join('\n') + '\n', 'utf8');
+    return `subtitles=filename='${escapeFilterPath(file)}'`;
+  }
+
   /** Untertitel eines Clips als ASS-Datei (libass) – oder drawtext als Rückfall. */
   private subtitleFilters(seg: Segment): string[] {
     const subs = seg.clip.subtitles;
     if (!subs || !subs.enabled || subs.segments.length === 0) return [];
-    const { width: W, height: H } = this.options;
     const style = subs.style;
     const visible = subs.segments
-      .map((s) => ({ ...s, a: seg.tlStart + (s.start - seg.localOffset), b: seg.tlStart + (s.end - seg.localOffset) }))
-      .filter((s) => s.b > seg.tlStart && s.a < seg.tlStart + seg.tlDur && s.text.trim())
-      .map((s) => ({ ...s, a: Math.max(seg.tlStart, s.a), b: Math.min(seg.tlStart + seg.tlDur, s.b) }));
+      .map((sg) => ({ ...sg, a: seg.tlStart + (sg.start - seg.localOffset), b: seg.tlStart + (sg.end - seg.localOffset) }))
+      .filter((sg) => sg.b > seg.tlStart && sg.a < seg.tlStart + seg.tlDur && sg.text.trim())
+      .map((sg) => ({ ...sg, a: Math.max(seg.tlStart, sg.a), b: Math.min(seg.tlStart + seg.tlDur, sg.b) }));
     if (visible.length === 0) return [];
-    if (this.filters.has('subtitles')) {
-      const toAss = (hex: string, alpha: number) => {
-        const h = hex.replace('#', '').padEnd(6, '0');
-        const a = Math.round((1 - alpha) * 255).toString(16).padStart(2, '0').toUpperCase();
-        return `&H${a}${h.slice(4, 6)}${h.slice(2, 4)}${h.slice(0, 2)}`.toUpperCase();
-      };
-      const fontSize = Math.max(4, Math.round((style.size / 100) * H));
-      const align = style.align === 'left' ? 1 : style.align === 'right' ? 3 : 2;
-      const alignCode = align + 3; // mittig-vertikal, Position per \pos
-      const borderStyle = style.background ? 3 : 1;
-      const outline = style.outline ? Math.max(1, Math.round(fontSize * 0.08)) : style.background ? Math.round(fontSize * 0.3) : 0;
-      const shadow = style.shadow ? Math.max(1, Math.round(fontSize * 0.04)) : 0;
-      const backColor = style.background ? toAss(style.background, style.backgroundOpacity) : '&H80000000';
-      const outlineColor = style.background ? backColor : '&H00000000';
-      const fmt = (t: number) => {
-        const h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
-        return `${h}:${m.toString().padStart(2, '0')}:${s.toFixed(2).padStart(5, '0')}`;
-      };
-      const header = [
-        '[Script Info]', 'ScriptType: v4.00+', `PlayResX: ${W}`, `PlayResY: ${H}`, 'WrapStyle: 0', 'ScaledBorderAndShadow: yes', '',
-        '[V4+ Styles]',
-        'Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding',
-        `Style: PanoCut,${fontFamilyName(style.font)},${fontSize},${toAss(style.color, 1)},&H000000FF,${outlineColor},${backColor},${style.bold ? -1 : 0},0,0,0,100,100,0,0,${borderStyle},${outline},${shadow},${alignCode},20,20,20,1`,
-        '', '[Events]', 'Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text',
-      ];
-      const x = Math.round((style.x / 100) * W), y = Math.round((style.y / 100) * H);
-      const lines = visible.map((s) => `Dialogue: 0,${fmt(s.a)},${fmt(s.b)},PanoCut,,0,0,0,,{\\pos(${x},${y})}${s.text.replace(/\n/g, '\\N').replace(/[{}]/g, '')}`);
-      const file = this.tmpFile(`subs_${seg.clip.id}.ass`);
-      fs.writeFileSync(file, header.concat(lines).join('\n') + '\n', 'utf8');
-      return [`subtitles=filename='${escapeFilterPath(file)}'`];
-    }
+    const att = subs.attach ? this.attachmentExpr(subs.attach, this.currentSegments, this.range().start) : null;
+    const ass = this.assFilter(visible.map((sg) => ({ a: sg.a, b: sg.b, text: sg.text, from: att ? { x: att.xAt(sg.a), y: att.yAt(sg.a) } : undefined, to: att ? { x: att.xAt(sg.b), y: att.yAt(sg.b) } : undefined })), style, `subs_${seg.clip.id}`);
+    if (ass) return [ass];
     // Rückfall ohne libass: drawtext pro Segment
     const out: string[] = [];
-    for (const s of visible) out.push(...this.drawText({ ...style, text: s.text }, s.text, s.a, s.b, false));
+    for (const sg of visible) out.push(...this.drawText({ ...style, text: sg.text }, sg.text, sg.a, sg.b, false));
     return out;
   }
 
@@ -535,11 +627,24 @@ export class ExportJob {
 
     // ---- Eingaben ----
     let inputCount = 0;
+    this.currentSegments = segs;
     for (const s of segs) {
       if (s.isTitle) continue;
+      if (s.media?.hasAlpha) args.push('-c:v', 'libvpx-vp9');
       if (s.isImage) args.push('-loop', '1', '-framerate', String(fps), '-t', fnum(s.tlDur), '-i', s.file);
       else args.push('-ss', fnum(s.srcIn), '-t', fnum(s.srcDur), '-i', s.file);
       inputCount++;
+    }
+    // Maskensequenzen für freigestellte Clips
+    for (const s of segs) {
+      const cut = s.clip.cutout;
+      const track = cut?.enabled ? s.clip.objects?.find((tr) => tr.id === cut.trackId) : undefined;
+      if (!s.hasVideo || !track?.masks?.length) continue;
+      const list = this.tmpFile(`masks_${s.clip.id}.txt`);
+      writeMaskList(track.masks, s.localOffset + s.tlDur, list);
+      args.push('-ss', fnum(s.localOffset), '-f', 'concat', '-safe', '0', '-i', list);
+      s.maskInput = inputCount++;
+      s.maskList = list;
     }
     // Zusätzliche Fenster-Eingaben für Übergänge
     for (const tr of transitions) {
@@ -569,7 +674,11 @@ export class ExportJob {
       if (!s.hasVideo) continue;
       if (s.isTitle) {
         const title = s.clip.title!;
-        const dts = this.drawText(title, title.text, s.tlStart, s.tlStart + s.tlDur, true);
+        const att = s.clip.attach ? this.attachmentExpr(s.clip.attach, segs, this.range().start) : null;
+        const a0 = s.tlStart, b0 = s.tlStart + s.tlDur;
+        const dts = this.filters.has('drawtext')
+          ? this.drawText(title, title.text, a0, b0, true, att ? { x: att.x, y: att.y } : undefined)
+          : [this.assFilter([{ a: a0, b: b0, text: title.text, animation: title.animation, from: att ? { x: att.xAt(a0), y: att.yAt(a0) } : undefined, to: att ? { x: att.xAt(b0), y: att.yAt(b0) } : undefined }], title, `title_${s.clip.id}`)].filter((x): x is string => !!x);
         for (const dt of dts) {
           const outLabel = `t${vi++}`;
           filters.push(`[${last}]${dt}[${outLabel}]`);
@@ -578,10 +687,20 @@ export class ExportJob {
         continue;
       }
       const c = s.clip;
-      const chain = this.videoChainPrefix(s);
-      chain.push(`setpts=PTS+${fnum(s.tlStart)}/TB`);
       const label = `v${vi}`;
-      filters.push(`${this.inputLabel(s, s.inputIndex)}${chain.join(',')}[${label}]`);
+      if (s.maskInput !== undefined && c.cutout) {
+        // Freistellen: Maske zeitlich und in der Größe anpassen, dann als Alphakanal einrechnen
+        const parts = this.videoChainParts(s);
+        const cutColor = [...parts.pre, ...parts.color];
+        filters.push(`${this.inputLabel(s, s.inputIndex)}${cutColor.join(',')}[cc${vi}]`);
+        filters.push(`[${s.maskInput}:v]fps=${fps},${maskChain(c.cutout.feather, c.cutout.grow, c.cutout.invert)}[cm${vi}]`);
+        filters.push(`[cm${vi}][cc${vi}]scale2ref[cms${vi}][ccr${vi}]`);
+        filters.push(`[ccr${vi}][cms${vi}]alphamerge,${parts.post.join(',')},setpts=PTS+${fnum(s.tlStart)}/TB[${label}]`);
+      } else {
+        const chain = this.videoChainPrefix(s);
+        chain.push(`setpts=PTS+${fnum(s.tlStart)}/TB`);
+        filters.push(`${this.inputLabel(s, s.inputIndex)}${chain.join(',')}[${label}]`);
+      }
       const t = c.transform;
       const dx = (t.x / 100) * W;
       const dy = (t.y / 100) * H;

@@ -4,6 +4,7 @@ import { FONTS, TITLE_TEMPLATES, defaultTitle } from '@shared/pano';
 import { beginTransaction, endTransaction, useProject } from '../store/project';
 import { t } from '../i18n/de';
 import { Section, SelectField, Slider, Toggle } from './InspectorBits';
+import { AttachFields } from './InspectorAi';
 
 /** Gemeinsame Stil-Felder für Titel und Untertitel. */
 export function TextStyleFields({ style, onChange, withAnimation }: { style: Omit<TitleStyle, 'text'>; onChange: (p: Partial<Omit<TitleStyle, 'text'>>) => void; withAnimation: boolean }): React.ReactElement {
@@ -42,6 +43,7 @@ export function TextStyleFields({ style, onChange, withAnimation }: { style: Omi
 
 export function InspectorTitle({ clip }: { clip: Clip }): React.ReactElement {
   const updateClip = useProject((s) => s.updateClip);
+  const setAttach = useProject((s) => s.setAttach);
   const title = clip.title ?? defaultTitle();
   const patch = (p: Partial<TitleStyle>) => updateClip(clip.id, { title: { ...title, ...p }, ...(p.text !== undefined ? { name: p.text.split('\n')[0] || 'Titel' } : {}) });
   return (
@@ -58,6 +60,7 @@ export function InspectorTitle({ clip }: { clip: Clip }): React.ReactElement {
         </select>
       </div>
       <TextStyleFields style={title} onChange={(p) => patch(p)} withAnimation />
+      <AttachFields clip={clip} attach={clip.attach} onChange={(a) => setAttach(clip.id, a, 'title')} />
     </Section>
   );
 }

@@ -1,7 +1,10 @@
 import type { Clip, MediaItem, Project, Track, TransitionType } from '@shared/types';
 import { clamp, clipAt, clipDuration, clipEnd, clipsOnTrack, projectDuration, sourceTimeAt, videoTracksBottomUp } from '@shared/timeline';
 import { panoViewAt } from '@shared/pano';
+import { maskAt, trackBoxAt } from '@shared/ai';
+import type { Attachment } from '@shared/types';
 import { PanoGL } from './panogl';
+import { ChromaGL } from './chromagl';
 import { drawStyledText } from './text';
 
 type MediaEl = HTMLVideoElement | HTMLAudioElement | HTMLImageElement;
@@ -13,6 +16,20 @@ interface Slot {
   isImage: boolean;
   lastSeek: number;
   pano?: PanoGL;
+  chroma?: ChromaGL;
+  work?: HTMLCanvasElement;   // Zwischen-Canvas für Freistellen
+}
+
+const maskImages = new Map<string, HTMLImageElement>();
+function maskImage(path: string, onLoad: () => void): HTMLImageElement {
+  let img = maskImages.get(path);
+  if (!img) {
+    img = new Image();
+    img.onload = onLoad;
+    img.src = window.panocut.toMediaUrl(path);
+    maskImages.set(path, img);
+  }
+  return img;
 }
 
 interface DrawExtra {
@@ -315,6 +332,42 @@ export class PlaybackEngine {
       }
     }
 
+    // Green Screen (WebGL)
+    if (clip.chroma?.enabled) {
+      if (!slot.chroma) slot.chroma = new ChromaGL();
+      if (slot.chroma.available) {
+        const out = slot.chroma.render(source as TexImageSource, Math.min(vw, 1920), Math.round((Math.min(vw, 1920) * vh) / vw), clip.chroma.color, clip.chroma.similarity, clip.chroma.blend, clip.chroma.despill);
+        if (out) { source = out; vw = out.width; vh = out.height; }
+      }
+    }
+    // Freistellen anhand der Objektmaske
+    const cut = clip.cutout;
+    const track = cut?.enabled ? clip.objects?.find((tr) => tr.id === cut.trackId) : undefined;
+    if (cut && track?.masks?.length) {
+      const localT = extra.localT ?? (this.current - clip.start);
+      const m = maskAt(track, localT);
+      if (m) {
+        const img = maskImage(m.path, () => { if (!this.playing) this.render(this.current); });
+        if (img.complete && img.naturalWidth > 0) {
+          const cw = Math.min(vw, 1280), chh = Math.round((cw * vh) / vw);
+          if (!slot.work) slot.work = document.createElement('canvas');
+          const wc = slot.work;
+          if (wc.width !== cw || wc.height !== chh) { wc.width = cw; wc.height = chh; }
+          const wctx = wc.getContext('2d')!;
+          wctx.save();
+          wctx.globalCompositeOperation = 'source-over';
+          wctx.filter = 'none';
+          wctx.clearRect(0, 0, cw, chh);
+          wctx.drawImage(source, 0, 0, cw, chh);
+          wctx.globalCompositeOperation = cut.invert ? 'destination-out' : 'destination-in';
+          if (cut.feather > 0) wctx.filter = `blur(${(cut.feather / 2) * (cw / Math.max(1, img.naturalWidth))}px)`;
+          wctx.drawImage(img, 0, 0, cw, chh);
+          wctx.restore();
+          source = wc; vw = cw; vh = chh;
+        }
+      }
+    }
+
     const tr = clip.transform;
     const col = clip.color;
     ctx.save();
@@ -343,11 +396,28 @@ export class PlaybackEngine {
     ctx.restore();
   }
 
+  /** Position (in %) für Elemente, die an ein getracktes Objekt geheftet sind – oder null. */
+  private attachedPosition(att: Attachment | undefined, t: number): { x: number; y: number } | null {
+    if (!att) return null;
+    const objClip = this.project.clips[att.clipId];
+    const track = objClip?.objects?.find((tr) => tr.id === att.trackId);
+    if (!objClip || !track) return null;
+    const b = trackBoxAt(track, t - objClip.start);
+    if (!b) return null;
+    const x = (b.x + b.w / 2) * 100 + att.dx;
+    let y = (b.y + b.h / 2) * 100;
+    if (att.anchor === 'above') y = b.y * 100 - 2;
+    else if (att.anchor === 'below') y = (b.y + b.h) * 100 + 2;
+    return { x, y: y + att.dy };
+  }
+
   private drawTitle(ctx: CanvasRenderingContext2D, clip: Clip, W: number, H: number, t: number): void {
     if (!clip.title) return;
     ctx.save();
     ctx.globalAlpha = clamp(clip.opacity, 0, 1);
-    drawStyledText(ctx, clip.title, clip.title.text, W, H, { localT: t - clip.start, duration: clipDuration(clip), animate: true });
+    const pos = this.attachedPosition(clip.attach, t);
+    const style = pos ? { ...clip.title, x: pos.x, y: pos.y } : clip.title;
+    drawStyledText(ctx, style, clip.title.text, W, H, { localT: t - clip.start, duration: clipDuration(clip), animate: true });
     ctx.restore();
   }
 
@@ -355,11 +425,53 @@ export class PlaybackEngine {
     const subs = clip.subtitles;
     if (!subs || !subs.enabled) return;
     const local = t - clip.start;
+    const pos = this.attachedPosition(subs.attach, t);
+    const style = pos ? { ...subs.style, x: pos.x, y: pos.y } : subs.style;
     for (const seg of subs.segments) {
       if (local >= seg.start && local < seg.end && seg.text.trim()) {
-        drawStyledText(ctx, subs.style, seg.text, W, H, { localT: 0, duration: 1, animate: false });
+        drawStyledText(ctx, style, seg.text, W, H, { localT: 0, duration: 1, animate: false });
       }
     }
+  }
+
+  // ---------- Frames für die KI ----------
+
+  private grabVideos = new Map<string, HTMLVideoElement>();
+
+  /** Holt ein Einzelbild eines Clips zur Clip-Zeit `localT` (aus dem Proxy), max. `maxWidth` breit. */
+  async grabFrame(clip: Clip, media: MediaItem, localT: number, maxWidth = 640): Promise<ImageData | null> {
+    const t = clip.start + Math.max(0, Math.min(clipDuration(clip), localT));
+    let source: CanvasImageSource;
+    let sw = 0, sh = 0;
+    if (media.type === 'image') {
+      const img = new Image();
+      img.src = window.panocut.toMediaUrl(isDisplayableImage(media.path) ? media.path : (media.thumb ?? media.path));
+      await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = () => rej(new Error('Bild konnte nicht geladen werden')); });
+      source = img; sw = img.naturalWidth; sh = img.naturalHeight;
+    } else {
+      const src = window.panocut.toMediaUrl(media.proxy ?? media.path);
+      let v = this.grabVideos.get(src);
+      if (!v) {
+        v = document.createElement('video');
+        v.muted = true; v.preload = 'auto'; v.src = src;
+        this.grabVideos.set(src, v);
+        await new Promise<void>((res, rej) => { v!.onloadeddata = () => res(); v!.onerror = () => rej(new Error('Video konnte nicht geladen werden')); });
+      }
+      const ft = this.fileTime(clip, media, t, false);
+      if (Math.abs(v.currentTime - ft) > 0.01) {
+        v.currentTime = ft;
+        await new Promise<void>((res) => { const done = () => { v!.removeEventListener('seeked', done); res(); }; v!.addEventListener('seeked', done); setTimeout(done, 3000); });
+      }
+      source = v; sw = v.videoWidth; sh = v.videoHeight;
+    }
+    if (!sw || !sh) return null;
+    const scale = Math.min(1, maxWidth / sw);
+    const w = Math.max(2, Math.round(sw * scale)), h = Math.max(2, Math.round(sh * scale));
+    const c = document.createElement('canvas');
+    c.width = w; c.height = h;
+    const ctx = c.getContext('2d', { willReadFrequently: true })!;
+    ctx.drawImage(source, 0, 0, w, h);
+    return ctx.getImageData(0, 0, w, h);
   }
 
   /** Läuft gerade ein Übergang auf dieser Spur? */

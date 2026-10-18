@@ -1,7 +1,7 @@
 {
   "name": "panocut",
   "productName": "PanoCut",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "PanoCut – Videoschnitt für 360°-, Kamera- und Drohnenvideos in einem Programm",
   "author": "BlayZzo",
   "license": "MIT",
@@ -27,7 +27,8 @@
   "dependencies": {
     "electron-log": "^5.2.0",
     "electron-updater": "^6.3.0",
-    "ffmpeg-static": "^5.2.0"
+    "ffmpeg-static": "^5.2.0",
+    "onnxruntime-node": "^1.19.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -19,14 +19,17 @@ jobs:
         with:
           node-version: 22
       - run: npm install --no-audit --no-fund
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
       - run: npm run typecheck
       - run: npm run build:main
       - run: npm run build:renderer
       - name: Selbsttest (Import + Export ohne Oberfläche)
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq xvfb
+          curl -sSL -o /tmp/dog.jpg https://raw.githubusercontent.com/Megvii-BaseDetection/YOLOX/main/assets/dog.jpg || true
           set -o pipefail
-          xvfb-run -a npx electron . --smoke-test --no-sandbox 2>&1 | tee smoke.log
+          PANOCUT_TEST_IMAGE=/tmp/dog.jpg PANOCUT_REQUIRE_AI=1 xvfb-run -a npx electron . --smoke-test --no-sandbox 2>&1 | tee smoke.log
       # Bei Fehlern das Protokoll in den Branch `ci-logs` legen (von der Cloud-Umgebung aus lesbar)
       - name: Protokoll sichern
         if: failure()

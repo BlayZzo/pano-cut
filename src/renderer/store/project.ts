@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { temporal } from 'zundo';
 import type { Clip, MediaItem, Project, ProjectSettings, Track, TrackKind } from '@shared/types';
-import type { PanoSettings, Stabilization, StitchSettings, SubtitleSegment, TitleStyle, Transition } from '@shared/types';
+import type { Attachment, ChromaKey, Cutout, ObjectTrack, PanoSettings, Stabilization, StitchSettings, SubtitleSegment, TitleStyle, Transition } from '@shared/types';
 import {
   clipDuration, clipEnd, createClip, createProject, createTitleClip, createTrack, makeId, MIN_CLIP_DURATION, nextFreeStart, overlaps, sourceLimit, sourceTimeAt,
 } from '@shared/timeline';
@@ -41,6 +41,13 @@ export interface ProjectState {
   setStabilize(id: string, s: Stabilization | undefined): void;
   setSubtitles(id: string, segments: SubtitleSegment[] | null, style?: Partial<Omit<TitleStyle, 'text'>>, enabled?: boolean): void;
   updateMediaStitch(mediaId: string, patch: Partial<StitchSettings>): void;
+
+  addObjectTrack(clipId: string, track: ObjectTrack): void;
+  updateObjectTrack(clipId: string, trackId: string, patch: Partial<ObjectTrack>): void;
+  removeObjectTrack(clipId: string, trackId: string): void;
+  setCutout(clipId: string, cutout: Cutout | undefined): void;
+  setChroma(clipId: string, chroma: ChromaKey | undefined): void;
+  setAttach(clipId: string, attach: Attachment | undefined, target: 'title' | 'subtitles'): void;
 }
 
 const HISTORY_LIMIT = 200;
@@ -290,6 +297,46 @@ export const useProject = create<ProjectState>()(
         const m = s.project.media[mediaId];
         if (!m || !m.stitch) return {};
         return { project: { ...s.project, media: { ...s.project.media, [mediaId]: { ...m, stitch: { ...m.stitch, ...patch } } } } };
+      }),
+
+      addObjectTrack: (clipId, track) => set((s) => {
+        const c = s.project.clips[clipId];
+        if (!c) return {};
+        return { project: { ...s.project, clips: { ...s.project.clips, [clipId]: { ...c, objects: [...(c.objects ?? []), track] } } } };
+      }),
+      updateObjectTrack: (clipId, trackId, patch) => set((s) => {
+        const c = s.project.clips[clipId];
+        if (!c?.objects) return {};
+        return { project: { ...s.project, clips: { ...s.project.clips, [clipId]: { ...c, objects: c.objects.map((t) => (t.id === trackId ? { ...t, ...patch } : t)) } } } };
+      }),
+      removeObjectTrack: (clipId, trackId) => set((s) => {
+        const c = s.project.clips[clipId];
+        if (!c?.objects) return {};
+        const next: Clip = { ...c, objects: c.objects.filter((t) => t.id !== trackId) };
+        if (next.cutout?.trackId === trackId) delete next.cutout;
+        return { project: { ...s.project, clips: { ...s.project.clips, [clipId]: next } } };
+      }),
+      setCutout: (clipId, cutout) => set((s) => {
+        const c = s.project.clips[clipId];
+        if (!c) return {};
+        const next = { ...c };
+        if (cutout) next.cutout = cutout; else delete next.cutout;
+        return { project: { ...s.project, clips: { ...s.project.clips, [clipId]: next } } };
+      }),
+      setChroma: (clipId, chroma) => set((s) => {
+        const c = s.project.clips[clipId];
+        if (!c) return {};
+        const next = { ...c };
+        if (chroma) next.chroma = chroma; else delete next.chroma;
+        return { project: { ...s.project, clips: { ...s.project.clips, [clipId]: next } } };
+      }),
+      setAttach: (clipId, attach, target) => set((s) => {
+        const c = s.project.clips[clipId];
+        if (!c) return {};
+        const next = { ...c };
+        if (target === 'title') { if (attach) next.attach = attach; else delete next.attach; }
+        else if (next.subtitles) { next.subtitles = { ...next.subtitles, attach }; if (!attach) delete next.subtitles.attach; }
+        return { project: { ...s.project, clips: { ...s.project.clips, [clipId]: next } } };
       }),
     }),
     {

@@ -40,6 +40,22 @@ const api: PanoCutApi = {
   cancelTranscribe: () => ipcRenderer.invoke(IPC.cancelTranscribe),
   onWhisperProgress: subscribe(IPC.whisperProgress),
 
+  aiStatus: () => ipcRenderer.invoke(IPC.aiStatus),
+  aiDetect: (frame, model, minScore) => ipcRenderer.invoke(IPC.aiDetect, frame, model, minScore),
+  aiSegment: (frame, model, box) => ipcRenderer.invoke(IPC.aiSegment, frame, model, box),
+  aiSaveMask: (mediaPath, trackId, index, png) => ipcRenderer.invoke(IPC.aiSaveMask, mediaPath, trackId, index, png),
+  aiCancel: () => ipcRenderer.invoke(IPC.aiCancel),
+  onAiProgress: subscribe(IPC.aiProgress),
+  renderObject: (req) => ipcRenderer.invoke(IPC.renderObject, req),
+
+  cloudTest: (s) => ipcRenderer.invoke(IPC.cloudTest, s),
+  cloudList: (s, dir) => ipcRenderer.invoke(IPC.cloudList, s, dir),
+  cloudUpload: (s, l, r) => ipcRenderer.invoke(IPC.cloudUpload, s, l, r),
+  cloudDownload: (s, r, l) => ipcRenderer.invoke(IPC.cloudDownload, s, r, l),
+  onCloudProgress: subscribe(IPC.cloudProgress),
+  readJsonFile: (p) => ipcRenderer.invoke(IPC.readJsonFile, p),
+  writeJsonFile: (p, data) => ipcRenderer.invoke(IPC.writeJsonFile, p, data),
+
   newProjectDialog: () => ipcRenderer.invoke(IPC.newProjectDialog),
   saveProject: (project, p) => ipcRenderer.invoke(IPC.saveProject, project, p),
   openProject: () => ipcRenderer.invoke(IPC.openProject),

@@ -1,4 +1,8 @@
-import type { AppInfo, ExportOptions, ExportProgress, MediaItem, Project, ProjectFile, Settings, SubtitleSegment, UpdateStatus, WhisperModel, WhisperProgress } from './types';
+import type { AiDetectModel, AiProgress, AiSegmentModel, AppInfo, CloudSettings, Detection, ExportOptions, ExportProgress, MediaItem, Project, ProjectFile, Settings, SubtitleSegment, UpdateStatus, WhisperModel, WhisperProgress } from './types';
+
+export interface FramePayload { data: Uint8Array; width: number; height: number }
+export interface MaskPayload { width: number; height: number; alpha: Uint8Array }
+export interface CloudEntry { name: string; path: string; size: number; isDir: boolean; modified?: string }
 
 /** Die API, die das Preload-Skript der Oberfläche als `window.panocut` bereitstellt. */
 export interface PanoCutApi {
@@ -26,6 +30,24 @@ export interface PanoCutApi {
   transcribe(req: { mediaPath: string; start: number; duration: number; language: string; model: WhisperModel; maxChars: number }): Promise<SubtitleSegment[]>;
   cancelTranscribe(): Promise<void>;
   onWhisperProgress(cb: (p: WhisperProgress) => void): () => void;
+
+  // KI (Erkennen, Tracken, Freistellen)
+  aiStatus(): Promise<{ available: boolean; models: Record<string, boolean> }>;
+  aiDetect(frame: FramePayload, model: AiDetectModel, minScore?: number): Promise<Detection[]>;
+  aiSegment(frame: FramePayload, model: AiSegmentModel, box: { x: number; y: number; w: number; h: number } | null): Promise<MaskPayload>;
+  aiSaveMask(mediaPath: string, trackId: string, index: number, png: Uint8Array): Promise<string>;
+  aiCancel(): Promise<void>;
+  onAiProgress(cb: (p: AiProgress) => void): () => void;
+  renderObject(req: { project: Project; clipId: string; trackId: string; name: string }): Promise<MediaItem>;
+
+  // Cloud (WebDAV)
+  cloudTest(settings: CloudSettings): Promise<{ ok: boolean; message?: string }>;
+  cloudList(settings: CloudSettings, dir: string): Promise<CloudEntry[]>;
+  cloudUpload(settings: CloudSettings, localPath: string, remotePath: string): Promise<void>;
+  cloudDownload(settings: CloudSettings, remotePath: string, localPath: string): Promise<void>;
+  onCloudProgress(cb: (p: { percent: number; message?: string }) => void): () => void;
+  readJsonFile<T>(path: string): Promise<T | null>;
+  writeJsonFile(path: string, data: unknown): Promise<string>;
 
   // Projekt
   newProjectDialog(): Promise<boolean>;
@@ -75,6 +97,22 @@ export const IPC = {
   transcribe: 'subs:transcribe',
   cancelTranscribe: 'subs:cancel',
   whisperProgress: 'subs:progress',
+
+  aiStatus: 'ai:status',
+  aiDetect: 'ai:detect',
+  aiSegment: 'ai:segment',
+  aiSaveMask: 'ai:saveMask',
+  aiCancel: 'ai:cancel',
+  aiProgress: 'ai:progress',
+  renderObject: 'ai:renderObject',
+
+  cloudTest: 'cloud:test',
+  cloudList: 'cloud:list',
+  cloudUpload: 'cloud:upload',
+  cloudDownload: 'cloud:download',
+  cloudProgress: 'cloud:progress',
+  readJsonFile: 'fs:readJson',
+  writeJsonFile: 'fs:writeJson',
 
   selectExportPath: 'export:selectPath',
   startExport: 'export:start',

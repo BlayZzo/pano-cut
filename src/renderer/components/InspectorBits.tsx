@@ -5,6 +5,12 @@ import { IconChevron } from './Icons';
 
 export function Section({ title, children, defaultOpen = true, onReset, badge }: { title: string; children: React.ReactNode; defaultOpen?: boolean; onReset?: () => void; badge?: string }): React.ReactElement {
   const [open, setOpen] = useState(defaultOpen);
+  // Aufklappen, wenn der Abschnitt nachträglich Inhalt bekommt (z. B. erstes erkanntes Objekt)
+  const wasDefault = React.useRef(defaultOpen);
+  React.useEffect(() => {
+    if (defaultOpen && !wasDefault.current) setOpen(true);
+    wasDefault.current = defaultOpen;
+  }, [defaultOpen]);
   return (
     <div className="section">
       <div className="section-title" onClick={() => setOpen(!open)}>

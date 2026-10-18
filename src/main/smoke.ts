@@ -11,6 +11,7 @@ import type { ExportOptions, MediaItem } from '@shared/types';
 import { availableFilters, probeFile, runFfmpeg } from './ffmpeg';
 import { prepareMedia, probeMedia } from './media';
 import { ExportJob } from './exporter';
+import { aiAvailable, detectObjects, segmentObject } from './ai';
 
 export async function runSmokeTest(): Promise<number> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'panocut-smoke-'));
@@ -63,7 +64,17 @@ export async function runSmokeTest(): Promise<number> {
     const c6 = createTitleClip(vTracks[0].id, 2.2, { ...defaultTitle('Titel: Test, 50%'), animation: 'slideup', background: '#000000' }, 1.3);
     const c7 = createClip(pan, vTracks[1].id, 3.5); c7.out = 1.5;
     c7.pano = { mode: 'flat', smooth: true, keyframes: [{ t: 0, yaw: -40, pitch: 0, roll: 0, fov: 100 }, { t: 1.5, yaw: 40, pitch: 10, roll: 0, fov: 70 }] };
-    for (const c of [c1, c2, c3, c4, c5, c6, c7]) project.clips[c.id] = c;
+    // Freistellen mit synthetischer Maske + Green Screen + angehefteter Titel
+    const mask1 = path.join(dir, 'mask1.png'), mask2 = path.join(dir, 'mask2.png');
+    await runFfmpeg(['-f', 'lavfi', '-i', "nullsrc=s=640x360,geq=lum='255*lt(hypot(X-220,Y-180),110)':cb=128:cr=128", '-frames:v', '1', mask1]);
+    await runFfmpeg(['-f', 'lavfi', '-i', "nullsrc=s=640x360,geq=lum='255*lt(hypot(X-420,Y-180),110)':cb=128:cr=128", '-frames:v', '1', mask2]);
+    const c8 = createClip(vid, vTracks[0].id, 3.6); c8.in = 2; c8.out = 3.2; c8.transform = { x: 0, y: 0, scale: 0.8, rotation: 0 };
+    c8.objects = [{ id: 'trk1', label: 'person', labelDe: 'Person', color: '#f00', boxes: [{ t: 0, x: 0.2, y: 0.2, w: 0.3, h: 0.6 }, { t: 1.2, x: 0.5, y: 0.2, w: 0.3, h: 0.6 }], masks: [{ t: 0, path: mask1 }, { t: 0.6, path: mask2 }] }];
+    c8.cutout = { enabled: true, trackId: 'trk1', feather: 4, grow: 2, invert: false };
+    c8.chroma = { enabled: true, color: '#ff0000', similarity: 0.2, blend: 0.1, despill: true };
+    const c9 = createTitleClip(vTracks[0].id, 4.9, { ...defaultTitle('Angeheftet'), size: 6, animation: 'none' }, 0.1);
+    c9.attach = { clipId: c8.id, trackId: 'trk1', anchor: 'above', dx: 0, dy: 0 };
+    for (const c of [c1, c2, c3, c4, c5, c6, c7, c8, c9]) project.clips[c.id] = c;
 
     const out = path.join(dir, 'export.mp4');
     const options: ExportOptions = { outputPath: out, width: 640, height: 360, fps: 30, format: 'mp4', codec: 'h264', quality: 'medium', hardware: false, audioBitrate: 128 };
@@ -107,6 +118,31 @@ export async function runSmokeTest(): Promise<number> {
     await new ExportJob(project, { ...options, outputPath: gif, format: 'gif', codec: 'gif', width: 320, height: 180, fps: 10, range: { start: 0, end: 1 } }, () => {}).run();
     if (!fs.existsSync(gif) || fs.statSync(gif).size < 1000) throw new Error('GIF-Export fehlgeschlagen');
     log('GIF ok');
+
+    // KI: Erkennung und Maske. In der CI liegt ein Testbild (Hund, Fahrrad, Auto) unter PANOCUT_TEST_IMAGE.
+    if (aiAvailable()) {
+      const testImage = process.env.PANOCUT_TEST_IMAGE;
+      const W = 768, H = 576;
+      let frame = { data: new Uint8Array(W * H * 4), width: W, height: H };
+      if (testImage && fs.existsSync(testImage)) {
+        const raw = path.join(dir, 'test.rgba');
+        await runFfmpeg(['-i', testImage, '-vf', `scale=${W}:${H}`, '-f', 'rawvideo', '-pix_fmt', 'rgba', raw]);
+        frame = { data: new Uint8Array(fs.readFileSync(raw)), width: W, height: H };
+      }
+      const t0 = Date.now();
+      const dets = await detectObjects(frame, 'yolox-nano', () => {}, 0.3);
+      log(`KI-Erkennung (${Date.now() - t0} ms): ${dets.map((d) => `${d.labelDe} ${Math.round(d.score * 100)}%`).join(', ') || 'nichts'}`);
+      const target = dets.find((d) => d.label === 'dog') ?? dets[0] ?? null;
+      if (testImage && fs.existsSync(testImage) && !dets.some((d) => d.label === 'dog')) throw new Error('KI hat den Hund im Testbild nicht erkannt');
+      const mask = await segmentObject(frame, 'u2netp', target, () => {});
+      let fg = 0;
+      for (const a of mask.alpha) if (a > 128) fg++;
+      log(`KI-Maske: ${mask.width}x${mask.height}, ${(100 * fg / mask.alpha.length).toFixed(1)} % Vordergrund`);
+      if (testImage && fs.existsSync(testImage) && fg < mask.alpha.length * 0.03) throw new Error('KI-Maske ist leer');
+    } else {
+      log('KI-Modul nicht verfügbar (onnxruntime-node fehlt)');
+      if (process.env.PANOCUT_REQUIRE_AI) throw new Error('KI-Modul fehlt');
+    }
 
     log('✅ Selbsttest bestanden');
     return 0;

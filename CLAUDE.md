@@ -35,11 +35,13 @@ fertige Installer über GitHub Releases.
 Fenster um den Schnitt, Vorschau-Näherung im Canvas), Titel (drawtext / Canvas-Text), Untertitel (whisper.cpp als
 extraResource, Modell-Download nach `userData/models`; Export via ASS/libass), Stabilisierung (vidstab 2-Pass, Proxy-
 Variante für die Vorschau), Export-Größenlimit (2-Pass x264/x265), 360°-Metadaten (`spherical.ts`).
-0.3: „KI-Info“-Button: Personen/Tiere/Objekte erkennen (lokales Detektionsmodell, ONNX Runtime) und über das Video
-tracken; KI-Masken (Segmentierung, z. B. MobileSAM/EfficientSAM per ONNX), nachbesserbar; Chroma Key (`chromakey`/`colorkey`);
-Freistellen; Bausteine an getrackte Objekte heften (Text, Untertitel/Übersetzung, Bilder); freigestellte Objekte
-kopieren und in andere Videos legen; Projekt-Mediathek für kopierte Objekte (lokal pro Projekt) mit optionaler eigener
-Cloud (Nextcloud/WebDAV, S3-kompatibel) – alles ohne Drittanbieter-Abo.
+0.3 ✅: KI lokal mit onnxruntime-node (`src/main/ai.ts`): YOLOX (Erkennung, BGR 0–255, Letterbox 114, Gitter 8/16/32)
+und U²-Net/ISNet (rembg-Modelle, Masken); Modelle werden nach `userData/models` geladen. Tracking im Renderer
+(`renderer/ai/tracking.ts`: pro Abtastzeit neu erkennen, IoU-Zuordnung), Masken als PNG im Medien-Cache, Freistellen
+im Export per concat-Bildsequenz + alphamerge, in der Vorschau per Canvas `destination-in`. Green Screen: FFmpeg
+`chromakey` ↔ `chromagl.ts`. Anheften: Export per Stützstellen-Ausdrücken (drawtext) bzw. ASS `\move`. Objekte als
+VP9-WebM mit Alpha (`objects.ts`), Cloud per WebDAV (`cloud.ts`). Test lokal: Python-onnxruntime als Shim für
+onnxruntime-node (siehe Scratch-Tests), CI prüft mit YOLOX-`dog.jpg`.
 0.4: Effekt-/Animations-Bibliothek, eigene Effekte, Audio-Ducking, Mehrkamera; Elgato Stream Deck (Plugin/Hotkeys);
 KI-Bildverbesserung („natürlich schön“) nur auf Wunsch; Nachbearbeitung einzelner Clips/Bilder; Übersetzung von
 Untertiteln (lokales Modell). Wenn der Bild-/Objektteil zu groß wird: zweites Programm (wie Photoshop neben Premiere),

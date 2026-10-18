@@ -1,18 +1,18 @@
-## PanoCut 0.2.0 – 360°, Übergänge, Titel, Untertitel
+## PanoCut 0.3.0 – KI: Erkennen, Verfolgen, Freistellen
 
 **Installieren**
-- Mac mit Apple-Chip (M1–M4): `PanoCut-0.2.0-mac-arm64.dmg`
-- Mac mit Intel: `PanoCut-0.2.0-mac-x64.dmg`
-- Windows 10/11: `PanoCut-0.2.0-win-x64.exe`
+- Mac mit Apple-Chip (M1–M4): `PanoCut-0.3.0-mac-arm64.dmg`
+- Mac mit Intel: `PanoCut-0.3.0-mac-x64.dmg`
+- Windows 10/11: `PanoCut-0.3.0-win-x64.exe`
 
-Beim ersten Start auf dem Mac: Systemeinstellungen → Datenschutz & Sicherheit → „Trotzdem öffnen“ (siehe README). Unter Windows beim SmartScreen-Hinweis „Weitere Informationen → Trotzdem ausführen“.
+Wenn PanoCut schon installiert ist, wird das Update beim Start angeboten.
 
-**Neu in 0.2**
-- **360°-Videos**: Insta360-Rohdateien (`.insv`, `.lrv`) werden automatisch zusammengesetzt (Stitching). Drei Ansichten pro Clip: *Ausschnitt* (normales Video – in der Vorschau mit der Maus umschauen, Mausrad zoomt), *Ganzes Panorama* und *Little Planet*. Kamerafahrten mit Keyframes, weich oder linear. Export als normales Video oder als echtes 360°-Video mit Metadaten für YouTube/Facebook.
-- **Übergänge**: 20 Arten (Überblenden, Wischen, Schieben, Kreis, Zoom, Pixel, Unschärfe …) – aus der Mediathek auf einen Clip ziehen, Dauer im Inspektor.
-- **Titel**: Vorlagen (Einfach, Kasten, Bauchbinde, Meme, Social-Media, Schreibmaschine), frei einstellbar in Schrift, Größe, Farbe, Position, Kasten, Schatten, Umrandung, Animation.
-- **Automatische Untertitel**: Sprache wird lokal erkannt (whisper.cpp, Modell wird einmalig geladen – kein Abo, nichts geht ins Internet außer dem Modell-Download). Kurze Einblendungen im Social-Media-Stil, Text und Zeiten bearbeitbar, Aussehen frei wählbar.
-- **Stabilisierung** für wacklige Aufnahmen (Stärke und Zuschnitt einstellbar).
-- **Export mit maximaler Dateigröße** (z. B. 16 MB für WhatsApp) – die Qualität wird passend berechnet.
-- **Kleinere Installer**: FFprobe entfernt, Mac-Download ohne ZIP-Duplikat, stärkere Kompression.
-- Fehlerschutz: Die Oberfläche bleibt bedienbar, auch wenn intern etwas schiefgeht.
+**Neu in 0.3**
+- **KI-Button (✦ KI) in der Vorschau**: Personen, Tiere und Gegenstände (80 Arten) an der aktuellen Stelle erkennen – mit einem Klick über den ganzen Clip **verfolgen**. Die Rahmen werden in der Vorschau angezeigt.
+- **KI-Masken**: Für ein verfolgtes Objekt eine Maske berechnen lassen (schnell, speziell für Personen oder in bester Qualität). Rand weich machen, Maske vergrößern/verkleinern.
+- **Freistellen**: Nur das Objekt zeigen – oder umgekehrt das Objekt entfernen.
+- **Objekt-Mediathek**: Freigestellte Objekte mit Transparenz kopieren (Reiter „Objekte“) und über andere Videos legen.
+- **An Objekt heften**: Titel und Untertitel folgen einem verfolgten Objekt (über, auf oder unter dem Objekt).
+- **Green Screen**: Farbe per Klick in der Vorschau wählen, Toleranz, weiche Kante, Farbsaum entfernen.
+- **Eigene Cloud** (Nextcloud/WebDAV): Objekte sichern und auf anderen Rechnern holen, Exporte direkt hochladen – nur dein Server, kein Abo.
+- Alle KI-Modelle laufen **lokal** und werden erst beim ersten Gebrauch geladen (4–176 MB, frei lizenziert). Der Installer bleibt klein.

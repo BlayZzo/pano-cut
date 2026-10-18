@@ -7,6 +7,7 @@ import { useUi } from '../store/ui';
 import { t } from '../i18n/de';
 import { Section, SelectField, Slider, Toggle } from './InspectorBits';
 import { TextStyleFields } from './InspectorTitle';
+import { AttachFields } from './InspectorAi';
 import { seekTo } from '../engine/instance';
 
 // ---------- Übergang ----------
@@ -53,6 +54,7 @@ export function InspectorStabilize({ clip, media }: { clip: Clip; media: MediaIt
 
 export function InspectorSubtitles({ clip, media }: { clip: Clip; media: MediaItem }): React.ReactElement {
   const setSubtitles = useProject((s) => s.setSubtitles);
+  const setAttach = useProject((s) => s.setAttach);
   const fps = useProject((s) => s.project.settings.fps);
   const toast = useUi((s) => s.toast);
   const [status, setStatus] = useState<{ available: boolean; models: Record<WhisperModel, boolean> } | null>(null);
@@ -147,6 +149,7 @@ export function InspectorSubtitles({ clip, media }: { clip: Clip; media: MediaIt
           </div>
           <div className="panel-header" style={{ padding: '6px 0 2px', border: 'none' }}>{t.subtitles.style}</div>
           <TextStyleFields style={subs.style} onChange={(p) => setSubtitles(clip.id, subs.segments, p)} withAnimation={false} />
+          <AttachFields clip={clip} attach={subs.attach} onChange={(a) => setAttach(clip.id, a, 'subtitles')} />
         </>
       )}
     </Section>

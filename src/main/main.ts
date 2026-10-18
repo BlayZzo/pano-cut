@@ -14,6 +14,11 @@ import { killAll } from './ffmpeg';
 import { buildMenu } from './menu';
 import { checkForUpdates, downloadUpdate, initUpdater, installUpdate } from './updater';
 import { downloadModel, transcribe, whisperStatus } from './whisper';
+import { aiAvailable, aiModelStatus, detectObjects, segmentObject } from './ai';
+import { maskDir, renderObject } from './objects';
+import { cloudDownload, cloudList, cloudTest, cloudUpload } from './cloud';
+import type { AiDetectModel, AiProgress, AiSegmentModel, CloudSettings } from '@shared/types';
+import type { FramePayload } from '@shared/ipc';
 import type { WhisperModel, WhisperProgress } from '@shared/types';
 
 log.transports.file.level = 'info';
@@ -233,6 +238,56 @@ ipcMain.handle(IPC.transcribe, async (_e, req: { mediaPath: string; start: numbe
   }
 });
 ipcMain.handle(IPC.cancelTranscribe, () => { transcribeController?.abort(); });
+
+// ---- KI ----
+
+let aiController: AbortController | null = null;
+const aiProgress = (p: AiProgress) => sendToWindow(IPC.aiProgress, p);
+ipcMain.handle(IPC.aiStatus, () => ({ available: aiAvailable(), models: aiModelStatus() }));
+ipcMain.handle(IPC.aiDetect, async (_e, frame: FramePayload, model: AiDetectModel, minScore?: number) => {
+  aiController = new AbortController();
+  try {
+    return await detectObjects({ data: new Uint8Array(frame.data), width: frame.width, height: frame.height }, model, aiProgress, minScore ?? 0.3, aiController.signal);
+  } catch (err) {
+    aiProgress({ phase: 'error', percent: 0, message: (err as Error).message });
+    throw err;
+  }
+});
+ipcMain.handle(IPC.aiSegment, async (_e, frame: FramePayload, model: AiSegmentModel, box: { x: number; y: number; w: number; h: number } | null) => {
+  aiController = new AbortController();
+  try {
+    return await segmentObject({ data: new Uint8Array(frame.data), width: frame.width, height: frame.height }, model, box, aiProgress, aiController.signal);
+  } catch (err) {
+    aiProgress({ phase: 'error', percent: 0, message: (err as Error).message });
+    throw err;
+  }
+});
+ipcMain.handle(IPC.aiSaveMask, async (_e, mediaPath: string, trackId: string, index: number, png: Uint8Array) => {
+  const file = path.join(maskDir(mediaPath, trackId), `${String(index).padStart(5, '0')}.png`);
+  fs.writeFileSync(file, Buffer.from(png));
+  return file;
+});
+ipcMain.handle(IPC.aiCancel, () => { aiController?.abort(); });
+ipcMain.handle(IPC.renderObject, async (_e, req: { project: Project; clipId: string; trackId: string; name: string }) => {
+  return renderObject(req.project, req.clipId, req.trackId, req.name, (percent) => aiProgress({ phase: 'run', percent, message: 'Objekt wird freigestellt …' }));
+});
+
+// ---- Cloud ----
+
+const cloudProgress = (p: { percent: number; message?: string }) => sendToWindow(IPC.cloudProgress, p);
+ipcMain.handle(IPC.cloudTest, (_e, s: CloudSettings) => cloudTest(s));
+ipcMain.handle(IPC.cloudList, (_e, s: CloudSettings, dir: string) => cloudList(s, dir));
+ipcMain.handle(IPC.cloudUpload, (_e, s: CloudSettings, l: string, r: string) => cloudUpload(s, l, r, cloudProgress));
+ipcMain.handle(IPC.cloudDownload, (_e, s: CloudSettings, r: string, l: string) => cloudDownload(s, r, l, cloudProgress));
+
+ipcMain.handle(IPC.readJsonFile, (_e, p: string) => {
+  try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return null; }
+});
+ipcMain.handle(IPC.writeJsonFile, (_e, p: string, data: unknown) => {
+  fs.mkdirSync(path.dirname(p), { recursive: true });
+  fs.writeFileSync(p, JSON.stringify(data, null, 1));
+  return p;
+});
 
 // ---- Projekt ----
 

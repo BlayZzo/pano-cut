@@ -7,6 +7,8 @@ import { engine, playPause } from '../engine/instance';
 import { goEnd, goStart, stepFrames } from '../actions';
 import { t } from '../i18n/de';
 import { IconLoop, IconPause, IconPlay, IconSkipBack, IconSkipFwd, IconStepBack, IconStepFwd } from './Icons';
+import { AiPanel } from './AiPanel';
+import { trackActiveAt, trackBoxAt } from '@shared/ai';
 
 export function Preview(): React.ReactElement {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -21,7 +23,46 @@ export function Preview(): React.ReactElement {
   const clips = useProject((s) => s.project.clips);
   const media = useProject((s) => s.project.media);
   const setPano = useProject((s) => s.setPano);
+  const setChroma = useProject((s) => s.setChroma);
   const [dragging, setDragging] = useState(false);
+  const aiPanel = useUi((s) => s.aiPanel);
+  const setAiPanel = useUi((s) => s.setAiPanel);
+  const pickColor = useUi((s) => s.pickColor);
+  const setPickColor = useUi((s) => s.setPickColor);
+  const overlayRef = useRef<HTMLCanvasElement>(null);
+  const stageRef = useRef<HTMLDivElement>(null);
+
+  // Ausgewählter Clip (für KI-Bereich und Objekt-Rahmen)
+  const selectedClip = selection.map((id) => clips[id]).find(Boolean) ?? null;
+  const selectedMedia = selectedClip ? media[selectedClip.mediaId] ?? null : null;
+
+  // Objekt-Rahmen über der Vorschau zeichnen
+  useEffect(() => {
+    const ov = overlayRef.current, c = canvasRef.current;
+    if (!ov || !c) return;
+    const rect = c.getBoundingClientRect();
+    const stage = stageRef.current?.getBoundingClientRect();
+    ov.width = Math.max(1, Math.round(rect.width));
+    ov.height = Math.max(1, Math.round(rect.height));
+    ov.style.left = `${rect.left - (stage?.left ?? 0)}px`;
+    ov.style.top = `${rect.top - (stage?.top ?? 0)}px`;
+    const ctx = ov.getContext('2d');
+    if (!ctx) return;
+    ctx.clearRect(0, 0, ov.width, ov.height);
+    if (!selectedClip?.objects?.length || !aiPanel) return;
+    const local = playhead - selectedClip.start;
+    for (const tr of selectedClip.objects) {
+      if (!trackActiveAt(tr, local)) continue;
+      const b = trackBoxAt(tr, local);
+      if (!b) continue;
+      ctx.strokeStyle = tr.color;
+      ctx.lineWidth = 2;
+      ctx.strokeRect(b.x * ov.width, b.y * ov.height, b.w * ov.width, b.h * ov.height);
+      ctx.fillStyle = tr.color;
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillText(tr.labelDe, b.x * ov.width + 4, Math.max(12, b.y * ov.height - 4));
+    }
+  }, [selectedClip, playhead, aiPanel, settings.width, settings.height]);
 
   useEffect(() => {
     const c = canvasRef.current;
@@ -38,6 +79,19 @@ export function Preview(): React.ReactElement {
   const panoClip = selection.map((id) => clips[id]).find((c) => c && c.pano && media[c.mediaId]?.info.is360 && playhead >= c.start && playhead < c.start + clipDuration(c));
 
   const onPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    if (pickColor && selectedClip && e.button === 0) {
+      const c = e.currentTarget;
+      const rect = c.getBoundingClientRect();
+      const x = Math.round(((e.clientX - rect.left) / rect.width) * c.width);
+      const y = Math.round(((e.clientY - rect.top) / rect.height) * c.height);
+      const d = c.getContext('2d')?.getImageData(x, y, 1, 1).data;
+      if (d) {
+        const hex = '#' + [d[0], d[1], d[2]].map((v) => v.toString(16).padStart(2, '0')).join('');
+        setChroma(selectedClip.id, { ...(selectedClip.chroma ?? { enabled: true, similarity: 0.3, blend: 0.1, despill: true, color: hex }), color: hex, enabled: true });
+      }
+      setPickColor(false);
+      return;
+    }
     if (!panoClip || e.button !== 0) return;
     const clip = panoClip;
     const pano = clip.pano!;
@@ -80,10 +134,13 @@ export function Preview(): React.ReactElement {
 
   return (
     <section className="preview">
-      <div className={`preview-stage${panoClip ? ' pano' : ''}${dragging ? ' dragging' : ''}`}>
+      <div className={`preview-stage${panoClip ? ' pano' : ''}${dragging ? ' dragging' : ''}${pickColor ? ' picking' : ''}`} ref={stageRef}>
         <canvas ref={canvasRef} style={{ aspectRatio: `${settings.width} / ${settings.height}` }} onPointerDown={onPointerDown} onWheel={onWheel} />
+        <canvas ref={overlayRef} className="preview-overlay" />
         {!hasClips && <div className="preview-empty">{t.preview.empty}</div>}
-        {panoClip && <div className="preview-badge">360° · ziehen = umschauen · Mausrad = zoomen</div>}
+        {panoClip && !pickColor && <div className="preview-badge">360° · ziehen = umschauen · Mausrad = zoomen</div>}
+        {pickColor && <div className="preview-badge">{t.ai.picking}</div>}
+        <AiPanel clip={selectedClip} media={selectedMedia} />
       </div>
       <div className="transport">
         <Timecode />
@@ -96,6 +153,7 @@ export function Preview(): React.ReactElement {
         <button className="btn icon ghost" title={t.preview.nextFrame} onClick={() => stepFrames(1)}><IconStepFwd /></button>
         <button className="btn icon ghost" title={t.preview.toEnd} onClick={goEnd}><IconSkipFwd /></button>
         <div className="spacer" />
+        <button className={`btn sm${aiPanel ? ' active' : ''}`} title={t.ai.title} onClick={() => setAiPanel(!aiPanel)} style={{ fontWeight: 700 }}>✦ {t.ai.button}</button>
         <button className={`btn icon ghost${loop ? ' active' : ''}`} title={t.preview.loop} onClick={() => setLoop(!loop)}><IconLoop /></button>
         <span className="timecode dim">{formatTime(duration, settings.fps)}</span>
       </div>

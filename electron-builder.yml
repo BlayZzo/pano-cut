@@ -16,6 +16,7 @@ asar: true
 compression: maximum
 asarUnpack:
   - node_modules/ffmpeg-static/**
+  - node_modules/onnxruntime-node/**
 
 afterPack: build/afterPack.js
 
