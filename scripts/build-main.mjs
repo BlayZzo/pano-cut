@@ -14,7 +14,7 @@ const common = {
   sourcemap: false,
   minify: false,
   // Diese Pakete dürfen nicht gebündelt werden (native Binaries / Electron-API).
-  external: ['electron', 'ffmpeg-static', 'ffprobe-static', 'electron-updater', 'electron-log'],
+  external: ['electron', 'ffmpeg-static', 'electron-updater', 'electron-log', 'onnxruntime-node'],
   alias: { '@shared': path.join(root, 'src/shared') },
   logLevel: 'info',
 };

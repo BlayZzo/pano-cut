@@ -32,7 +32,7 @@ const common = {
   platform: 'node',
   target: 'node20',
   format: 'cjs',
-  external: ['electron', 'ffmpeg-static', 'ffprobe-static', 'electron-updater', 'electron-log'],
+  external: ['electron', 'ffmpeg-static', 'electron-updater', 'electron-log', 'onnxruntime-node'],
   alias: { '@shared': path.join(root, 'src/shared') },
   logLevel: 'silent',
 };

@@ -21,9 +21,12 @@ jobs:
       - run: npm install --no-audit --no-fund
         env:
           ONNXRUNTIME_NODE_INSTALL: skip
-      - run: npm run typecheck
-      - run: npm run build:main
-      - run: npm run build:renderer
+      - run: npm run typecheck 2>&1 | tee -a build.log
+        shell: bash -o pipefail {0}
+      - run: npm run build:main 2>&1 | tee -a build.log
+        shell: bash -o pipefail {0}
+      - run: npm run build:renderer 2>&1 | tee -a build.log
+        shell: bash -o pipefail {0}
       - name: Selbsttest (Import + Export ohne Oberfläche)
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq xvfb
@@ -36,7 +39,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mkdir -p /tmp/cilogs && cp smoke.log /tmp/cilogs/smoke-${{ github.run_id }}.log 2>/dev/null || true
+          mkdir -p /tmp/cilogs
+          cat build.log smoke.log > /tmp/cilogs/smoke-${{ github.run_id }}.log 2>/dev/null || echo "kein Protokoll" > /tmp/cilogs/smoke-${{ github.run_id }}.log
           cd /tmp/cilogs
           git init -q && git checkout -q -b ci-logs
           git config user.email "ci@panocut" && git config user.name "PanoCut CI"
