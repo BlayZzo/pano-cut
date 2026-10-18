@@ -38,6 +38,15 @@ jobs:
             echo "Neue Version v$version – Release wird gebaut."
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
+      # Release vorab anlegen, damit die parallelen Mac-/Windows-Builds nur noch hochladen
+      # (sonst kollidieren sie beim gleichzeitigen Anlegen).
+      - if: steps.decide.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          v="${{ steps.decide.outputs.version }}"
+          gh release view "v$v" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create "v$v" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "PanoCut $v" --generate-notes
 
   build:
     name: ${{ matrix.name }}

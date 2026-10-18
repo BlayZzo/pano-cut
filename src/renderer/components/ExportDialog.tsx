@@ -33,10 +33,14 @@ export function ExportDialog(): React.ReactElement {
   const [jobId, setJobId] = useState<string | null>(null);
   const [photosState, setPhotosState] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
 
-  useEffect(() => {
-    setWidth(preset.width); setHeight(preset.height); setFps(preset.fps);
-    setFormat(preset.format); setCodec(preset.codec); setQuality(preset.quality);
-  }, [presetId]);
+  const selectPreset = (id: string) => {
+    const p = EXPORT_PRESETS.find((x) => x.id === id);
+    if (!p) return;
+    setPresetId(id);
+    if (id === 'custom') { setWidth(project.settings.width); setHeight(project.settings.height); setFps(project.settings.fps); }
+    else { setWidth(p.width); setHeight(p.height); setFps(p.fps); }
+    setFormat(p.format); setCodec(p.codec); setQuality(p.quality);
+  };
 
   useEffect(() => {
     if (!FORMAT_CODECS[format].includes(codec)) setCodec(FORMAT_CODECS[format][0]);
@@ -105,7 +109,7 @@ export function ExportDialog(): React.ReactElement {
                 <div className="hint" style={{ marginBottom: 8, fontSize: 12 }}>{t.export.preset}</div>
                 <div className="preset-list">
                   {EXPORT_PRESETS.map((p) => (
-                    <div key={p.id} className={`preset${presetId === p.id ? ' active' : ''}`} onClick={() => setPresetId(p.id)}>
+                    <div key={p.id} className={`preset${presetId === p.id ? ' active' : ''}`} onClick={() => selectPreset(p.id)}>
                       <div className="name">{p.name}</div>
                       <div className="desc">{p.description}</div>
                     </div>
