@@ -17,12 +17,19 @@ import { aiAvailable, detectObjects, segmentObject } from './ai';
 export async function runSmokeTest(): Promise<number> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'panocut-smoke-'));
   const log = (...a: unknown[]) => console.log('[smoke]', ...a);
+  // Wächter: hängt ein Schritt, bricht der Test mit einer klaren Meldung ab (statt die CI stundenlang zu blockieren)
+  let stage = 'Start';
+  const step = (name: string) => { stage = name; log(name); };
+  const watchdog = setTimeout(() => {
+    console.error(`[smoke] ❌ Zeitüberschreitung bei: ${stage}`);
+    app.exit(2);
+  }, Number(process.env.PANOCUT_SMOKE_TIMEOUT ?? 12 * 60) * 1000);
   try {
     const video = path.join(dir, 'test.mp4');
     const image = path.join(dir, 'test.png');
     const music = path.join(dir, 'music.wav');
     const pano = path.join(dir, 'pano.mp4');
-    log('Testdateien erzeugen …');
+    step('Testdateien erzeugen …');
     await runFfmpeg([
       '-f', 'lavfi', '-i', 'testsrc=duration=4:size=640x360:rate=30',
       '-f', 'lavfi', '-i', 'sine=frequency=440:duration=4',
@@ -36,7 +43,7 @@ export async function runSmokeTest(): Promise<number> {
     const filters = await availableFilters();
     log(`Filter: v360=${filters.has('v360')} xfade=${filters.has('xfade')} drawtext=${filters.has('drawtext')} subtitles=${filters.has('subtitles')} vidstab=${filters.has('vidstabdetect')} sendcmd=${filters.has('sendcmd')}`);
 
-    log('Import …');
+    step('Import …');
     const items: MediaItem[] = [];
     for (const f of [video, image, music, pano]) {
       const item = await probeMedia(f);
@@ -50,7 +57,7 @@ export async function runSmokeTest(): Promise<number> {
     const [vid, img, mus, pan] = items;
     if (!pan.info.is360 || pan.stitch?.mode !== 'equirect') throw new Error('360°-Erkennung fehlgeschlagen');
 
-    log('Timeline bauen …');
+    step('Timeline bauen …');
     const project = createProject('Smoke', 640, 360, 30);
     for (const it of items) project.media[it.id] = it;
     const vTracks = project.tracks.filter((t) => t.kind === 'video');
@@ -79,7 +86,7 @@ export async function runSmokeTest(): Promise<number> {
 
     const out = path.join(dir, 'export.mp4');
     const options: ExportOptions = { outputPath: out, width: 640, height: 360, fps: 30, format: 'mp4', codec: 'h264', quality: 'medium', hardware: false, audioBitrate: 128 };
-    log('Export …');
+    step('Export …');
     let lastPercent = -1;
     const job = new ExportJob(project, options, (p) => {
       if (p.phase === 'rendering' && p.percent !== lastPercent && p.percent % 25 === 0) { lastPercent = p.percent; log(` ${p.percent} %`); }
@@ -97,6 +104,7 @@ export async function runSmokeTest(): Promise<number> {
     if (!a) throw new Error('Keine Tonspur');
 
     // Größenlimit (zwei Durchgänge) + 360°-Panorama-Export mit Metadaten
+    step('360°-Export mit Größenlimit …');
     const panoProject = createProject('Smoke360', 1024, 512, 30);
     panoProject.settings.is360 = true;
     panoProject.media[pan.id] = pan;
@@ -115,12 +123,14 @@ export async function runSmokeTest(): Promise<number> {
     if ((probe360.format.duration ?? 0) < 1.8) throw new Error('360°-Datei nach Metadaten-Einbau beschädigt');
 
     // GIF-Export kurz prüfen
+    step('GIF-Export …');
     const gif = path.join(dir, 'export.gif');
     await new ExportJob(project, { ...options, outputPath: gif, format: 'gif', codec: 'gif', width: 320, height: 180, fps: 10, range: { start: 0, end: 1 } }, () => {}).run();
     if (!fs.existsSync(gif) || fs.statSync(gif).size < 1000) throw new Error('GIF-Export fehlgeschlagen');
     log('GIF ok');
 
     // v0.4: Farb-Look + eigene LUT, Bild-Effekte, Zuschnitt, Animation (Bewegung + Deckkraft), Ducking, Übersetzung
+    step('Effekt-Export (Looks, LUT, Animation, Ducking) …');
     const lutFile = path.join(dir, 'test.cube');
     fs.writeFileSync(lutFile, 'LUT_3D_SIZE 2\n1 1 1\n0 1 1\n1 0 1\n0 0 1\n1 1 0\n0 1 0\n1 0 0\n0 0 0\n'); // invertiert
     const fxProject = createProject('SmokeFx', 640, 360, 30);
@@ -165,11 +175,16 @@ export async function runSmokeTest(): Promise<number> {
         frame = { data: new Uint8Array(fs.readFileSync(raw)), width: W, height: H };
       }
       const t0 = Date.now();
-      const dets = await detectObjects(frame, 'yolox-nano', () => {}, 0.3);
+      step('KI: Erkennungsmodell laden und ausführen …');
+      let lastPct = -1;
+      const aiLog = (p: { phase: string; percent: number; message?: string }) => { if (p.percent !== lastPct && p.percent % 25 === 0) { lastPct = p.percent; log(`  ${p.phase} ${p.percent} %`); } };
+      const dets = await detectObjects(frame, 'yolox-nano', aiLog, 0.3);
       log(`KI-Erkennung (${Date.now() - t0} ms): ${dets.map((d) => `${d.labelDe} ${Math.round(d.score * 100)}%`).join(', ') || 'nichts'}`);
       const target = dets.find((d) => d.label === 'dog') ?? dets[0] ?? null;
       if (testImage && fs.existsSync(testImage) && !dets.some((d) => d.label === 'dog')) throw new Error('KI hat den Hund im Testbild nicht erkannt');
-      const mask = await segmentObject(frame, 'u2netp', target, () => {});
+      step('KI: Maskenmodell laden und ausführen …');
+      lastPct = -1;
+      const mask = await segmentObject(frame, 'u2netp', target, aiLog);
       let fg = 0;
       for (const a of mask.alpha) if (a > 128) fg++;
       log(`KI-Maske: ${mask.width}x${mask.height}, ${(100 * fg / mask.alpha.length).toFixed(1)} % Vordergrund`);
@@ -185,6 +200,7 @@ export async function runSmokeTest(): Promise<number> {
     console.error('[smoke] ❌', (err as Error).message);
     return 1;
   } finally {
+    clearTimeout(watchdog);
     fs.rmSync(dir, { recursive: true, force: true });
     void app;
   }

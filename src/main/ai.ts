@@ -61,8 +61,16 @@ async function ensureModel(def: ModelDef, onProgress: (p: AiProgress) => void, s
   const dest = path.join(modelsDir(), def.file);
   if (fs.existsSync(dest)) return dest;
   onProgress({ phase: 'download', percent: 0, message: `KI-Modell wird geladen (${def.sizeMB} MB) …` });
-  const res = await net.fetch(def.url, { signal });
-  if (!res.ok || !res.body) throw new Error(`Modell-Download fehlgeschlagen (${res.status})`);
+  // Abbrechen, wenn 60 s lang keine Daten kommen (hängende Verbindung)
+  const idle = new AbortController();
+  let idleTimer = setTimeout(() => idle.abort(), 60_000);
+  const bump = () => { clearTimeout(idleTimer); idleTimer = setTimeout(() => idle.abort(), 60_000); };
+  signal?.addEventListener('abort', () => idle.abort());
+  const res = await net.fetch(def.url, { signal: idle.signal }).catch((err: Error) => {
+    clearTimeout(idleTimer);
+    throw new Error(idle.signal.aborted && !signal?.aborted ? 'Modell-Download: keine Antwort vom Server (Internet prüfen)' : err.message);
+  });
+  if (!res.ok || !res.body) { clearTimeout(idleTimer); throw new Error(`Modell-Download fehlgeschlagen (${res.status})`); }
   const total = Number(res.headers.get('content-length') ?? def.sizeMB * 1048576);
   const tmp = dest + '.part';
   const out = fs.createWriteStream(tmp);
@@ -71,14 +79,17 @@ async function ensureModel(def: ModelDef, onProgress: (p: AiProgress) => void, s
   try {
     for (;;) {
       const { done, value } = await reader.read();
+      bump();
       if (done) break;
       received += value.byteLength;
       if (!out.write(Buffer.from(value))) await new Promise<void>((r) => out.once('drain', () => r()));
       onProgress({ phase: 'download', percent: Math.round((received / total) * 100), message: `KI-Modell wird geladen … ${Math.round(received / 1048576)} / ${Math.round(total / 1048576)} MB` });
     }
+    clearTimeout(idleTimer);
     await new Promise<void>((res2, rej) => out.end((e?: Error | null) => (e ? rej(e) : res2())));
     fs.renameSync(tmp, dest);
   } catch (err) {
+    clearTimeout(idleTimer);
     out.destroy();
     fs.rmSync(tmp, { force: true });
     throw err;
