@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  check:
+    name: Typecheck, Build & Selbsttest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build:main
+      - run: npm run build:renderer
+      - name: Selbsttest (Import + Export ohne Oberfläche)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq xvfb
+          xvfb-run -a npx electron . --smoke-test --no-sandbox
+      - name: Linux-Paket bauen (Packaging-Check)
+        run: npx electron-builder --linux AppImage --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: panocut-linux
+          path: release/*.AppImage
+          if-no-files-found: ignore

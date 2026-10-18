@@ -1,0 +1,84 @@
+appId: de.blayzzo.panocut
+productName: PanoCut
+copyright: Copyright © 2026 BlayZzo
+artifactName: ${productName}-${version}-${os}-${arch}.${ext}
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - dist/**
+  - package.json
+  - "!**/*.map"
+
+asar: true
+asarUnpack:
+  - node_modules/ffmpeg-static/**
+  - node_modules/ffprobe-static/**
+
+afterPack: build/afterPack.js
+
+publish:
+  provider: github
+  owner: BlayZzo
+  repo: pano-cut
+  releaseType: release
+
+mac:
+  category: public.app-category.video
+  target:
+    - target: dmg
+    - target: zip
+  icon: build/icon.png
+  identity: null
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  darkModeSupport: true
+  extendInfo:
+    CFBundleDisplayName: PanoCut
+    NSHumanReadableCopyright: Copyright © 2026 BlayZzo
+    LSApplicationCategoryType: public.app-category.video
+
+dmg:
+  title: PanoCut ${version}
+  iconSize: 120
+  contents:
+    - x: 150
+      y: 200
+      type: file
+    - x: 450
+      y: 200
+      type: link
+      path: /Applications
+  window:
+    width: 600
+    height: 400
+
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  icon: build/icon.png
+  verifyUpdateCodeSignature: false
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: PanoCut
+  runAfterFinish: true
+  deleteAppDataOnUninstall: true
+  installerLanguages: [de_DE, en_US]
+  language: 1031
+  include: build/installer.nsh
+  uninstallDisplayName: PanoCut
+  license: build/LICENSE-de.txt
+
+linux:
+  target:
+    - AppImage
+  icon: build/icon.png
+  category: AudioVideo

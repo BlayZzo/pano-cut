@@ -1,0 +1,48 @@
+name: Release
+
+# Ein Tag wie `v0.1.0` baut die Installer für Mac und Windows und veröffentlicht sie
+# als GitHub-Release. PanoCut findet neue Versionen darüber automatisch.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-14
+            name: macOS (Apple Silicon + Intel)
+            args: --mac --arm64 --x64
+          - os: windows-latest
+            name: Windows
+            args: --win --x64
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Installer bauen und veröffentlichen
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npx electron-builder ${{ matrix.args }} --publish always
+      - uses: actions/upload-artifact@v4
+        with:
+          name: panocut-${{ matrix.os }}
+          path: |
+            release/*.dmg
+            release/*.exe
+            release/*.zip
+            release/*.yml
+          if-no-files-found: ignore

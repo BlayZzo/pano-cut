@@ -1,0 +1,225 @@
+// Zentrale Aktionen – von Menü, Tastenkürzeln und Buttons gemeinsam genutzt.
+import type { MediaItem, Project } from '@shared/types';
+import { clipEnd, clipsOnTrack, projectDuration } from '@shared/timeline';
+import { clearHistory, isDirty, redo, setDirty, undo, untracked, useProject } from './store/project';
+import { useUi } from './store/ui';
+import { engine, seekTo, stopPlayback } from './engine/instance';
+import { fmt, t } from './i18n/de';
+
+const api = () => window.panocut;
+
+// ---------- Medien ----------
+
+export async function importFiles(paths: string[]): Promise<void> {
+  if (paths.length === 0) return;
+  const items = await api().importMedia(paths);
+  const skipped = paths.length - items.length;
+  if (items.length) {
+    untracked(() => useProject.getState().addMedia(items));
+    setDirty(true);
+    useUi.getState().toast(fmt(t.toast.imported, { n: items.length }), 'success');
+    for (const item of items) {
+      if (item.status !== 'error') void api().prepareMedia(item);
+    }
+  }
+  if (skipped > 0) useUi.getState().toast(fmt(t.toast.unsupported, { n: skipped }), 'error');
+}
+
+export async function importDialog(): Promise<void> {
+  const paths = await api().selectMediaFiles();
+  await importFiles(paths);
+}
+
+export function ensureMediaPrepared(project: Project): void {
+  for (const m of Object.values(project.media)) {
+    if (m.status === 'processing' || m.status === 'analyzing') void api().prepareMedia(m);
+  }
+}
+
+export function addMediaToTimeline(media: MediaItem, at?: number): void {
+  const store = useProject.getState();
+  const project = store.project;
+  const kind = media.type === 'audio' ? 'audio' : 'video';
+  const tracks = project.tracks.filter((tr) => tr.kind === kind && !tr.locked);
+  // Unterste Videospur bzw. erste Audiospur bevorzugen
+  const track = kind === 'video' ? tracks[tracks.length - 1] : tracks[0];
+  if (!track) return;
+  let start = at ?? useUi.getState().playhead;
+  if (at === undefined) {
+    // Ans Ende der Spur anhängen, wenn der Abspielkopf mitten in einem Clip steht
+    const onTrack = clipsOnTrack(project, track.id);
+    const last = onTrack[onTrack.length - 1];
+    if (last && start < clipEnd(last)) start = clipEnd(last);
+  }
+  const clip = store.addClip(media.id, track.id, start);
+  if (clip) useUi.getState().select([clip.id]);
+}
+
+// ---------- Projekt ----------
+
+export async function saveProject(saveAs = false): Promise<boolean> {
+  const { project, path, setPath } = useProject.getState();
+  const target = await api().saveProject(project, saveAs ? undefined : path ?? undefined);
+  if (!target) return false;
+  setPath(target);
+  setDirty(false);
+  useUi.getState().toast(t.toast.saved, 'success');
+  return true;
+}
+
+export async function openProject(): Promise<void> {
+  if (isDirty()) {
+    const ok = await api().newProjectDialog();
+    if (!ok) return;
+  }
+  const file = await api().openProject();
+  if (file) applyLoadedProject(file.project, file.path);
+}
+
+export async function loadProjectPath(p: string): Promise<void> {
+  if (isDirty()) {
+    const ok = await api().newProjectDialog();
+    if (!ok) return;
+  }
+  const file = await api().loadProject(p);
+  if (file) applyLoadedProject(file.project, file.path);
+  else useUi.getState().toast(t.toast.loadError, 'error');
+}
+
+export function applyLoadedProject(project: Project, path: string | null): void {
+  stopPlayback();
+  useProject.getState().setProject(project, path);
+  clearHistory();
+  setDirty(false);
+  const ui = useUi.getState();
+  ui.clearSelection();
+  ui.setPlayhead(0);
+  ui.setRange(null, null);
+  seekTo(0);
+  ensureMediaPrepared(project);
+  void api().setSettings({ lastProject: path ?? undefined });
+}
+
+export async function newProjectFlow(): Promise<void> {
+  if (isDirty()) {
+    const ok = await api().newProjectDialog();
+    if (!ok) return;
+  }
+  useUi.getState().openDialog('newProject');
+}
+
+export function createNewProject(name: string, width: number, height: number, fps: number): void {
+  stopPlayback();
+  useProject.getState().newProject(name, width, height, fps);
+  clearHistory();
+  setDirty(false);
+  const ui = useUi.getState();
+  ui.clearSelection();
+  ui.setPlayhead(0);
+  ui.setRange(null, null);
+  seekTo(0);
+}
+
+// ---------- Bearbeiten ----------
+
+export function doUndo(): void {
+  stopPlayback();
+  undo();
+  useUi.getState().bumpHistory();
+  pruneSelection();
+}
+
+export function doRedo(): void {
+  stopPlayback();
+  redo();
+  useUi.getState().bumpHistory();
+  pruneSelection();
+}
+
+function pruneSelection(): void {
+  const clips = useProject.getState().project.clips;
+  const ui = useUi.getState();
+  const next = ui.selection.filter((id) => clips[id]);
+  if (next.length !== ui.selection.length) ui.select(next);
+}
+
+export function splitAtPlayhead(): void {
+  const ui = useUi.getState();
+  const store = useProject.getState();
+  const t0 = ui.playhead;
+  const project = store.project;
+  let targets = ui.selection.filter((id) => project.clips[id]);
+  if (targets.length === 0) {
+    targets = Object.values(project.clips)
+      .filter((c) => {
+        const track = project.tracks.find((tr) => tr.id === c.trackId);
+        return !track?.locked && t0 > c.start && t0 < clipEnd(c);
+      })
+      .map((c) => c.id);
+  }
+  const created: string[] = [];
+  for (const id of targets) {
+    const r = store.splitClipAt(id, t0);
+    if (r) created.push(r);
+  }
+  if (created.length) ui.select(created);
+}
+
+export function deleteSelection(): void {
+  const ui = useUi.getState();
+  if (ui.selection.length === 0) return;
+  useProject.getState().removeClips(ui.selection);
+  ui.clearSelection();
+}
+
+export function duplicateSelection(): void {
+  const ui = useUi.getState();
+  if (ui.selection.length === 0) return;
+  const ids = useProject.getState().duplicateClips(ui.selection);
+  if (ids.length) ui.select(ids);
+}
+
+export function selectAll(): void {
+  useUi.getState().select(Object.keys(useProject.getState().project.clips));
+}
+
+export function stepFrames(n: number): void {
+  stopPlayback();
+  const fps = useProject.getState().project.settings.fps || 30;
+  const dur = projectDuration(useProject.getState().project);
+  const next = Math.min(dur, Math.max(0, useUi.getState().playhead + n / fps));
+  seekTo(next);
+}
+
+export function goStart(): void { stopPlayback(); seekTo(0); }
+export function goEnd(): void { stopPlayback(); seekTo(projectDuration(useProject.getState().project)); }
+
+export function setRangeIn(): void {
+  const ui = useUi.getState();
+  const inT = ui.playhead;
+  const outT = ui.rangeOut !== null && ui.rangeOut > inT ? ui.rangeOut : null;
+  ui.setRange(inT, outT);
+}
+export function setRangeOut(): void {
+  const ui = useUi.getState();
+  const outT = ui.playhead;
+  const inT = ui.rangeIn !== null && ui.rangeIn < outT ? ui.rangeIn : 0;
+  ui.setRange(inT, outT);
+}
+export function clearRange(): void { useUi.getState().setRange(null, null); }
+
+// ---------- Zoom ----------
+
+export function zoomBy(factor: number): void {
+  const ui = useUi.getState();
+  ui.setZoom(ui.zoom * factor);
+}
+
+export function zoomToFit(availableWidth: number): void {
+  const dur = projectDuration(useProject.getState().project);
+  if (dur <= 0 || availableWidth <= 0) return;
+  useUi.getState().setZoom((availableWidth - 40) / dur);
+  useUi.getState().setScrollX(0);
+}
+
+export { engine };

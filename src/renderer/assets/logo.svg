@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#111833"/>
+      <stop offset="1" stop-color="#0c6e76"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.25" cy="0.1" r="0.6">
+      <stop offset="0" stop-color="#78dce6" stop-opacity="0.35"/>
+      <stop offset="1" stop-color="#78dce6" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect x="10" y="10" width="236" height="236" rx="52" fill="url(#bg)"/>
+  <rect x="10" y="10" width="236" height="236" rx="52" fill="url(#glow)"/>
+  <!-- Ring mit Lücke oben rechts -->
+  <path d="M 199.3 92.2 A 77 77 0 1 1 163.8 56.7" fill="none" stroke="#f5fafc" stroke-width="22" stroke-linecap="round"/>
+  <!-- Klinge -->
+  <line x1="166" y1="90" x2="206" y2="50" stroke="#3ff0cf" stroke-width="9" stroke-linecap="round"/>
+  <!-- Play -->
+  <polygon points="112,96 112,160 166,128" fill="#3ff0cf"/>
+</svg>
