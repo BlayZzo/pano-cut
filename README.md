@@ -86,7 +86,7 @@ npm run typecheck    # TypeScript prüfen
 npm run package      # Installer für das aktuelle System bauen (→ release/)
 ```
 
-**Neue Version veröffentlichen:** Version in `package.json` erhöhen, committen und auf `main` pushen – GitHub Actions erkennt die neue Version, baut die Mac- und Windows-Installer und veröffentlicht sie als Release. (Alternativ: Tag setzen oder den Release-Workflow manuell starten.)
+**Neue Version veröffentlichen:** `RELEASE_NOTES.md` aktualisieren, Version in `package.json` erhöhen, committen und auf `main` pushen – GitHub Actions erkennt die neue Version, baut die Mac- und Windows-Installer und veröffentlicht sie als Release. (Alternativ: Tag setzen oder den Release-Workflow manuell starten.)
 
 ```bash
 npm version patch --no-git-tag-version   # z. B. 0.1.0 → 0.1.1
