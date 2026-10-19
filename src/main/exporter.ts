@@ -12,9 +12,9 @@ import { escapeFilterPath, fontFamilyName, resolveFontFile } from './fonts';
 import { injectSphericalMetadata } from './spherical';
 import { maskChain, writeMaskList } from './objects';
 import { blendDef, hasShadow, shadowPixels } from '@shared/layers';
-import { bakeGradeLut, gradeKey, isNeutralGrade, lutToCube, parseCube } from '@shared/color';
+import { bakeGradeLut, exposureGainAt, gradeForLut, gradeKey, hasExposureCurve, isNeutralGrade, lutToCube, parseCube } from '@shared/color';
 import { hasGeometryMotion, hasOpacityMotion } from '@shared/effects';
-import { opacityCommands, perspectiveCorners } from './motionExpr';
+import { exposureCommands, opacityCommands, perspectiveCorners } from './motionExpr';
 import { trackBoxAt } from '@shared/ai';
 
 type ProgressFn = (p: Omit<ExportProgress, 'jobId'>) => void;
@@ -426,8 +426,17 @@ export class ExportJob {
     }
     // Farbe: alle Einstellungen als 3D-LUT (gleiche Rechnung wie die Vorschau)
     const col = c.color;
-    if (!isNeutralGrade(col)) {
-      const cube = this.lutFile(col);
+    const lutGrade = gradeForLut(col);
+    if (hasExposureCurve(col)) {
+      // Belichtung über die Zeit: Faktor (≤ 1) vor der LUT, in 16 Bit, per sendcmd weich interpoliert
+      const id = `x${c.id.replace(/[^a-zA-Z0-9]/g, '')}${Math.round((opts.localOffset ?? seg.localOffset) * 1000)}`;
+      const file = this.tmpFile(`exposure_${id}.txt`);
+      fs.writeFileSync(file, exposureCommands(col, id, opts.localOffset ?? seg.localOffset, (t) => exposureGainAt(col, t)));
+      const g0 = fnum(exposureGainAt(col, opts.localOffset ?? seg.localOffset));
+      color.push('format=rgb48le', `sendcmd=f='${escapeFilterPath(file)}'`, `colorchannelmixer@${id}=rr=${g0}:gg=${g0}:bb=${g0}`);
+    }
+    if (!isNeutralGrade(lutGrade)) {
+      const cube = this.lutFile(lutGrade);
       if (cube) color.push(`lut3d=file='${escapeFilterPath(cube)}':interp=tetrahedral`);
     }
     // Bild-Effekte

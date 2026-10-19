@@ -1,6 +1,6 @@
 // Animationen als FFmpeg-Ausdrücke (perspective-Filter, Auswertung pro Bild).
 // Dieselben Formeln stehen in src/shared/effects.ts (motionAt/oscAt) für die Vorschau.
-import type { Motion, MotionKeyframe, Transform } from '@shared/types';
+import type { ColorGrade, Motion, MotionKeyframe, Transform } from '@shared/types';
 
 function f(n: number): string {
   return (Math.round(n * 1e5) / 1e5).toString();
@@ -75,5 +75,31 @@ export function opacityCommands(m: Motion, baseOpacity: number, id: string, offs
   }
   const last = k[k.length - 1];
   lines.push(`${f(Math.max(0, last.t - offset))}-${f(Math.max(0, last.t - offset) + 100000)} [expr] colorchannelmixer@${id} aa '${val(last.opacity)}';`);
+  return lines.join('\n') + '\n';
+}
+
+/**
+ * sendcmd-Zeilen für die Belichtung über die Zeit (colorchannelmixer rr/gg/bb = Faktor).
+ * Zwischen den Kurvenpunkten wird linear interpoliert – wie `exposureGainAt` in der Vorschau.
+ */
+export function exposureCommands(g: ColorGrade, id: string, offset: number, gainAt: (t: number) => number): string {
+  const c = g.exposureCurve ?? [];
+  const lines: string[] = [];
+  const cmd = (a: number, b: number, v0: number, v1: number) => {
+    const e = Math.abs(v1 - v0) < 1e-6 ? f(v0) : `lerp(${f(v0)},${f(v1)},TI)`;
+    return `${f(a)}-${f(b)} [expr] colorchannelmixer@${id} rr '${e}', [expr] colorchannelmixer@${id} gg '${e}', [expr] colorchannelmixer@${id} bb '${e}';`;
+  };
+  if (c.length === 0) return '';
+  if (c[0].t - offset > 0) lines.push(cmd(0, c[0].t - offset, gainAt(c[0].t), gainAt(c[0].t)));
+  for (let i = 0; i < c.length - 1; i++) {
+    const t0 = c[i].t - offset, t1 = c[i + 1].t - offset;
+    if (t1 <= 0) continue;
+    // Startwert am tatsächlichen Intervallbeginn (falls der Export mitten im Intervall beginnt)
+    const a = Math.max(0, t0);
+    lines.push(cmd(a, t1, gainAt(a + offset), gainAt(c[i + 1].t)));
+  }
+  const last = c[c.length - 1];
+  const a = Math.max(0, last.t - offset);
+  lines.push(cmd(a, a + 100000, gainAt(last.t), gainAt(last.t)));
   return lines.join('\n') + '\n';
 }

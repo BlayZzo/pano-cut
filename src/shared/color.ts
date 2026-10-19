@@ -1,6 +1,6 @@
 // Farbbearbeitung: EINE Rechenvorschrift für Vorschau (WebGL-LUT) und Export (FFmpeg lut3d).
 // Alle Farbeinstellungen eines Clips werden in eine 3D-Farbtabelle (LUT) „gebacken“.
-import type { ColorGrade } from './types';
+import type { CameraProfile, ColorGrade } from './types';
 
 export const LUT_SIZE = 33;
 
@@ -24,7 +24,9 @@ export function lookById(id: string | undefined): LookDef | undefined {
   return id ? LOOKS.find((l) => l.id === id) : undefined;
 }
 
-export const NEUTRAL: Required<Omit<ColorGrade, 'look' | 'lookStrength' | 'lut' | 'lutStrength'>> = {
+type NumericGrade = Omit<ColorGrade, 'look' | 'lookStrength' | 'lut' | 'lutStrength' | 'profile' | 'exposureCurve'>;
+
+export const NEUTRAL: Required<NumericGrade> = {
   brightness: 0, contrast: 1, saturation: 1, hue: 0,
   exposure: 0, temperature: 0, tint: 0, highlights: 0, shadows: 0, whites: 0, blacks: 0,
   vibrance: 0, gamma: 1, fade: 0, dehaze: 0, splitShadow: 0, splitHighlight: 0,
@@ -32,6 +34,7 @@ export const NEUTRAL: Required<Omit<ColorGrade, 'look' | 'lookStrength' | 'lut' 
 
 /** Ist die Farbeinstellung neutral (dann kann der LUT-Schritt entfallen)? */
 export function isNeutralGrade(g: ColorGrade): boolean {
+  if (g.profile) return false;
   if (g.lut && (g.lutStrength ?? 1) > 0) return false;
   if (g.look && (g.lookStrength ?? 1) > 0) return false;
   for (const [k, v] of Object.entries(NEUTRAL)) {
@@ -42,7 +45,7 @@ export function isNeutralGrade(g: ColorGrade): boolean {
 }
 
 /** Eigene Einstellung + Look (mit Stärke) zu einer effektiven Einstellung zusammenführen. */
-export function effectiveGrade(g: ColorGrade): Required<Omit<ColorGrade, 'look' | 'lookStrength' | 'lut' | 'lutStrength'>> {
+export function effectiveGrade(g: ColorGrade): Required<NumericGrade> {
   const out = { ...NEUTRAL } as Record<string, number>;
   for (const k of Object.keys(NEUTRAL)) {
     const v = (g as unknown as Record<string, number | undefined>)[k];
@@ -59,7 +62,40 @@ export function effectiveGrade(g: ColorGrade): Required<Omit<ColorGrade, 'look' 
       else out[k] = out[k] + (v - neutral) * s;
     }
   }
-  return out as Required<Omit<ColorGrade, 'look' | 'lookStrength' | 'lut' | 'lutStrength'>>;
+  return out as Required<NumericGrade>;
+}
+
+// ---------- Kamera-Profile (Log → Szenen-Linear) ----------
+
+export const CAMERA_PROFILES: Array<{ id: CameraProfile; name: string }> = [
+  { id: 'bmdfilm5', name: 'Blackmagic Film (Gen 5)' },
+  { id: 'dlog', name: 'DJI D-Log' },
+  { id: 'log', name: 'Flaches Profil / anderes Log' },
+];
+
+/** Log-Wert (0..1) → Szenen-linear (0.18 = mittleres Grau). */
+function decodeLog(v: number, p: CameraProfile): number {
+  if (p === 'bmdfilm5' || p === 'log') {
+    // Blackmagic Generation 5 Film (Blackmagic Design, Gen-5-Farbwissenschaft)
+    const A = 0.08692876065491224, B = 0.005494072432257808, C = 0.5300133392291939, D = 8.283605932402494, E = 0.09246575342465753;
+    const logCut = D * 0.005 + E;
+    const x = v < logCut ? (v - E) / D : Math.exp((v - C) / A) - B;
+    return p === 'log' ? Math.pow(Math.max(0, x), 0.85) * 0.8 : x;   // „anderes Log“: etwas sanfter
+  }
+  // DJI D-Log (DJI White Paper)
+  return v <= 0.14 ? (v - 0.0929) / 6.025 : (Math.pow(10, (v - 0.584555) / 0.256663) - 0.0108) / 0.9892;
+}
+
+/** Filmische Kurve (ACES-Näherung) für Szenen-linear → Anzeige-linear. */
+function filmic(x: number): number {
+  x = Math.max(0, x) * 0.6;
+  return clamp01((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14));
+}
+
+/** Weiche Schulter, damit hochgezogene Belichtung die Lichter nicht hart abschneidet. */
+function shoulder(x: number, k: number): number {
+  if (x <= k) return x;
+  return k + (1 - k) * Math.tanh((x - k) / (1 - k));
 }
 
 const toLin = (c: number) => (c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4));
@@ -68,14 +104,25 @@ const clamp01 = (v: number) => (v < 0 ? 0 : v > 1 ? 1 : v);
 const smooth = (e0: number, e1: number, x: number) => { const t = clamp01((x - e0) / (e1 - e0)); return t * t * (3 - 2 * t); };
 
 /** Eine Farbe (sRGB 0..1) durch die Einstellungen schicken. */
-export function gradePixel(r: number, g: number, b: number, e: ReturnType<typeof effectiveGrade>): [number, number, number] {
-  // 1) Linear: Belichtung und Weißabgleich
-  let lr = toLin(r), lg = toLin(g), lb = toLin(b);
+export function gradePixel(r: number, g: number, b: number, e: ReturnType<typeof effectiveGrade>, profile?: CameraProfile): [number, number, number] {
+  // 1) Linear: Kamera-Profil, Belichtung und Weißabgleich
+  let lr: number, lg: number, lb: number;
+  if (profile) { lr = decodeLog(r, profile); lg = decodeLog(g, profile); lb = decodeLog(b, profile); }
+  else { lr = toLin(r); lg = toLin(g); lb = toLin(b); }
   const exp = Math.pow(2, e.exposure);
   const t = e.temperature / 100, ti = e.tint / 100;
   lr *= exp * (1 + 0.35 * t) * (1 + 0.1 * ti);
   lg *= exp * (1 - 0.25 * ti);
   lb *= exp * (1 - 0.35 * t) * (1 + 0.1 * ti);
+  if (profile) {
+    // Log-Material: filmische Kurve + etwas mehr Sättigung (weiter Farbraum der Kamera)
+    lr = filmic(lr); lg = filmic(lg); lb = filmic(lb);
+    const l = 0.2126 * lr + 0.7152 * lg + 0.0722 * lb;
+    lr = l + (lr - l) * 1.18; lg = l + (lg - l) * 1.18; lb = l + (lb - l) * 1.18;
+  } else if (e.exposure > 0.01) {
+    const k = 1 - 0.25 * Math.min(1, e.exposure);
+    lr = shoulder(lr, k); lg = shoulder(lg, k); lb = shoulder(lb, k);
+  }
   r = clamp01(toSrgb(lr)); g = clamp01(toSrgb(lg)); b = clamp01(toSrgb(lb));
 
   // 2) Tonwerte: Schwarz/Weiß-Punkt, Tiefen/Lichter, Mitteltöne (Gamma), Dunst, Kontrast, Helligkeit
@@ -189,7 +236,7 @@ export function bakeGradeLut(g: ColorGrade, userLut?: Lut3D | null, size = LUT_S
   for (let bi = 0; bi < size; bi++) {
     for (let gi = 0; gi < size; gi++) {
       for (let ri = 0; ri < size; ri++) {
-        let [r, gg, b] = gradePixel(ri / (size - 1), gi / (size - 1), bi / (size - 1), e);
+        let [r, gg, b] = gradePixel(ri / (size - 1), gi / (size - 1), bi / (size - 1), e, g.profile);
         if (userLut && us > 0) {
           const [ur, ug, ub] = sampleLut(userLut, r, gg, b);
           r = r + (ur - r) * us; gg = gg + (ug - gg) * us; b = b + (ub - b) * us;
@@ -209,7 +256,53 @@ export function lutToCube(lut: Lut3D, title = 'PanoCut'): string {
 
 /** Schlüssel, der sich ändert, sobald sich etwas an der Farbe ändert (für Caches). */
 export function gradeKey(g: ColorGrade): string {
-  return JSON.stringify([effectiveGrade(g), g.lut ?? '', g.lutStrength ?? 1]);
+  return JSON.stringify([effectiveGrade(g), g.lut ?? '', g.lutStrength ?? 1, g.profile ?? '']);
+}
+
+// ---------- Belichtung über die Zeit ----------
+// Die LUT wird mit der höchsten Belichtung der Kurve gebacken; davor dunkelt ein zeitabhängiger Faktor (≤ 1) ab.
+// So wird vor der LUT nie etwas abgeschnitten. Faktor auf Gamma-Werten: 2^(Δev/2.2) ≈ lineare Belichtung.
+
+export function hasExposureCurve(g: ColorGrade): boolean {
+  const c = g.exposureCurve;
+  if (!c || c.length < 2) return false;
+  const evs = c.map((k) => k.ev);
+  return Math.max(...evs) - Math.min(...evs) > 0.05;
+}
+
+export function exposureCurvePeak(g: ColorGrade): number {
+  return hasExposureCurve(g) ? Math.max(...g.exposureCurve!.map((k) => k.ev)) : 0;
+}
+
+/** Farbeinstellung für die LUT (inkl. Spitze der Belichtungskurve). */
+export function gradeForLut(g: ColorGrade): ColorGrade {
+  const peak = exposureCurvePeak(g);
+  if (!peak && !g.exposureCurve) return g;
+  return { ...g, exposure: (g.exposure ?? 0) + peak, exposureCurve: undefined };
+}
+
+/** Belichtungs-Offset der Kurve zur Clip-Zeit t (lineare Interpolation, außerhalb festgehalten). */
+export function exposureAt(g: ColorGrade, t: number): number {
+  const c = g.exposureCurve;
+  if (!c || c.length === 0) return 0;
+  if (t <= c[0].t) return c[0].ev;
+  for (let i = 0; i < c.length - 1; i++) {
+    if (t <= c[i + 1].t) { const u = (t - c[i].t) / Math.max(1e-6, c[i + 1].t - c[i].t); return c[i].ev + (c[i + 1].ev - c[i].ev) * u; }
+  }
+  return c[c.length - 1].ev;
+}
+
+/** Faktor vor der LUT zur Clip-Zeit t (≤ 1). Zwischen den Punkten wird der Faktor linear interpoliert (wie im Export). */
+export function exposureGainAt(g: ColorGrade, t: number): number {
+  if (!hasExposureCurve(g)) return 1;
+  const c = g.exposureCurve!;
+  const peak = exposureCurvePeak(g);
+  const gain = (ev: number) => Math.pow(2, (ev - peak) / 2.2);
+  if (t <= c[0].t) return gain(c[0].ev);
+  for (let i = 0; i < c.length - 1; i++) {
+    if (t <= c[i + 1].t) { const u = (t - c[i].t) / Math.max(1e-6, c[i + 1].t - c[i].t); return gain(c[i].ev) + (gain(c[i + 1].ev) - gain(c[i].ev)) * u; }
+  }
+  return gain(c[c.length - 1].ev);
 }
 
 // ---------- Automatisch verbessern ----------
@@ -218,6 +311,9 @@ export interface FrameStats {
   p01: number; p05: number; p50: number; p95: number; p99: number; // Helligkeits-Perzentile 0..1
   meanR: number; meanG: number; meanB: number;                       // Mittelwerte (Graue-Welt)
   meanSat: number;                                                   // mittlere Sättigung 0..1
+  clipHi?: number;                                                   // Anteil fast weißer Pixel
+  clipLo?: number;                                                   // Anteil fast schwarzer Pixel
+  hist?: Uint32Array;                                                // Helligkeits-Histogramm (256)
 }
 
 export function frameStats(rgba: Uint8ClampedArray | Uint8Array): FrameStats {
@@ -233,13 +329,16 @@ export function frameStats(rgba: Uint8ClampedArray | Uint8Array): FrameStats {
     n++;
   }
   const pct = (p: number) => { let acc = 0; const target = n * p; for (let i = 0; i < 256; i++) { acc += hist[i]; if (acc >= target) return i / 255; } return 1; };
-  return { p01: pct(0.01), p05: pct(0.05), p50: pct(0.5), p95: pct(0.95), p99: pct(0.99), meanR: sr / n / 255, meanG: sg / n / 255, meanB: sb / n / 255, meanSat: ss / n };
+  let hi = 0, lo = 0;
+  for (let i = 250; i < 256; i++) hi += hist[i];
+  for (let i = 0; i < 6; i++) lo += hist[i];
+  return { p01: pct(0.01), p05: pct(0.05), p50: pct(0.5), p95: pct(0.95), p99: pct(0.99), meanR: sr / n / 255, meanG: sg / n / 255, meanB: sb / n / 255, meanSat: ss / n, clipHi: hi / n, clipLo: lo / n, hist };
 }
 
 /** Aus Bildstatistiken eine natürliche Verbesserung ableiten (sanft, keine Effekthascherei). */
 export function autoEnhance(stats: FrameStats[]): Partial<ColorGrade> {
   if (stats.length === 0) return {};
-  const avg = (k: keyof FrameStats) => stats.reduce((a, s) => a + s[k], 0) / stats.length;
+  const avg = (k: 'p01' | 'p05' | 'p50' | 'p95' | 'p99' | 'meanR' | 'meanG' | 'meanB' | 'meanSat') => stats.reduce((a, s) => a + s[k], 0) / stats.length;
   const p01 = avg('p01'), p50 = avg('p50'), p99 = avg('p99');
   const mr = avg('meanR'), mg = avg('meanG'), mb = avg('meanB'), sat = avg('meanSat');
   const out: Partial<ColorGrade> = {};

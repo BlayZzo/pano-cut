@@ -243,7 +243,12 @@ export interface ColorGrade {
   lookStrength?: number; // 0..1
   lut?: string;          // Pfad zu einer eigenen .cube-Datei
   lutStrength?: number;  // 0..1
+  profile?: CameraProfile;  // Kamera-Profil (Log → normale Farben)
+  exposureCurve?: Array<{ t: number; ev: number }>;  // Belichtung über die Zeit (Clip-lokal, Blenden), vom Bild-Assistenten
 }
+
+/** Kamera-Profile, deren flache Log-Aufnahmen in normale Farben umgerechnet werden. */
+export type CameraProfile = 'bmdfilm5' | 'dlog' | 'log';
 
 /** Bild-Effekte, die nicht nur die Farbe betreffen. */
 export interface ImageFx {

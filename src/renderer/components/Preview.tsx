@@ -9,6 +9,7 @@ import { t } from '../i18n/de';
 import { IconLoop, IconPause, IconPlay, IconSkipBack, IconSkipFwd, IconStepBack, IconStepFwd } from './Icons';
 import { AiPanel } from './AiPanel';
 import { EffectPanel } from './EffectPanel';
+import { ImagePanel } from './ImagePanel';
 import { maskAt, trackActiveAt, trackBoxAt } from '@shared/ai';
 import { forgetMask } from '../engine/playback';
 import { boxToSource, canvasToPng, canvasToSource, clipBox, dabToBox, drawSelection, loadMaskCanvas, paintDab, tintMask } from './previewTools';
@@ -33,6 +34,8 @@ export function Preview(): React.ReactElement {
   const pickColor = useUi((s) => s.pickColor);
   const setPickColor = useUi((s) => s.setPickColor);
   const vfxPanel = useUi((s) => s.vfxPanel);
+  const imagePanel = useUi((s) => s.imagePanel);
+  const setImagePanel = useUi((s) => s.setImagePanel);
   const setVfxPanel = useUi((s) => s.setVfxPanel);
   const maskBrush = useUi((s) => s.maskBrush);
   const setMaskBrush = useUi((s) => s.setMaskBrush);
@@ -325,6 +328,7 @@ export function Preview(): React.ReactElement {
         )}
         <AiPanel clip={selectedClip} media={selectedMedia} />
         <EffectPanel />
+        <ImagePanel />
       </div>
       <div className="transport">
         <Timecode />
@@ -337,7 +341,8 @@ export function Preview(): React.ReactElement {
         <button className="btn icon ghost" title={t.preview.nextFrame} onClick={() => stepFrames(1)}><IconStepFwd /></button>
         <button className="btn icon ghost" title={t.preview.toEnd} onClick={goEnd}><IconSkipFwd /></button>
         <div className="spacer" />
-        <button className={`btn sm${vfxPanel ? ' active' : ''}`} title={t.vfx.title} onClick={() => setVfxPanel(!vfxPanel)} style={{ fontWeight: 700 }}>✦ {t.vfx.button}</button>
+        <button className={`btn sm${imagePanel ? ' active' : ''}`} title={t.imageAssist.title} onClick={() => { setImagePanel(!imagePanel); if (!imagePanel) setVfxPanel(false); }} style={{ fontWeight: 700 }}>✦ {t.imageAssist.button}</button>
+        <button className={`btn sm${vfxPanel ? ' active' : ''}`} title={t.vfx.title} onClick={() => { setVfxPanel(!vfxPanel); if (!vfxPanel) setImagePanel(false); }} style={{ fontWeight: 700 }}>✦ {t.vfx.button}</button>
         <button className={`btn sm${aiPanel ? ' active' : ''}`} title={t.ai.title} onClick={() => setAiPanel(!aiPanel)} style={{ fontWeight: 700 }}>✦ {t.ai.button}</button>
         <button className={`btn icon ghost${loop ? ' active' : ''}`} title={t.preview.loop} onClick={() => setLoop(!loop)}><IconLoop /></button>
         <span className="timecode dim">{formatTime(duration, settings.fps)}</span>

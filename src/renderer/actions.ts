@@ -15,6 +15,12 @@ const api = () => window.panocut;
 
 export async function importFiles(paths: string[]): Promise<void> {
   if (paths.length === 0) return;
+  // Blackmagic RAW braucht Blackmagics eigene Software – freundlich erklären statt nur „nicht unterstützt“
+  if (paths.some((p) => /\.braw$/i.test(p))) {
+    useUi.getState().toast(t.toast.braw, 'error');
+    paths = paths.filter((p) => !/\.braw$/i.test(p));
+    if (paths.length === 0) return;
+  }
   const items = await api().importMedia(paths);
   const skipped = paths.length - items.length;
   if (items.length) {

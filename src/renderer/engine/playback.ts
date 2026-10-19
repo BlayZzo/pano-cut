@@ -1,5 +1,5 @@
 import type { Clip, MediaItem, Project, Track, TransitionType } from '@shared/types';
-import { clamp, clipAt, clipDuration, clipEnd, clipsOnTrack, projectDuration, sourceTimeAt, videoTracksBottomUp } from '@shared/timeline';
+import { clamp, clipAt, clipDuration, clipEnd, clipsOnTrack, defaultColor, projectDuration, sourceTimeAt, videoTracksBottomUp } from '@shared/timeline';
 import { panoViewAt } from '@shared/pano';
 import { maskAt, trackBoxAt } from '@shared/ai';
 import type { Attachment } from '@shared/types';
@@ -9,6 +9,7 @@ import { sharedColorGL } from './colorgl';
 import { motionAt } from '@shared/effects';
 import { drawStyledText } from './text';
 import { blendDef, hasShadow, shadowPixels } from '@shared/layers';
+import { exposureGainAt, gradeForLut } from '@shared/color';
 
 type MediaEl = HTMLVideoElement | HTMLAudioElement | HTMLImageElement;
 
@@ -92,6 +93,8 @@ export class PlaybackEngine {
   private lastEmit = 0;
   loop = false;
   muted = false;
+  /** Vergleich: Bild ohne Farbkorrektur zeigen (Bild-Assistent „Vorher“). */
+  compareOriginal = false;
   onTime: (t: number) => void = () => {};
   onEnded: () => void = () => {};
   /** Wird gerufen, wenn für einen Rückwärts-Clip noch keine Rückwärts-Vorschau existiert. */
@@ -368,7 +371,11 @@ export class PlaybackEngine {
       : null;
     const cgl = sharedColorGL();
     if (cgl.available) {
-      const out = cgl.render(source as TexImageSource, vw, vh, clip.color, clip.fx?.vignette ?? 0, crop, !!clip.fx?.mirror, !!clip.fx?.flip, () => { if (!this.playing) this.render(this.current); });
+      // Vergleich „Vorher“: Farbe und Vignette auslassen
+      const original = this.compareOriginal;
+      const grade = original ? defaultColor() : gradeForLut(clip.color);
+      const gain = original ? 1 : exposureGainAt(clip.color, localT);
+      const out = cgl.render(source as TexImageSource, vw, vh, grade, original ? 0 : clip.fx?.vignette ?? 0, crop, !!clip.fx?.mirror, !!clip.fx?.flip, () => { if (!this.playing) this.render(this.current); }, gain);
       if (out) { source = out; vw = out.width; vh = out.height; }
     }
 

@@ -37,7 +37,10 @@ export function InspectorColor({ clip, ids }: { clip: Clip; ids: string[] }): Re
   return (
     <Section title={t.inspector.sectionColor} badge={changed ? (c.look ? LOOKS.find((l) => l.id === c.look)?.name ?? '•' : '•') : undefined}
       onReset={() => updateClips(ids, { color: defaultColor() })}>
-      <button className="btn primary" style={{ width: '100%' }} onClick={() => void autoEnhanceClips(ids)}>{t.look.auto}</button>
+      <div className="field-row">
+        <button className="btn primary" style={{ flex: 1 }} onClick={() => void autoEnhanceClips(ids)}>{t.look.auto}</button>
+        <button className="btn" onClick={() => useUi.getState().setImagePanel(true)} title={t.imageAssist.title}>{t.imageAssist.open}</button>
+      </div>
       <div className="hint">{t.look.autoHint}</div>
 
       <SubHead>{t.look.lookGroup}</SubHead>

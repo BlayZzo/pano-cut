@@ -41,6 +41,7 @@ export interface UiState {
   aiBusy: { percent: number; message: string } | null;
   pickColor: boolean;   // Green-Screen-Farbe in der Vorschau wählen
   vfxPanel: boolean;    // Effekt-Studio offen
+  imagePanel: boolean;  // Bild-Assistent offen
   vfxPreset: string | null;  // vorgewählte Effektart (aus der Bibliothek)
   maskBrush: { clipId: string; trackId: string; size: number; all: boolean } | null;  // Masken-Pinsel aktiv
   dirty: boolean;
@@ -69,6 +70,7 @@ export interface UiState {
   setAiBusy(b: UiState['aiBusy']): void;
   setPickColor(p: boolean): void;
   setVfxPanel(open: boolean, preset?: string | null): void;
+  setImagePanel(open: boolean): void;
   setMaskBrush(b: UiState['maskBrush']): void;
   setDirty(d: boolean): void;
   bumpHistory(): void;
@@ -98,6 +100,7 @@ export const useUi = create<UiState>()((set, get) => ({
   aiBusy: null,
   pickColor: false,
   vfxPanel: false,
+  imagePanel: false,
   vfxPreset: null,
   maskBrush: null,
   dirty: false,
@@ -120,7 +123,7 @@ export const useUi = create<UiState>()((set, get) => ({
   toast: (text, kind = 'info') => {
     const id = ++toastId;
     set((s) => ({ toasts: [...s.toasts, { id, text, kind }] }));
-    setTimeout(() => get().dismissToast(id), kind === 'error' ? 8000 : 3500);
+    setTimeout(() => get().dismissToast(id), Math.max(kind === 'error' ? 8000 : 3500, text.length * 55));
   },
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
   setExportProgress: (exportProgress) => set({ exportProgress }),
@@ -130,6 +133,7 @@ export const useUi = create<UiState>()((set, get) => ({
   setAiBusy: (aiBusy) => set({ aiBusy }),
   setPickColor: (pickColor) => set({ pickColor }),
   setVfxPanel: (vfxPanel, preset) => set({ vfxPanel, vfxPreset: preset ?? null }),
+  setImagePanel: (imagePanel) => set({ imagePanel }),
   setMaskBrush: (maskBrush) => set({ maskBrush }),
   setDirty: (dirty) => set({ dirty }),
   bumpHistory: () => set((s) => ({ historyVersion: s.historyVersion + 1 })),

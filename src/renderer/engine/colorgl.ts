@@ -16,7 +16,7 @@ void main() { vUv = vec2((aPos.x + 1.0) * 0.5, (1.0 - aPos.y) * 0.5); gl_Positio
 const FRAG = `
 precision highp float;
 uniform sampler2D uTex; uniform sampler2D uLut; uniform float uSize; uniform float uUseLut;
-uniform float uVignette; uniform vec2 uDim; uniform vec4 uCrop; uniform vec2 uFlip;
+uniform float uVignette; uniform vec2 uDim; uniform vec4 uCrop; uniform vec2 uFlip; uniform float uGain;
 varying vec2 vUv;
 vec3 lut(vec3 c) {
   float N = uSize;
@@ -32,6 +32,7 @@ void main() {
   vec2 u = vec2(uFlip.x > 0.5 ? 1.0 - vUv.x : vUv.x, uFlip.y > 0.5 ? 1.0 - vUv.y : vUv.y);
   vec4 c = texture2D(uTex, uCrop.xy + u * uCrop.zw);
   vec3 rgb = c.rgb;
+  rgb *= uGain;   // Belichtung über die Zeit (vor der LUT, wie im Export)
   if (uUseLut > 0.5) rgb = lut(rgb);
   if (uVignette > 0.0) {
     vec2 p = (vUv - 0.5) * uDim;
@@ -105,7 +106,7 @@ export class ColorGL {
     };
     this.tex = mk();
     this.lutTex = mk();
-    for (const n of ['uSize', 'uUseLut', 'uVignette', 'uDim', 'uCrop', 'uFlip']) this.loc[n] = gl.getUniformLocation(prog, n);
+    for (const n of ['uSize', 'uUseLut', 'uVignette', 'uDim', 'uCrop', 'uFlip', 'uGain']) this.loc[n] = gl.getUniformLocation(prog, n);
     gl.uniform1i(gl.getUniformLocation(prog, 'uTex'), 0);
     gl.uniform1i(gl.getUniformLocation(prog, 'uLut'), 1);
     this.program = prog;
@@ -143,11 +144,11 @@ export class ColorGL {
    * Zuschnitt, Spiegeln, Farbe und Vignette in einem Durchgang (gleiche Reihenfolge wie im Export).
    * `w`/`h` sind die Maße der Quelle; die Ausgabe hat die Maße des Zuschnitts. Gibt null zurück, wenn nichts zu tun ist.
    */
-  render(source: TexImageSource, w: number, h: number, grade: ColorGrade, vignette: number, crop: { x: number; y: number; w: number; h: number } | null, mirror: boolean, flip: boolean, onLutLoaded: () => void): HTMLCanvasElement | null {
+  render(source: TexImageSource, w: number, h: number, grade: ColorGrade, vignette: number, crop: { x: number; y: number; w: number; h: number } | null, mirror: boolean, flip: boolean, onLutLoaded: () => void, gain = 1): HTMLCanvasElement | null {
     const gl = this.gl;
     if (!gl || !this.program) return null;
     const useLut = !isNeutralGrade(grade);
-    if (!useLut && vignette <= 0.01 && !crop && !mirror && !flip) return null;
+    if (!useLut && vignette <= 0.01 && !crop && !mirror && !flip && Math.abs(gain - 1) < 1e-4) return null;
     const lutReady = useLut ? this.uploadLut(grade, onLutLoaded) : false;
     const cr = crop ?? { x: 0, y: 0, w: 1, h: 1 };
     const ow = Math.max(2, Math.round(w * cr.w)), oh = Math.max(2, Math.round(h * cr.h));
@@ -162,6 +163,7 @@ export class ColorGL {
     gl.uniform2f(this.loc.uDim, ow, oh);
     gl.uniform4f(this.loc.uCrop, cr.x, cr.y, cr.w, cr.h);
     gl.uniform2f(this.loc.uFlip, mirror ? 1 : 0, flip ? 1 : 0);
+    gl.uniform1f(this.loc.uGain, gain);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     return this.canvas;
   }
