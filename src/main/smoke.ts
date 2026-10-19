@@ -8,6 +8,7 @@ import path from 'node:path';
 import { createClip, createProject, createTitleClip } from '@shared/timeline';
 import { defaultSubtitleStyle, defaultTitle } from '@shared/pano';
 import { createMotion } from '@shared/effects';
+import { syncLinkedClips } from '@shared/layers';
 import type { ExportOptions, MediaItem } from '@shared/types';
 import { availableFilters, probeFile, runFfmpeg } from './ffmpeg';
 import { prepareMedia, probeMedia } from './media';
@@ -163,6 +164,46 @@ export async function runSmokeTest(): Promise<number> {
     if (!(late[0] > 150 && late[1] < 90 && late[2] < 90)) throw new Error('Animation: Bild steht nicht an der Zielposition');
     if (early[0] > 150 && early[1] < 90 && early[2] < 90) throw new Error('Animation: Bild ist am Anfang schon sichtbar');
     log('Effekte ok');
+
+    // v0.5: Ebenen – Effekt mit Transparenz (WebM/VP9), Schlagschatten, Lichtschein im Mischmodus „Negativ multiplizieren“
+    step('Ebenen-Export (Transparenz, Schatten, Mischmodus) …');
+    const fxWebm = path.join(dir, 'fx_alpha.webm'), lightWebm = path.join(dir, 'fx_light.webm'), grey = path.join(dir, 'grey.mp4');
+    await runFfmpeg(['-f', 'lavfi', '-i', 'color=c=0x606060:s=640x360:d=2:r=30', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', grey]);
+    await runFfmpeg(['-f', 'lavfi', '-i', "color=c=red:s=160x160:d=2:r=30,format=rgba,geq=r='255':g='0':b='0':a='255*lt(hypot(X-80\\,Y-80)\\,50)'", '-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p', '-b:v', '0', '-crf', '20', fxWebm]);
+    await runFfmpeg(['-f', 'lavfi', '-i', "nullsrc=s=80x80:d=2:r=30,format=gray,geq=lum='255*exp(-(pow(X-40\\,2)+pow(Y-40\\,2))/300)'", '-vf', 'format=yuv420p', '-c:v', 'libvpx-vp9', '-b:v', '0', '-crf', '20', lightWebm]);
+    const layerItems: MediaItem[] = [];
+    for (const f of [grey, fxWebm, lightWebm]) {
+      const it = await probeMedia(f);
+      let latest = it;
+      await prepareMedia(it, (u) => { latest = u; }, 360);
+      layerItems.push(latest);
+    }
+    const [greyM, fxM, lightM] = layerItems;
+    fxM.hasAlpha = true;
+    let layProject = createProject('SmokeLayers', 640, 360, 30);
+    for (const it of layerItems) layProject.media[it.id] = it;
+    const lv = layProject.tracks.filter((t) => t.kind === 'video');
+    layProject.tracks = [{ id: 'trk_fx', kind: 'video', name: 'Effekt', muted: false, locked: false, hidden: false }, { id: 'trk_light', kind: 'video', name: 'Licht', muted: false, locked: false, hidden: false }, ...layProject.tracks];
+    const lb = createClip(greyM, lv[1].id, 0); lb.out = 2;
+    const lf = createClip(fxM, 'trk_fx', 0); lf.out = 2; lf.transform = { x: 0, y: 0, scale: 0.5, rotation: 0 };
+    lf.shadow = { enabled: true, opacity: 0.8, blur: 0, distance: 10, angle: 0 };
+    const ll = createClip(lightM, 'trk_light', 0); ll.out = 2; ll.blend = 'screen'; ll.link = { clipId: lf.id, mode: 'light', scale: 3 };
+    for (const c of [lb, lf, ll]) layProject.clips[c.id] = c;
+    layProject = syncLinkedClips(layProject);
+    if (Math.abs(layProject.clips[ll.id].transform.scale - 1.5) > 1e-6) throw new Error('Verknüpfter Lichtschein folgt dem Effekt nicht');
+    const outLay = path.join(dir, 'export_layers.mp4');
+    await new ExportJob(layProject, { ...options, outputPath: outLay }, (p) => { if (p.phase === 'error') log(' Fehler:', p.message); }).run();
+    const layPx = async (x: number, y: number): Promise<number[]> => {
+      const raw = path.join(dir, `lay_${x}_${y}.rgb`);
+      await runFfmpeg(['-ss', '1', '-i', outLay, '-frames:v', '1', '-vf', `crop=4:4:${x}:${y}`, '-f', 'rawvideo', '-pix_fmt', 'rgb24', raw]);
+      return [...fs.readFileSync(raw).subarray(0, 3)];
+    };
+    const disc = await layPx(318, 178), shadowPx = await layPx(393, 178), lit = await layPx(318, 70), plain = await layPx(20, 20);
+    log(`Ebenen: Effekt ${disc.join(',')} · Schatten ${shadowPx.join(',')} · Licht ${lit.join(',')} · Hintergrund ${plain.join(',')}`);
+    if (!(disc[0] > 180 && disc[1] < 90)) throw new Error('Ebenen: Effekt mit Transparenz fehlt');
+    if (!(shadowPx[1] < plain[1] - 40)) throw new Error('Ebenen: Schlagschatten fehlt');
+    if (!(lit[1] > plain[1] + 25)) throw new Error('Ebenen: Lichtschein (Negativ multiplizieren) fehlt');
+    log('Ebenen ok');
 
     // KI: Erkennung und Maske. In der CI liegt ein Testbild (Hund, Fahrrad, Auto) unter PANOCUT_TEST_IMAGE.
     if (aiAvailable()) {

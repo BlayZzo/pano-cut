@@ -10,6 +10,7 @@ import { InspectorTitle } from './InspectorTitle';
 import { InspectorStabilize, InspectorSubtitles, InspectorTransition } from './InspectorExtras';
 import { InspectorChroma, InspectorObjects } from './InspectorAi';
 import { DuckingFields, InspectorColor, InspectorFx, InspectorMotion, SaveEffectButton } from './InspectorLook';
+import { InspectorLayer, InspectorVfx } from './InspectorLayer';
 
 export function Inspector(): React.ReactElement {
   const selection = useUi((s) => s.selection);
@@ -62,6 +63,8 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
       </Section>
 
       {isTitle && <InspectorTitle clip={clip} />}
+      {!isTitle && media?.vfx && <InspectorVfx clip={clip} media={media} />}
+      {!isTitle && !isAudioOnly && <InspectorLayer clip={clip} ids={ids} />}
       {!isTitle && media?.info.is360 && media.type === 'video' && <InspectorPano clip={clip} media={media} />}
       {!isTitle && !isAudioOnly && <InspectorTransition clip={clip} />}
 
@@ -97,9 +100,9 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
         </Section>
       )}
 
-      {!isTitle && media && media.type !== 'audio' && <InspectorObjects clip={clip} media={media} />}
-      {!isTitle && media && media.type !== 'audio' && <InspectorChroma clip={clip} />}
-      {!isTitle && media?.type === 'video' && <InspectorStabilize clip={clip} media={media} />}
+      {!isTitle && media && media.type !== 'audio' && !media.vfx && <InspectorObjects clip={clip} media={media} />}
+      {!isTitle && media && media.type !== 'audio' && !media.vfx && <InspectorChroma clip={clip} />}
+      {!isTitle && media?.type === 'video' && !media.vfx && <InspectorStabilize clip={clip} media={media} />}
       {!isTitle && media?.type === 'video' && media.info.hasAudio && <InspectorSubtitles clip={clip} media={media} />}
 
       {!isAudioOnly && !isTitle && (

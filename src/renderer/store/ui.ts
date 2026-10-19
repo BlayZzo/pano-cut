@@ -40,6 +40,9 @@ export interface UiState {
   aiPanel: boolean;
   aiBusy: { percent: number; message: string } | null;
   pickColor: boolean;   // Green-Screen-Farbe in der Vorschau wählen
+  vfxPanel: boolean;    // Effekt-Studio offen
+  vfxPreset: string | null;  // vorgewählte Effektart (aus der Bibliothek)
+  maskBrush: { clipId: string; trackId: string; size: number; all: boolean } | null;  // Masken-Pinsel aktiv
   dirty: boolean;
   historyVersion: number;
 
@@ -65,6 +68,8 @@ export interface UiState {
   setAiPanel(open: boolean): void;
   setAiBusy(b: UiState['aiBusy']): void;
   setPickColor(p: boolean): void;
+  setVfxPanel(open: boolean, preset?: string | null): void;
+  setMaskBrush(b: UiState['maskBrush']): void;
   setDirty(d: boolean): void;
   bumpHistory(): void;
 }
@@ -92,6 +97,9 @@ export const useUi = create<UiState>()((set, get) => ({
   aiPanel: false,
   aiBusy: null,
   pickColor: false,
+  vfxPanel: false,
+  vfxPreset: null,
+  maskBrush: null,
   dirty: false,
   historyVersion: 0,
 
@@ -121,6 +129,8 @@ export const useUi = create<UiState>()((set, get) => ({
   setAiPanel: (aiPanel) => set({ aiPanel }),
   setAiBusy: (aiBusy) => set({ aiBusy }),
   setPickColor: (pickColor) => set({ pickColor }),
+  setVfxPanel: (vfxPanel, preset) => set({ vfxPanel, vfxPreset: preset ?? null }),
+  setMaskBrush: (maskBrush) => set({ maskBrush }),
   setDirty: (dirty) => set({ dirty }),
   bumpHistory: () => set((s) => ({ historyVersion: s.historyVersion + 1 })),
 }));

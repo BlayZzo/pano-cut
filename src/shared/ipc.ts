@@ -1,4 +1,4 @@
-import type { AiDetectModel, AiProgress, AiSegmentModel, AppInfo, CloudSettings, Detection, ExportOptions, ExportProgress, MediaItem, Project, ProjectFile, Settings, SubtitleSegment, UpdateStatus, WhisperModel, WhisperProgress } from './types';
+import type { AiDetectModel, AiProgress, AiSegmentModel, AppInfo, CloudSettings, Detection, ExportOptions, ExportProgress, MediaItem, Project, ProjectFile, Settings, SubtitleSegment, UpdateStatus, VfxSpec, WhisperModel, WhisperProgress } from './types';
 
 export interface FramePayload { data: Uint8Array; width: number; height: number }
 export interface MaskPayload { width: number; height: number; alpha: Uint8Array }
@@ -38,10 +38,16 @@ export interface PanoCutApi {
   aiStatus(): Promise<{ available: boolean; models: Record<string, boolean> }>;
   aiDetect(frame: FramePayload, model: AiDetectModel, minScore?: number): Promise<Detection[]>;
   aiSegment(frame: FramePayload, model: AiSegmentModel, box: { x: number; y: number; w: number; h: number } | null): Promise<MaskPayload>;
-  aiSaveMask(mediaPath: string, trackId: string, index: number, png: Uint8Array): Promise<string>;
+  aiSaveMask(mediaPath: string, trackId: string, index: number | string, png: Uint8Array): Promise<string>;
   aiCancel(): Promise<void>;
   onAiProgress(cb: (p: AiProgress) => void): () => void;
   renderObject(req: { project: Project; clipId: string; trackId: string; name: string }): Promise<MediaItem>;
+
+  // Effekt-Simulationen: Bilder aus der Oberfläche → Video
+  vfxBegin(req: { projectId: string; spec: VfxSpec; role: 'effect' | 'light'; width: number; height: number; mediaId?: string; name?: string }): Promise<string>;
+  vfxFrame(jobId: string, rgba: Uint8Array): Promise<void>;
+  vfxEnd(jobId: string): Promise<MediaItem>;
+  vfxCancel(jobId: string): Promise<void>;
 
   // Cloud (WebDAV)
   cloudTest(settings: CloudSettings): Promise<{ ok: boolean; message?: string }>;
@@ -111,6 +117,10 @@ export const IPC = {
   aiCancel: 'ai:cancel',
   aiProgress: 'ai:progress',
   renderObject: 'ai:renderObject',
+  vfxBegin: 'vfx:begin',
+  vfxFrame: 'vfx:frame',
+  vfxEnd: 'vfx:end',
+  vfxCancel: 'vfx:cancel',
 
   cloudTest: 'cloud:test',
   cloudList: 'cloud:list',

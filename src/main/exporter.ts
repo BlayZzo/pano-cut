@@ -11,6 +11,7 @@ import { needsStitching, stitchChain } from './stitch';
 import { escapeFilterPath, fontFamilyName, resolveFontFile } from './fonts';
 import { injectSphericalMetadata } from './spherical';
 import { maskChain, writeMaskList } from './objects';
+import { blendDef, hasShadow, shadowPixels } from '@shared/layers';
 import { bakeGradeLut, gradeKey, isNeutralGrade, lutToCube, parseCube } from '@shared/color';
 import { hasGeometryMotion, hasOpacityMotion } from '@shared/effects';
 import { opacityCommands, perspectiveCorners } from './motionExpr';
@@ -823,7 +824,35 @@ export class ExportJob {
       const dy = full ? 0 : (t.y / 100) * H;
       const outLabel = `ov${vi}`;
       const end = s.tlStart + s.tlDur;
-      filters.push(`[${last}][${label}]overlay=x=(W-w)/2+${fnum(dx)}:y=(H-h)/2+${fnum(dy)}:eof_action=pass:enable='between(t,${fnum(s.tlStart)},${fnum(end)})'[${outLabel}]`);
+      const enable = `enable='between(t,${fnum(s.tlStart)},${fnum(end)})'`;
+      let layer = label;
+      // Schlagschatten: Form des Clips schwarz, weich, versetzt – unter den Clip legen (wie Canvas shadowBlur)
+      if (hasShadow(c)) {
+        const sp = shadowPixels(c.shadow!, H);
+        const pad = Math.ceil(sp.sigma * 3) + 2;
+        filters.push(`[${label}]split[${label}m][${label}s]`);
+        filters.push(`[${label}s]format=rgba,colorchannelmixer=rr=0:gg=0:bb=0:aa=${fnum(Math.min(1, c.shadow!.opacity))},pad=iw+${2 * pad}:ih+${2 * pad}:${pad}:${pad}:color=black@0${sp.sigma > 0.3 ? `,gblur=sigma=${fnum(sp.sigma)}` : ''}[${label}sh]`);
+        filters.push(`[${last}][${label}sh]overlay=x=(W-w)/2+${fnum(dx + sp.dx)}:y=(H-h)/2+${fnum(dy + sp.dy)}:eof_action=pass:${enable}[${label}so]`);
+        last = `${label}so`;
+        layer = `${label}m`;
+      }
+      const mode = blendDef(c.blend).ffmpeg;
+      if (mode !== 'normal') {
+        // Mischmodus: Clip auf eine transparente Fläche in Ausgabegröße legen, mit der Szene verrechnen und
+        // über die Deckkraft (Alpha) des Clips einblenden: Ergebnis = Szene·(1−a) + Mischung(Szene, Clip)·a
+        const L = `lay${vi}`;
+        filters.push(`color=c=black@0:s=${W}x${H}:r=${fps}:d=${fnum(total)},format=rgba[${L}c]`);
+        filters.push(`[${L}c][${layer}]overlay=x=(W-w)/2+${fnum(dx)}:y=(H-h)/2+${fnum(dy)}:eof_action=pass:format=rgb:${enable}[${L}]`);
+        filters.push(`[${last}]format=gbrp,split[${L}b1][${L}b2]`);
+        filters.push(`[${L}]split[${L}l1][${L}l2]`);
+        filters.push(`[${L}l1]format=gbrp[${L}rgb]`);
+        filters.push(`[${L}b1][${L}rgb]blend=all_mode=${mode}[${L}bl]`);
+        filters.push(`[${L}l2]alphaextract[${L}a]`);
+        filters.push(`[${L}bl][${L}a]alphamerge[${L}ba]`);
+        filters.push(`[${L}b2][${L}ba]overlay=format=rgb,format=yuv420p[${outLabel}]`);
+      } else {
+        filters.push(`[${last}][${layer}]overlay=x=(W-w)/2+${fnum(dx)}:y=(H-h)/2+${fnum(dy)}:eof_action=pass:${enable}[${outLabel}]`);
+      }
       last = outLabel;
       vi++;
 

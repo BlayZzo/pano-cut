@@ -227,3 +227,42 @@ export async function availableFilters(): Promise<Set<string>> {
     child.on('error', () => resolve(new Set()));
   });
 }
+
+/** FFmpeg mit Eingabe über stdin (z. B. Rohbilder aus der Oberfläche). */
+export interface FfmpegPipe {
+  write(data: Uint8Array): Promise<void>;
+  end(): Promise<void>;
+  kill(): void;
+}
+
+export function pipeFfmpeg(args: string[]): FfmpegPipe {
+  const fullArgs = ['-hide_banner', '-y', ...args];
+  log.debug('ffmpeg (pipe)', fullArgs.join(' '));
+  const child = spawn(getFfmpegPath(), fullArgs, { windowsHide: true, stdio: ['pipe', 'ignore', 'pipe'] });
+  active.add(child);
+  let stderr = '';
+  child.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); if (stderr.length > 20000) stderr = stderr.slice(-10000); });
+  const done = new Promise<void>((resolve, reject) => {
+    child.on('error', (err) => { active.delete(child); reject(err); });
+    child.on('close', (code) => {
+      active.delete(child);
+      if (code === 0) resolve();
+      else reject(new FfmpegError(`FFmpeg-Fehler (Code ${code}):\n${stderr.split('\n').slice(-6).join('\n')}`, stderr, code));
+    });
+  });
+  done.catch(() => { /* wird über end() gemeldet */ });
+  return {
+    write: (data) => new Promise<void>((resolve, reject) => {
+      const stdin = child.stdin;
+      if (!stdin || stdin.destroyed) { reject(new Error('FFmpeg wurde beendet')); return; }
+      const ok = stdin.write(Buffer.from(data.buffer, data.byteOffset, data.byteLength), (err) => { if (err) reject(err); });
+      if (ok) resolve();
+      else stdin.once('drain', () => resolve());
+    }),
+    end: async () => {
+      child.stdin?.end();
+      await done;
+    },
+    kill: () => { try { child.kill('SIGKILL'); } catch { /* ignorieren */ } },
+  };
+}

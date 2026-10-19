@@ -157,7 +157,7 @@ select { padding-right: 24px; }
 .timeline { display: grid; grid-template-rows: 36px minmax(0, 1fr); background: var(--panel); min-height: 0; }
 .timeline-toolbar { display: flex; align-items: center; gap: 6px; padding: 0 10px; border-bottom: 1px solid var(--border); }
 .timeline-toolbar .sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
-.timeline-body { display: grid; grid-template-columns: 160px minmax(0, 1fr); min-height: 0; position: relative; }
+.timeline-body { display: grid; grid-template-columns: 188px minmax(0, 1fr); min-height: 0; position: relative; }
 .track-headers { border-right: 1px solid var(--border); background: var(--panel); overflow: hidden; }
 .track-headers-inner { padding-top: 24px; }
 .track-header { height: var(--track-h); display: flex; align-items: center; gap: 4px; padding: 0 8px; border-bottom: 1px solid var(--border); font-size: 12px; }
@@ -298,3 +298,24 @@ textarea:focus { border-color: var(--accent); }
 .effect-tile .effect-del:hover { color: var(--danger); }
 .effect-tile.look-tile .effect-swatch { width: 100%; height: 22px; border-radius: 3px; }
 .clip.effect-drop { outline: 2px solid var(--accent); outline-offset: -2px; }
+
+/* v0.5: Effekt-Studio, Ebenen, Pinsel */
+.vfx-panel { left: 14px; right: auto; width: 340px; }
+.vfx-prompt { width: 100%; resize: vertical; min-height: 46px; background: var(--panel-2); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 8px; font: inherit; font-size: 12.5px; }
+.vfx-prompt:focus { outline: none; border-color: var(--accent); }
+.vfx-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.vfx-chips .chip { font-size: 10.5px; padding: 2px 7px; }
+.vfx-understood { font-size: 12px; color: var(--accent); }
+.vfx-kinds { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
+.vfx-kind { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 5px 2px; border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--panel-2); color: var(--text); font-size: 10px; cursor: pointer; }
+.vfx-kind:hover { border-color: var(--accent); }
+.vfx-kind.active { border-color: var(--accent); background: var(--accent-soft); }
+.vfx-kind .effect-icon { font-size: 18px; }
+.preview-stage.placing canvas { cursor: move; }
+.preview-stage.brushing canvas, .preview-stage.brushing .preview-overlay { cursor: crosshair; }
+.track-order { display: inline-flex; flex-direction: column; margin-left: 2px; }
+.track-order button { height: 11px; width: 14px; padding: 0; line-height: 9px; font-size: 8px; border: none; background: transparent; color: var(--text-faint); cursor: pointer; }
+.track-order button:hover { color: var(--accent); }
+.link-badge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--accent); }
+.clip .clip-link { position: absolute; right: 4px; top: 2px; font-size: 10px; opacity: 0.85; }
+.clip .clip-fx { position: absolute; right: 4px; bottom: 2px; font-size: 10px; opacity: 0.85; }

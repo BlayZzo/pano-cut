@@ -38,7 +38,7 @@ export function MediaCard({ item, selected, onSelect, onOpen, onContextMenu }: P
     ? { backgroundImage: cssUrl(item.sprite.path), backgroundPosition: `${(frameIndex / Math.max(1, frames - 1)) * 100}% 0` }
     : undefined;
   // Hintergrundgröße: der Streifen ist frames × frameWidth breit → bei "auto 100%" passt die Höhe, die Breite skaliert mit
-  const badge = item.info.is360 ? t.library.is360 : item.type === 'audio' ? 'AUDIO' : item.type === 'image' ? 'BILD' : (item.info.height >= 2160 ? '4K' : item.info.height >= 1080 ? 'HD' : '');
+  const badge = item.vfx ? 'FX' : item.info.is360 ? t.library.is360 : item.type === 'audio' ? 'AUDIO' : item.type === 'image' ? 'BILD' : (item.info.height >= 2160 ? '4K' : item.info.height >= 1080 ? 'HD' : '');
 
   return (
     <div

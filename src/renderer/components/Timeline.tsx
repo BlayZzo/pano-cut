@@ -65,6 +65,7 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
   const trimClip = useProject((s) => s.trimClip);
   const removeTrack = useProject((s) => s.removeTrack);
   const updateTrack = useProject((s) => s.updateTrack);
+  const moveTrack = useProject((s) => s.moveTrack);
 
   const zoom = useUi((s) => s.zoom);
   const setZoom = useUi((s) => s.setZoom);
@@ -333,6 +334,9 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
       { label: track.muted ? t.timeline.mute + ' aus' : t.timeline.mute, onClick: () => updateTrack(track.id, { muted: !track.muted }) },
       { label: track.locked ? t.timeline.lock + ' aus' : t.timeline.lock, onClick: () => updateTrack(track.id, { locked: !track.locked }) },
       { sep: true },
+      { label: t.layers.trackUp, onClick: () => moveTrack(track.id, -1) },
+      { label: t.layers.trackDown, onClick: () => moveTrack(track.id, 1) },
+      { sep: true },
       { label: t.timeline.removeTrack, danger: true, disabled: project.tracks.filter((tr) => tr.kind === track.kind).length <= 1, onClick: () => removeTrack(track.id) },
     ] });
   };
@@ -365,6 +369,10 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
               <React.Fragment key={track.id}>
                 {i > 0 && offsets[i - 1].track.kind !== track.kind && <div className="track-divider" />}
                 <div className={`track-header ${track.kind}`} style={{ '--track-h': `${height}px` } as React.CSSProperties} onContextMenu={(e) => { e.preventDefault(); trackMenu(track, e.clientX, e.clientY); }}>
+                  <span className="track-order">
+                    <button title={t.layers.trackUp} onClick={() => moveTrack(track.id, -1)}>▲</button>
+                    <button title={t.layers.trackDown} onClick={() => moveTrack(track.id, 1)}>▼</button>
+                  </span>
                   <span className="name" title={track.name}>{track.name}</span>
                   {track.kind === 'video' && (
                     <button className={`tbtn${track.hidden ? ' on' : ''}`} title={t.timeline.hide} onClick={() => updateTrack(track.id, { hidden: !track.hidden })}>{track.hidden ? <IconEyeOff /> : <IconEye />}</button>
@@ -555,6 +563,10 @@ const TimelineClip = React.memo(function TimelineClip({ clip, media, zoom, selec
   if (clip.muted) tags.push('🔇');
   if (clip.stabilize?.enabled) tags.push('⟲');
   if (clip.subtitles?.enabled && clip.subtitles.segments.length) tags.push('CC');
+  if (media?.vfx) tags.push(media.vfxRole === 'light' ? '☀' : '✦');
+  if (clip.link) tags.push('🔗');
+  if (clip.blend && clip.blend !== 'normal') tags.push('◐');
+  if (clip.cutout?.enabled) tags.push('✂');
 
   return (
     <div

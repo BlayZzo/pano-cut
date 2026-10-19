@@ -10,6 +10,7 @@ import { ContextMenu, type MenuEntry } from './ContextMenu';
 import { TITLE_TEMPLATES, TRANSITIONS, defaultTitle } from '@shared/pano';
 import { DRAG_EFFECT, DRAG_TITLE, DRAG_TRANSITION, setDragging } from '../utils/dnd';
 import { EFFECT_BLOCKS } from '@shared/effects';
+import { VFX_KINDS } from '@shared/vfx';
 import { defaultColor } from '@shared/timeline';
 import { effectiveGrade, gradePixel } from '@shared/color';
 import { drawStyledText } from '../engine/text';
@@ -30,7 +31,7 @@ export function MediaLibrary(): React.ReactElement {
   const items = useMemo(() => {
     const q = query.trim().toLowerCase();
     return Object.values(media)
-      .filter((m) => !m.isObject)
+      .filter((m) => !m.isObject && m.vfxRole !== 'light')
       .filter((m) => filter === 'all' || m.type === filter)
       .filter((m) => !q || m.name.toLowerCase().includes(q))
       .sort((a, b) => a.addedAt - b.addedAt);
@@ -210,6 +211,17 @@ function EffectLibrary(): React.ReactElement {
   ];
   return (
     <div className="panel-body" style={{ padding: '8px 10px' }}>
+      <div className="effect-group">
+        <div className="effect-group-title">{t.effects.groupSim}</div>
+        <div className="effect-grid">
+          {VFX_KINDS.map((k) => (
+            <div key={k.kind} className="effect-tile" title={t.effects.simHint} onClick={() => useUi.getState().setVfxPanel(true, k.kind)}>
+              <span className="effect-icon">{k.icon}</span><span>{k.name}</span>
+            </div>
+          ))}
+        </div>
+        <div className="hint" style={{ marginTop: 6 }}>{t.effects.simHint}</div>
+      </div>
       <div className="hint" style={{ marginBottom: 8 }}>{t.effects.hint}</div>
       {groups.map((g) => (
         <div key={g.kind} className="effect-group">

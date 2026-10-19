@@ -6,6 +6,7 @@ import {
   clipDuration, clipEnd, createClip, createProject, createTitleClip, createTrack, makeId, MIN_CLIP_DURATION, nextFreeStart, overlaps, sourceLimit, sourceTimeAt,
 } from '@shared/timeline';
 import { defaultPano, defaultSubtitleStyle } from '@shared/pano';
+import { syncLinkedClips } from '@shared/layers';
 
 export interface ProjectState {
   project: Project;
@@ -34,6 +35,12 @@ export interface ProjectState {
   addTrack(kind: TrackKind): void;
   removeTrack(id: string): void;
   updateTrack(id: string, patch: Partial<Track>): void;
+  /** Spur innerhalb ihrer Art verschieben (-1 = nach oben/vorne, 1 = nach unten/hinten). */
+  moveTrack(id: string, dir: -1 | 1): void;
+  /** Neue Videospur ganz oben (vorderste Ebene) – optional direkt über einer bestimmten Spur. Gibt die ID zurück. */
+  addVideoTrackAbove(aboveTrackId: string | null, name?: string): string;
+  /** Fertige Clips einfügen (Effekte, Objekt-Kopien). */
+  insertClips(clips: Clip[]): void;
 
   addTitleClip(trackId: string, start: number, title: TitleStyle): Clip | null;
   setPano(id: string, pano: PanoSettings | undefined): void;
@@ -53,9 +60,22 @@ export interface ProjectState {
 
 const HISTORY_LIMIT = 200;
 
+type SetState = (partial: Partial<ProjectState> | ((s: ProjectState) => Partial<ProjectState>)) => void;
+
+/** Jede Änderung am Projekt führt verknüpfte Clips (Lichtschein, Objekt-Kopien) automatisch nach. */
+function withLinkSync(rawSet: SetState): SetState {
+  return (partial) => rawSet((s) => {
+    const r = typeof partial === 'function' ? partial(s) : partial;
+    if (r && r.project) return { ...r, project: syncLinkedClips(r.project) };
+    return r;
+  });
+}
+
 export const useProject = create<ProjectState>()(
   temporal(
-    (set, get) => ({
+    (rawSet, get) => {
+      const set = withLinkSync(rawSet as SetState);
+      return {
       project: createProject(),
       path: null,
 
@@ -249,6 +269,31 @@ export const useProject = create<ProjectState>()(
       updateTrack: (id, patch) => set((s) => ({
         project: { ...s.project, tracks: s.project.tracks.map((t) => (t.id === id ? { ...t, ...patch } : t)) },
       })),
+      moveTrack: (id, dir) => set((s) => {
+        const tracks = [...s.project.tracks];
+        const i = tracks.findIndex((t) => t.id === id);
+        if (i < 0) return {};
+        const j = i + dir;
+        if (j < 0 || j >= tracks.length || tracks[j].kind !== tracks[i].kind) return {};
+        [tracks[i], tracks[j]] = [tracks[j], tracks[i]];
+        return { project: { ...s.project, tracks } };
+      }),
+      addVideoTrackAbove: (aboveTrackId, name) => {
+        const s = get();
+        const count = s.project.tracks.filter((t) => t.kind === 'video').length + 1;
+        const track = createTrack('video', count);
+        if (name) track.name = name;
+        const tracks = [...s.project.tracks];
+        const idx = aboveTrackId ? tracks.findIndex((t) => t.id === aboveTrackId) : -1;
+        tracks.splice(idx >= 0 ? idx : 0, 0, track);
+        set({ project: { ...s.project, tracks } });
+        return track.id;
+      },
+      insertClips: (newClips) => set((s) => {
+        const clips = { ...s.project.clips };
+        for (const c of newClips) clips[c.id] = c;
+        return { project: { ...s.project, clips } };
+      }),
 
       addTitleClip: (trackId, start, title) => {
         const s = get();
@@ -345,7 +390,8 @@ export const useProject = create<ProjectState>()(
         else if (next.subtitles) { next.subtitles = { ...next.subtitles, attach }; if (!attach) delete next.subtitles.attach; }
         return { project: { ...s.project, clips: { ...s.project.clips, [clipId]: next } } };
       }),
-    }),
+    };
+    },
     {
       limit: HISTORY_LIMIT,
       partialize: (s) => ({ project: s.project }),

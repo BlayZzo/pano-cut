@@ -8,6 +8,7 @@ import { sharedChromaGL } from './chromagl';
 import { sharedColorGL } from './colorgl';
 import { motionAt } from '@shared/effects';
 import { drawStyledText } from './text';
+import { blendDef, hasShadow, shadowPixels } from '@shared/layers';
 
 type MediaEl = HTMLVideoElement | HTMLAudioElement | HTMLImageElement;
 
@@ -20,17 +21,32 @@ interface Slot {
   work?: HTMLCanvasElement;   // Zwischen-Canvas für Freistellen
 }
 
-const maskImages = new Map<string, HTMLImageElement>();
-function maskImage(path: string, onLoad: () => void): HTMLImageElement {
-  let img = maskImages.get(path);
-  if (!img) {
-    img = new Image();
-    img.onload = onLoad;
+// Masken sind Graustufen-PNGs (hell = Objekt). Für die Vorschau wird die Helligkeit zu Transparenz umgerechnet.
+const maskImages = new Map<string, { img: HTMLImageElement; canvas: HTMLCanvasElement | null }>();
+export function maskCanvas(path: string, onLoad: () => void): HTMLCanvasElement | null {
+  let entry = maskImages.get(path);
+  if (!entry) {
+    const img = new Image();
+    const e: { img: HTMLImageElement; canvas: HTMLCanvasElement | null } = { img, canvas: null };
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = img.naturalWidth; c.height = img.naturalHeight;
+      const cx = c.getContext('2d', { willReadFrequently: true })!;
+      cx.drawImage(img, 0, 0);
+      const d = cx.getImageData(0, 0, c.width, c.height);
+      for (let i = 0; i < d.data.length; i += 4) { d.data[i + 3] = d.data[i]; d.data[i] = 255; d.data[i + 1] = 255; d.data[i + 2] = 255; }
+      cx.putImageData(d, 0, 0);
+      e.canvas = c;
+      onLoad();
+    };
     img.src = window.panocut.toMediaUrl(path);
-    maskImages.set(path, img);
+    maskImages.set(path, e);
+    entry = e;
   }
-  return img;
+  return entry.canvas;
 }
+/** Nach dem Bearbeiten einer Maske den Zwischenspeicher leeren. */
+export function forgetMask(path: string): void { maskImages.delete(path); }
 
 interface DrawExtra {
   alpha?: number;
@@ -370,8 +386,8 @@ export class PlaybackEngine {
     if (cut && track?.masks?.length) {
       const m = maskAt(track, localT);
       if (m) {
-        const img = maskImage(m.path, () => { if (!this.playing) this.render(this.current); });
-        if (img.complete && img.naturalWidth > 0) {
+        const img = maskCanvas(m.path, () => { if (!this.playing) this.render(this.current); });
+        if (img) {
           const cw = Math.min(vw, 1280), chh = Math.round((cw * vh) / vw);
           if (!slot.work) slot.work = document.createElement('canvas');
           const wc = slot.work;
@@ -383,9 +399,9 @@ export class PlaybackEngine {
           wctx.clearRect(0, 0, cw, chh);
           wctx.drawImage(source, 0, 0, cw, chh);
           wctx.globalCompositeOperation = cut.invert ? 'destination-out' : 'destination-in';
-          if (cut.feather > 0) wctx.filter = `blur(${(cut.feather / 2) * (cw / Math.max(1, img.naturalWidth))}px)`;
+          if (cut.feather > 0) wctx.filter = `blur(${(cut.feather / 2) * (cw / Math.max(1, img.width))}px)`;
           // Maske genauso zuschneiden und spiegeln wie das Bild
-          const mw = img.naturalWidth, mh = img.naturalHeight;
+          const mw = img.width, mh = img.height;
           const mc = crop ?? { x: 0, y: 0, w: 1, h: 1 };
           wctx.translate(clip.fx?.mirror ? cw : 0, clip.fx?.flip ? chh : 0);
           wctx.scale(clip.fx?.mirror ? -1 : 1, clip.fx?.flip ? -1 : 1);
@@ -401,6 +417,15 @@ export class PlaybackEngine {
     ctx.save();
     if (extra.clipPath) extra.clipPath(ctx);
     ctx.globalAlpha = clamp(clip.opacity * mo.opacity, 0, 1) * (extra.alpha ?? 1);
+    // Ebene: Mischmodus und Schlagschatten (gleiche Rechnung wie FFmpeg blend/gblur im Export)
+    ctx.globalCompositeOperation = blendDef(clip.blend).canvas;
+    if (hasShadow(clip)) {
+      const sp = shadowPixels(clip.shadow!, H);
+      ctx.shadowColor = `rgba(0,0,0,${clamp(clip.shadow!.opacity, 0, 1)})`;
+      ctx.shadowBlur = sp.sigma * 2;
+      ctx.shadowOffsetX = sp.dx;
+      ctx.shadowOffsetY = sp.dy;
+    }
     // Weichzeichnen (gleiche Stärke relativ zur Bildhöhe wie im Export)
     ctx.filter = clip.fx && clip.fx.blur > 0.01 ? `blur(${clip.fx.blur * 0.02 * H}px)` : 'none';
     ctx.translate(W / 2 + ((tr.x + mo.x) / 100) * W + (extra.dx ?? 0), H / 2 + ((tr.y + mo.y) / 100) * H + (extra.dy ?? 0));

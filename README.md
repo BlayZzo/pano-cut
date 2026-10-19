@@ -58,7 +58,9 @@ Außerdem: **Hilfe → Nach Updates suchen …**
 10. **Untertitel** – Clip auswählen → Inspektor → „Untertitel automatisch erzeugen“. Das Sprachmodell wird beim ersten Mal geladen; alles läuft auf deinem Rechner. **Übersetzen** ins Englische geht ebenfalls lokal (die Übersetzung steht in eigener Farbe darunter); für weitere Sprachen kann ein eigener, kostenloser Übersetzungs-Server (LibreTranslate) eingetragen werden.
 11. **KI** – in der Vorschau auf **✦ KI** klicken: „Objekte erkennen“ → beim gewünschten Objekt „Verfolgen“ → „Maske berechnen“. Danach ist der Clip freigestellt (Inspektor → „Objekte (KI)“). Mit „In Objekt-Mediathek kopieren“ landet das Objekt im Reiter **Objekte** und lässt sich über andere Videos legen. Titel und Untertitel können im Inspektor **an ein Objekt geheftet** werden.
 12. **Green Screen** – Clip auswählen → Inspektor → „Green Screen“ → „Aus Vorschau wählen“ und auf den Hintergrund klicken.
-13. **Exportieren** – **⌘/Strg + E**: Preset wählen (Handy 9:16, Quadrat, Full HD, 4K, WhatsApp, ProRes, GIF, 360°), Qualität oder **maximale Dateigröße** einstellen, fertig. Auf dem Mac danach direkt **„In Fotos importieren“** – und von dort per WhatsApp teilen.
+13. **Effekt-Studio** – unter der Vorschau auf **✦ Effekt** klicken und beschreiben, was passieren soll („große Explosion mit viel Rauch“, „leichter Schneefall“, „Gewitter“ …). Der Effekt wird auf deinem Rechner simuliert, an die Szene angepasst (Helligkeit, Farbe, Lichtschein, Schatten) und als Ebene eingefügt. In der Vorschau ziehen = platzieren, Mausrad = Größe, Umschalt + ziehen = drehen.
+14. **Ebenen** – im Inspektor unter „Ebene“: Mischmodus (z. B. Negativ multiplizieren für Licht) und Schlagschatten. Spuren mit ▲▼ nach vorne oder hinten. Ein freigestelltes Objekt lässt sich im Bereich „Objekte (KI)“ mit **„Vor andere Ebenen holen“** ganz nach vorne legen – z. B. fährt ein Auto dann durch einen Text. Masken lassen sich mit dem **Pinsel** nachbessern.
+15. **Exportieren** – **⌘/Strg + E**: Preset wählen (Handy 9:16, Quadrat, Full HD, 4K, WhatsApp, ProRes, GIF, 360°), Qualität oder **maximale Dateigröße** einstellen, fertig. Auf dem Mac danach direkt **„In Fotos importieren“** – und von dort per WhatsApp teilen.
 
 **Musik leiser beim Sprechen (Ducking):** Musik-Clip auswählen → Inspektor → Ton → „Leiser, wenn gesprochen wird“.
 
@@ -95,7 +97,8 @@ In den Einstellungen lässt sich eine WebDAV-Adresse eintragen (z. B. Nextcloud:
 | **0.2** ✅ | 360°: Stitching der Insta360-Rohdateien, Umschauen in der Vorschau, Kamerafahrten mit Keyframes, Little Planet, 360°-Export mit Metadaten · 20 Übergänge · Titel-Vorlagen · Stabilisierung · automatische Untertitel (lokal) · Export mit Größenlimit |
 | **0.3** ✅ | KI-Button: Personen, Tiere und Objekte erkennen und verfolgen · KI-Masken · Freistellen · Green Screen · Titel/Untertitel an Objekte heften · Objekt-Mediathek · eigene Cloud (Nextcloud/WebDAV) |
 | **0.4** ✅ | Effekt- und Animations-Bibliothek · eigene Effekte · Keyframes · Looks und LUTs · „Natürlich schön“ (automatische Bildverbesserung auf Wunsch) · Zuschneiden/Spiegeln · Audio-Ducking · Übersetzung von Untertiteln · Elgato Stream Deck |
-| **0.5** | Mehrkamera-Schnitt · Blackmagic RAW · Übersetzung in weitere Sprachen ohne eigenen Server · bei Bedarf ein zweites Programm für Bild-/Objektbearbeitung (wie Photoshop neben Premiere) |
+| **0.5** ✅ | Effekt-Studio: Effekte beschreiben und simulieren (Explosion, Feuer, Rauch, Schnee, Regen, Nebel, Funken, Blitz, Staub, Konfetti), an die Szene anpassen (Licht, Schatten, Farbe, Erschütterung) · Ebenen mit Mischmodi und Schatten · Objekt vor andere Ebenen holen · Masken-Pinsel · Platzieren direkt in der Vorschau |
+| **0.6** | Mehrkamera-Schnitt · Blackmagic RAW · Übersetzung in weitere Sprachen ohne eigenen Server · weitere Effekte (Wasser, Glas, Partikel-Spuren) · bei Bedarf ein zweites Programm für Bild-/Objektbearbeitung |
 
 Alles läuft lokal auf deinem Rechner – ohne Abo, ohne Cloud-Zwang.
 

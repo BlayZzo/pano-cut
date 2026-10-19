@@ -16,6 +16,7 @@ import { checkForUpdates, downloadUpdate, initUpdater, installUpdate } from './u
 import { downloadModel, transcribe, whisperStatus } from './whisper';
 import { translateTexts } from './translate';
 import { startRemote, stopRemote } from './remote';
+import { vfxBegin, vfxCancel, vfxEnd, vfxFrame, type VfxBeginRequest } from './vfx';
 import { aiAvailable, aiModelStatus, detectObjects, segmentObject } from './ai';
 import { maskDir, renderObject } from './objects';
 import { cloudDownload, cloudList, cloudTest, cloudUpload } from './cloud';
@@ -290,8 +291,9 @@ ipcMain.handle(IPC.aiSegment, async (_e, frame: FramePayload, model: AiSegmentMo
     throw err;
   }
 });
-ipcMain.handle(IPC.aiSaveMask, async (_e, mediaPath: string, trackId: string, index: number, png: Uint8Array) => {
-  const file = path.join(maskDir(mediaPath, trackId), `${String(index).padStart(5, '0')}.png`);
+ipcMain.handle(IPC.aiSaveMask, async (_e, mediaPath: string, trackId: string, index: number | string, png: Uint8Array) => {
+  const name = typeof index === 'number' ? String(index).padStart(5, '0') : String(index).replace(/[^\w-]/g, '_');
+  const file = path.join(maskDir(mediaPath, trackId), `${name}.png`);
   fs.writeFileSync(file, Buffer.from(png));
   return file;
 });
@@ -299,6 +301,13 @@ ipcMain.handle(IPC.aiCancel, () => { aiController?.abort(); });
 ipcMain.handle(IPC.renderObject, async (_e, req: { project: Project; clipId: string; trackId: string; name: string }) => {
   return renderObject(req.project, req.clipId, req.trackId, req.name, (percent) => aiProgress({ phase: 'run', percent, message: 'Objekt wird freigestellt …' }));
 });
+
+// ---- Effekt-Simulationen ----
+
+ipcMain.handle(IPC.vfxBegin, (_e, req: VfxBeginRequest) => vfxBegin(req));
+ipcMain.handle(IPC.vfxFrame, (_e, jobId: string, rgba: Uint8Array) => vfxFrame(jobId, rgba));
+ipcMain.handle(IPC.vfxEnd, (_e, jobId: string) => vfxEnd(jobId));
+ipcMain.handle(IPC.vfxCancel, (_e, jobId: string) => { vfxCancel(jobId); });
 
 // ---- Cloud ----
 

@@ -50,6 +50,10 @@ const api: PanoCutApi = {
   aiCancel: () => ipcRenderer.invoke(IPC.aiCancel),
   onAiProgress: subscribe(IPC.aiProgress),
   renderObject: (req) => ipcRenderer.invoke(IPC.renderObject, req),
+  vfxBegin: (req) => ipcRenderer.invoke(IPC.vfxBegin, req),
+  vfxFrame: (jobId, rgba) => ipcRenderer.invoke(IPC.vfxFrame, jobId, rgba),
+  vfxEnd: (jobId) => ipcRenderer.invoke(IPC.vfxEnd, jobId),
+  vfxCancel: (jobId) => ipcRenderer.invoke(IPC.vfxCancel, jobId),
 
   cloudTest: (s) => ipcRenderer.invoke(IPC.cloudTest, s),
   cloudList: (s, dir) => ipcRenderer.invoke(IPC.cloudList, s, dir),

@@ -53,6 +53,8 @@ export interface MediaItem {
   proxyStabilized?: string; // stabilisierte Vorschau-Datei (wird bei Bedarf erzeugt)
   hasAlpha?: boolean;      // Video mit Transparenz (freigestelltes Objekt, WebM/VP9)
   isObject?: boolean;      // gehört zur Objekt-Mediathek des Projekts
+  vfx?: VfxSpec;           // erzeugter Effekt (kann neu gerendert werden)
+  vfxRole?: 'effect' | 'light';  // Effekt selbst oder sein Lichtschein
   addedAt: number;
 }
 
@@ -283,6 +285,49 @@ export interface Ducking {
   amount: number;      // 0..1 (wie stark leiser)
 }
 
+// ---------- Ebenen ----------
+
+/** Mischmodus einer Ebene (wie in Photoshop). */
+export type BlendMode = 'normal' | 'screen' | 'add' | 'multiply' | 'lighten' | 'darken';
+
+/** Schlagschatten einer Ebene. */
+export interface LayerShadow {
+  enabled: boolean;
+  opacity: number;    // 0..1
+  blur: number;       // Weichheit in % der Bildhöhe (0..10)
+  distance: number;   // Abstand in % der Bildhöhe (0..20)
+  angle: number;      // Richtung, in die der Schatten fällt (Grad, 0 = rechts, 90 = unten)
+}
+
+/** Verknüpfter Clip: folgt einem anderen Clip (Licht eines Effekts, Objekt-Kopie vor anderen Ebenen). */
+export interface ClipLink {
+  clipId: string;
+  mode: 'light' | 'copy';
+  scale?: number;     // nur 'light': Größe relativ zum Effekt
+}
+
+// ---------- Effekt-Simulationen (VFX) ----------
+
+export type VfxKind = 'explosion' | 'fire' | 'smoke' | 'snow' | 'rain' | 'fog' | 'sparks' | 'lightning' | 'dust' | 'confetti';
+
+export interface VfxSpec {
+  kind: VfxKind;
+  prompt: string;       // ursprüngliche Beschreibung
+  duration: number;     // Sekunden
+  seed: number;         // Variante
+  size: number;         // 0.4..2 (Größe bzw. Dichte der Teilchen)
+  intensity: number;    // 0.2..2 (Stärke)
+  speed: number;        // 0.3..2.5
+  wind: number;         // -1..1 (links ↔ rechts)
+  smoke: number;        // 0..2 (Rauchanteil bei Feuer/Explosion)
+  color?: string;       // eigene Farbe (sonst natürlich)
+  width: number;        // Render-Größe in Pixeln
+  height: number;
+  fps: number;
+  fullFrame: boolean;   // ganzes Bild (Schnee, Regen, Nebel …) oder platzierbar (Explosion, Feuer …)
+  loop: boolean;        // nahtlos wiederholbar
+}
+
 /** Eigener Effekt: gespeicherte Kombination aus Farbe, Bild-Effekten, Zuschnitt und Animation. */
 export interface UserEffect {
   id: string;
@@ -329,6 +374,9 @@ export interface Clip {
   cutout?: Cutout;              // Freistellen anhand einer Objektmaske
   chroma?: ChromaKey;           // Green Screen
   attach?: Attachment;          // Titel-Clip an ein getracktes Objekt heften
+  blend?: BlendMode;            // Mischmodus der Ebene (Standard: normal)
+  shadow?: LayerShadow;         // Schlagschatten
+  link?: ClipLink;              // folgt einem anderen Clip
 }
 
 export type TrackKind = 'video' | 'audio';

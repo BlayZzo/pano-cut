@@ -53,7 +53,16 @@ Effekt-Bibliothek (`EFFECT_BLOCKS`, eigene Effekte in den Einstellungen `userEff
 Vorschau ≈ Pegelabsenkung). Übersetzung: whisper `-tr` (nur Englisch) bzw. eigener LibreTranslate-Server (`translate.ts`).
 Fernsteuerung `remote.ts` (127.0.0.1:51888, nur POST ohne Origin) + Stream-Deck-Plugin `streamdeck/` (SDK 2, Node ohne
 Abhängigkeiten, `generate.py` erzeugt Manifest + Symbole; Release-Job packt `PanoCut.streamDeckPlugin`).
-0.5: Mehrkamera, Blackmagic RAW, Übersetzung in weitere Sprachen ohne Server; bei Bedarf zweites Programm für
+0.5 ✅: Effekt-Studio (`shared/vfx.ts`: Arten, Beschreibung verstehen `parseVfxPrompt`, `matchToScene`, `shakeKeyframes`;
+`renderer/vfx/shaders.ts` GLSL je Art, `render.ts` rendert Bild für Bild per WebGL → IPC `vfxBegin/vfxFrame/vfxEnd` →
+`main/vfx.ts` kodiert über stdin zu VP9-WebM mit Alpha; Lichtschein als eigenes WebM, verknüpfter Clip mit Mischmodus
+„screen“, Größe ×3 (`LIGHT_SCALE`)). Ganzbild-Effekte sind mit ihrer Dauer periodisch (nahtlos aneinanderreihbar).
+Ebenen (`shared/layers.ts`): Mischmodi (Canvas `globalCompositeOperation` ↔ FFmpeg `blend` auf gbrp + alphamerge über
+transparente Vollbild-Fläche), Schlagschatten (Canvas shadowBlur = 2σ ↔ `gblur=sigma`), verknüpfte Clips `link`
+(Store-Setter führt sie per `syncLinkedClips` nach). Objekt nach vorne = verknüpfte Kopie mit Freistellen auf neuer
+oberster Spur. Masken-Pinsel in der Vorschau (`components/previewTools.ts`), Masken sind Graustufen-PNGs (Vorschau rechnet
+Helligkeit → Alpha). Ziehen/Mausrad in der Vorschau verschiebt/skaliert den ausgewählten Clip.
+0.6: Mehrkamera, Blackmagic RAW, Übersetzung in weitere Sprachen ohne Server; bei Bedarf zweites Programm für
 Bild/Objekte (gleiche Codebasis `src/shared`).
 Leistung: muss auf einem MacBook Air (M-Serie, 2024) flüssig laufen – Proxys, WebGL, Hintergrund-Jobs mit niedriger Priorität.
 
