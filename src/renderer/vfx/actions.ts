@@ -1,5 +1,5 @@
 // Effekte erzeugen, neu rendern, an die Szene anpassen – und Objekte vor andere Ebenen holen.
-import type { Clip, MediaItem, VfxSpec } from '@shared/types';
+import type { Clip, MediaItem, VfxKind, VfxSpec } from '@shared/types';
 import { clipAt, clipDuration, createClip, makeId } from '@shared/timeline';
 import { frameStats } from '@shared/color';
 import { defaultVfx, matchToScene, shakeKeyframes, vfxKind } from '@shared/vfx';
@@ -10,6 +10,8 @@ import { useUi } from '../store/ui';
 import { engine } from '../engine/instance';
 import { t } from '../i18n/de';
 import { LIGHT_SCALE, renderVfx } from './render';
+
+const GLOW_KINDS: VfxKind[] = ['flare', 'bokeh', 'leaks', 'glitter'];
 
 export interface GenerateOptions {
   matchScene: boolean;
@@ -67,6 +69,8 @@ export async function generateEffects(specs: VfxSpec[], opts: GenerateOptions, o
       c.name = res.effect.name;
       if (r === reps - 1) c.out = Math.max(0.1, Math.min(dur, lastOut));
       if (def.fullFrame) { c.fit = 'cover'; }
+      // Licht-Effekte (Reflex, Bokeh, Lichtlecks, Glitzer) hellen nur auf – wie echtes Licht
+      if (GLOW_KINDS.includes(spec.kind)) c.blend = 'screen';
       else { c.fit = 'contain'; c.transform = { x: 0, y: def.y, scale: Math.max(0.15, Math.min(2.5, def.scale * spec.size)), rotation: 0 }; }
       clips.push(c);
     }

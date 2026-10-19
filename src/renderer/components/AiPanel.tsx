@@ -3,7 +3,7 @@ import type { AiDetectModel, AiSegmentModel, Clip, Detection, MediaItem } from '
 import { clipDuration } from '@shared/timeline';
 import { trackActiveAt, trackBoxAt } from '@shared/ai';
 import { useProject } from '../store/project';
-import { useUi } from '../store/ui';
+import { useUi, usePlayheadCoarse } from '../store/ui';
 import { t } from '../i18n/de';
 import { cancelAi, detectAt, maskTrack, trackObject } from '../ai/tracking';
 import { IconClose } from './Icons';
@@ -14,7 +14,7 @@ export function AiPanel({ clip, media }: { clip: Clip | null; media: MediaItem |
   const setOpen = useUi((s) => s.setAiPanel);
   const busy = useUi((s) => s.aiBusy);
   const setBusy = useUi((s) => s.setAiBusy);
-  const playhead = useUi((s) => s.playhead);
+  const playhead = usePlayheadCoarse(0.25);
   const toast = useUi((s) => s.toast);
   const settings = useUi((s) => s.settings);
   const addObjectTrack = useProject((s) => s.addObjectTrack);

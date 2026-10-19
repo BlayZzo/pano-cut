@@ -4,7 +4,7 @@ import { applyCameraMove, CAMERA_MOVES, type CameraMove } from '@shared/cameraMo
 import { clipDuration, formatTime } from '@shared/timeline';
 import { defaultPano, defaultStitch, keyframeAt, panoViewAt, removeKeyframe, upsertKeyframe } from '@shared/pano';
 import { beginTransaction, endTransaction, useProject } from '../store/project';
-import { useUi } from '../store/ui';
+import { useUi, usePlayheadCoarse } from '../store/ui';
 import { fmt, t } from '../i18n/de';
 import { Section, SelectField, Slider, Toggle } from './InspectorBits';
 import { seekTo } from '../engine/instance';
@@ -53,7 +53,7 @@ export function InspectorPano({ clip, media }: { clip: Clip; media: MediaItem })
   const updateMediaStitch = useProject((s) => s.updateMediaStitch);
   const fps = useProject((s) => s.project.settings.fps);
   const is360Project = useProject((s) => !!s.project.settings.is360);
-  const playhead = useUi((s) => s.playhead);
+  const playhead = usePlayheadCoarse(0.25);
   const pano = clip.pano ?? defaultPano(is360Project ? 'equirect' : 'flat');
   const local = Math.max(0, Math.min(clipDuration(clip), playhead - clip.start));
   const view = panoViewAt(pano, local);

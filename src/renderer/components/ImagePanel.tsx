@@ -6,7 +6,7 @@ import { CAMERA_PROFILES, bakeGradeLut, exposureGainAt, frameStats, gradeForLut,
 import { FINDING_TEXT, analyzeClip, rescueGrade, type Analysis, type Sample } from '@shared/rescue';
 import { NEUTRAL_FX } from '@shared/effects';
 import { beginTransaction, endTransaction, useProject } from '../store/project';
-import { useUi } from '../store/ui';
+import { useUi, usePlayheadCoarse } from '../store/ui';
 import { engine } from '../engine/instance';
 import { t } from '../i18n/de';
 import { IconClose } from './Icons';
@@ -66,7 +66,7 @@ export function ImagePanel(): React.ReactElement | null {
   const open = useUi((s) => s.imagePanel);
   const setOpen = useUi((s) => s.setImagePanel);
   const selection = useUi((s) => s.selection);
-  const playhead = useUi((s) => s.playhead);
+  const playhead = usePlayheadCoarse(0.5);
   const toast = useUi((s) => s.toast);
   const clip = useProject((s) => selection.map((id) => s.project.clips[id]).find((c) => c && c.kind !== 'title') ?? null);
   const media = useProject((s) => (clip ? s.project.media[clip.mediaId] ?? null : null));

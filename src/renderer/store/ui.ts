@@ -154,3 +154,11 @@ export const useUi = create<UiState>()((set, get) => ({
   setDirty: (dirty) => set({ dirty }),
   bumpHistory: () => set((s) => ({ historyVersion: s.historyVersion + 1 })),
 }));
+
+/**
+ * Abspielkopf für Bedienfelder: im Stillstand genau, während der Wiedergabe nur in groben Schritten
+ * (`step` Sekunden). So zeichnen sich Inspektor & Co. nicht 30-mal pro Sekunde neu – die Vorschau bleibt flüssig.
+ */
+export function usePlayheadCoarse(step = 0.5, live = false): number {
+  return useUi((s) => (s.playing && !live ? Math.floor(s.playhead / step) * step : s.playhead));
+}

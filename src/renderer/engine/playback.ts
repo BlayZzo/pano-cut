@@ -97,6 +97,9 @@ function scratchCanvas(i: number, W: number, H: number): { c: HTMLCanvasElement;
  * Die Vorschau-Engine: zeichnet die Timeline auf ein Canvas und spielt die Proxy-Dateien
  * der Clips synchron ab. Sie ist bewusst unabhängig von React.
  */
+/** Höchstzahl gleichzeitig geladener Medien-Elemente (jedes Video belegt einen Decoder). */
+const MAX_SLOTS = 14;
+
 export class PlaybackEngine {
   private canvas: HTMLCanvasElement | null = null;
   private ctx: CanvasRenderingContext2D | null = null;
@@ -292,7 +295,7 @@ export class PlaybackEngine {
       if (local < half) gain *= clamp(local / half, 0, 1);
     }
     // Übergang des nächsten Clips (dieser Clip blendet aus)
-    const next = clipsOnTrack(this.project, clip.trackId).find((c) => c.transition && Math.abs(c.start - clipEnd(clip)) < 1 / 30);
+    const next = this.sortedTrack(clip.trackId).find((c) => c.transition && Math.abs(c.start - clipEnd(clip)) < 1 / 30);
     if (next?.transition) {
       const half = Math.min(next.transition.duration, clipDuration(next), clipDuration(clip)) / 2;
       const remain = clipEnd(clip) - t;
@@ -551,12 +554,43 @@ export class PlaybackEngine {
     return ctx.getImageData(0, 0, w, h);
   }
 
+  // Sortierte Clips je Spur – nur neu berechnet, wenn sich die Clips ändern (spart Arbeit in jedem Bild)
+  private trackCacheKey: unknown = null;
+  private trackCache = new Map<string, Clip[]>();
+  private prevCache = new Map<string, Clip | null>();
+  private sortedTrack(trackId: string): Clip[] {
+    if (this.trackCacheKey !== this.project.clips) {
+      this.trackCacheKey = this.project.clips;
+      this.trackCache.clear();
+      this.prevCache.clear();
+    }
+    let list = this.trackCache.get(trackId);
+    if (!list) { list = clipsOnTrack(this.project, trackId); this.trackCache.set(trackId, list); }
+    return list;
+  }
+  /** Clip, der direkt vor `b` auf derselben Spur endet (für Übergänge). */
+  private clipBefore(b: Clip): Clip | null {
+    this.sortedTrack(b.trackId);
+    if (this.prevCache.has(b.id)) return this.prevCache.get(b.id)!;
+    const a = this.sortedTrack(b.trackId).find((c) => c.id !== b.id && Math.abs(clipEnd(c) - b.start) < 1 / 30) ?? null;
+    this.prevCache.set(b.id, a);
+    return a;
+  }
+  private clipOnTrackAt(trackId: string, t: number): Clip | undefined {
+    for (const c of this.sortedTrack(trackId)) {
+      if (c.start > t) break;
+      if (t < clipEnd(c)) return c;
+    }
+    return undefined;
+  }
+
   /** Läuft gerade ein Übergang auf dieser Spur? */
   private transitionAt(track: Track, t: number): ActiveTransition | null {
-    for (const b of clipsOnTrack(this.project, track.id)) {
+    for (const b of this.sortedTrack(track.id)) {
       const tr = b.transition;
       if (!tr) continue;
-      const a = clipsOnTrack(this.project, track.id).find((c) => c.id !== b.id && Math.abs(clipEnd(c) - b.start) < 1 / 30);
+      if (b.start - tr.duration > t) continue;
+      const a = this.clipBefore(b);
       if (!a) continue;
       const d = Math.min(tr.duration, clipDuration(a), clipDuration(b));
       const start = b.start - d / 2;
@@ -689,7 +723,7 @@ export class PlaybackEngine {
     // Audio-Spuren (nur Ton)
     for (const track of project.tracks) {
       if (track.kind !== 'audio') continue;
-      const clip = clipAt(project, track.id, t);
+      const clip = this.clipOnTrackAt(track.id, t);
       if (!clip || clip.kind === 'title') continue;
       const media = project.media[clip.mediaId];
       if (!media || media.status === 'error' || media.type === 'image') continue;
@@ -718,7 +752,7 @@ export class PlaybackEngine {
           this.drawSubtitles(ctx, cur, W, H, t);
           continue;
         }
-        const clip = clipAt(project, track.id, t);
+        const clip = this.clipOnTrackAt(track.id, t);
         if (!clip) continue;
         if (clip.kind === 'title') { this.drawTitle(ctx, clip, W, H, t); continue; }
         const media = project.media[clip.mediaId];
@@ -757,6 +791,17 @@ export class PlaybackEngine {
             if (Math.abs(m.currentTime - ft) > 0.05 && Math.abs(slot.lastSeek - ft) > 0.005) { slot.lastSeek = ft; m.currentTime = ft; }
           }
         }
+      }
+    }
+    // Speicher sparen: bei vielen Clips weit entfernte Video-Player freigeben (werden bei Bedarf neu geladen)
+    if (this.slots.size > MAX_SLOTS) {
+      for (const [id, slot] of this.slots) {
+        if (activeIds.has(id)) continue;
+        const clip = project.clips[id];
+        if (clip && clip.start - t < 15 && t - clipEnd(clip) < 15) continue;
+        this.disposeSlot(slot);
+        this.slots.delete(id);
+        if (this.slots.size <= MAX_SLOTS) break;
       }
     }
   }

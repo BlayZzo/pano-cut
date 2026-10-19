@@ -5,7 +5,7 @@ import { clipDuration, defaultColor } from '@shared/timeline';
 import { LOOKS } from '@shared/color';
 import { MOTION_PRESETS, NEUTRAL_FX, createMotion, hasMotion, insertKeyframe } from '@shared/effects';
 import { beginTransaction, endTransaction, useProject } from '../store/project';
-import { useUi } from '../store/ui';
+import { useUi, usePlayheadCoarse } from '../store/ui';
 import { t } from '../i18n/de';
 import { Section, SelectField, Slider, Toggle } from './InspectorBits';
 import { autoEnhanceClips, saveClipAsEffect } from '../actions';
@@ -128,7 +128,7 @@ export function InspectorFx({ clip, ids }: { clip: Clip; ids: string[] }): React
 
 export function InspectorMotion({ clip, ids }: { clip: Clip; ids: string[] }): React.ReactElement {
   const updateClips = useProject((s) => s.updateClips);
-  const playhead = useUi((s) => s.playhead);
+  const playhead = usePlayheadCoarse(0.5);
   const dur = clipDuration(clip);
   const m = clip.motion;
   const on = hasMotion(m) || m?.preset === 'custom';

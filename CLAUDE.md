@@ -72,8 +72,13 @@ Auftritte `entranceKeyframes` (effects.ts) + VFX-Art `impact`. Mehrkamera `share
 Onset-Hüllkurven, `project.multicam`, Stücke mit `clip.mc`, stabile IDs). 3D: three.js 0.170 (devDependency, per `import()`
 nachgeladen) `renderer/three/` → Bilder über die VFX-Jobs (`vfxBegin` mit `model`) zu VP9-Alpha; Draco-Dekoder in
 `renderer/public/draco` (im fertigen Programm über `pcmedia:` geladen, CSP `wasm-unsafe-eval`, `worker-src blob:`).
-0.7: Übersetzung in weitere Sprachen ohne Server, weitere Effekte, Mehrkamera-Winkel in der Timeline; bei Bedarf zweites
-Programm für Bild/Objekte (gleiche Codebasis `src/shared`).
+0.7 ✅: Social-Untertitel (`shared/subtitles.ts`: Wortzeiten aus whisper `-ml 1 -sow`, `groupWords`, `subtitleViewAt` ↔ Export ein
+ASS-Ereignis je Wortwechsel mit `{\c}`; `SUBTITLE_PRESETS`). Übersetzung DE↔EN lokal mit Bergamot-WASM (`main/mt.ts` + Worker
+`mtWorker.ts`; Engine von github.com/browsermt Release 0.4.5, Modelle aus Firefox Remote Settings `translations-models`, Mozilla-CDN
+lehnt net.fetch mit 406 ab → Node-fetch). Neue VFX-Arten flare/bokeh/speedlines/leaks/hearts/glitter (Licht-Arten mit Mischmodus
+screen). Leistung: Vorschau-Canvas in Anzeigegröße (Preview `fit`), `usePlayheadCoarse` für Bedienfelder, Track-Cache in der Engine,
+`MAX_SLOTS`, Vorbereitung in zwei Warteschlangen (quick/heavy), Sprite mit `-skip_frame nokey`, Mac-Proxy per videotoolbox (Fallback x264).
+0.8: Mehrkamera-Winkel in der Timeline, weitere Effekte; bei Bedarf zweites Programm für Bild/Objekte (gleiche Codebasis `src/shared`).
 Leistung: muss auf einem MacBook Air (M-Serie, 2024) flüssig laufen – Proxys, WebGL, Hintergrund-Jobs mit niedriger Priorität.
 
 ## Lokale Prüfung ohne npm
@@ -83,3 +88,4 @@ Electron-Stub, three.js-Typen aus three-ts-types r170). Für den FFmpeg-Teil lä
 mit `app.getPath`, `electron-log` → console) und mit `PANOCUT_FFMPEG=/usr/bin/ffmpeg PANOCUT_FFPROBE=/usr/bin/ffprobe`
 direkt unter Node ausführen. Vollständige CI-Logs sind aus der Cloud nicht abrufbar (`gh run view <id> --json jobs`
 zeigt nur den Schritt-Status).
+Build- und Selbsttest-Protokoll jedes CI-Laufs liegt im Branch `ci-logs` (`git clone --depth 1 --branch ci-logs …`).

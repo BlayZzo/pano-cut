@@ -228,15 +228,24 @@ ipcMain.handle(IPC.importMedia, async (_e, paths: string[]) => {
   return items;
 });
 
-// Vorbereitung läuft nacheinander (Warteschlange), damit der Rechner nicht überlastet wird.
-let prepareQueue: Promise<void> = Promise.resolve();
+// Vorbereitung in zwei Warteschlangen: zuerst für alle Dateien die schnellen Vorschaubilder/Wellenformen,
+// danach nacheinander die Proxys – so erscheinen beim Import vieler Dateien sofort alle Vorschaubilder.
+let quickQueue: Promise<void> = Promise.resolve();
+let heavyQueue: Promise<void> = Promise.resolve();
 ipcMain.handle(IPC.prepareMedia, (_e, item: MediaItem, options?: { reversed?: boolean; stabilized?: number }) => {
-  const run = async () => {
-    const settings = loadSettings();
-    await prepareMedia(item, (updated) => sendToWindow(IPC.mediaUpdate, updated), settings.proxyHeight, options);
+  const settings = loadSettings();
+  let latest = item;
+  const send = (updated: MediaItem) => { latest = updated; sendToWindow(IPC.mediaUpdate, updated); };
+  const quick = async () => { await prepareMedia(item, send, settings.proxyHeight, { ...options, stage: 'quick' }); };
+  quickQueue = quickQueue.then(quick, quick);
+  const myQuick = quickQueue;
+  const heavy = async () => {
+    await myQuick.catch(() => undefined);
+    if (latest.status === 'error') return;
+    await prepareMedia(latest, send, settings.proxyHeight, { ...options, stage: 'heavy' });
   };
-  prepareQueue = prepareQueue.then(run, run);
-  return prepareQueue;
+  heavyQueue = heavyQueue.then(heavy, heavy);
+  return heavyQueue;
 });
 
 // ---- Untertitel ----

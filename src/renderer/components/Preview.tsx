@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { clipDuration, formatTime, projectDuration } from '@shared/timeline';
 import { keyframeAt, panoViewAt, upsertKeyframe } from '@shared/pano';
 import { beginTransaction, endTransaction, useProject } from '../store/project';
-import { useUi } from '../store/ui';
+import { useUi, usePlayheadCoarse } from '../store/ui';
 import { engine, playPause } from '../engine/instance';
 import { goEnd, goStart, stepFrames } from '../actions';
 import { t } from '../i18n/de';
@@ -26,7 +26,6 @@ export function Preview(): React.ReactElement {
   const loop = useUi((s) => s.loop);
   const setLoop = useUi((s) => s.setLoop);
   const selection = useUi((s) => s.selection);
-  const playhead = useUi((s) => s.playhead);
   const clips = useProject((s) => s.project.clips);
   const media = useProject((s) => s.project.media);
   const setPano = useProject((s) => s.setPano);
@@ -61,6 +60,9 @@ export function Preview(): React.ReactElement {
   // Ausgewählter Clip (für KI-Bereich und Objekt-Rahmen)
   const selectedClip = selection.map((id) => clips[id]).find(Boolean) ?? null;
   const selectedMedia = selectedClip ? media[selectedClip.mediaId] ?? null : null;
+  // Während der Wiedergabe nur grob mitzählen (sonst zeichnet sich die ganze Vorschau-Leiste 30× pro Sekunde neu);
+  // genau nur, wenn erkannte Objekte live eingezeichnet werden
+  const playhead = usePlayheadCoarse(0.5, !!(aiPanel && selectedClip?.objects?.length));
 
   // Objekt-Rahmen über der Vorschau zeichnen
   useEffect(() => {
@@ -139,12 +141,28 @@ export function Preview(): React.ReactElement {
   useEffect(() => {
     const c = canvasRef.current;
     if (!c) return;
-    // Vorschau intern maximal in Full HD rendern (schneller, der Export bleibt in voller Größe)
-    const k = Math.min(1, 1920 / settings.width, 1920 / settings.height);
-    c.width = Math.round((settings.width * k) / 2) * 2;
-    c.height = Math.round((settings.height * k) / 2) * 2;
+    // Vorschau intern nur so groß rendern, wie sie angezeigt wird (höchstens Full HD) – spart viel Rechenzeit,
+    // der Export bleibt in voller Größe
+    const fit = () => {
+      const stage = stageRef.current;
+      const rect = stage?.getBoundingClientRect();
+      const dpr = Math.min(1.5, window.devicePixelRatio || 1);
+      const cssW = rect && rect.width > 50 ? Math.max(50, Math.min(rect.width - 28, (rect.height - 28) * (settings.width / settings.height))) : 0;
+      // Anzeigegröße fest vorgeben (unabhängig von der internen Auflösung)
+      if (cssW) { c.style.width = `${Math.floor(cssW)}px`; c.style.height = `${Math.floor(cssW * settings.height / settings.width)}px`; }
+      const shown = cssW ? cssW * dpr : 1920;
+      const longSide = Math.max(settings.width, settings.height);
+      const targetLong = Math.max(640, Math.min(1920, Math.ceil((shown * (longSide / settings.width)) / 160) * 160));
+      const k = Math.min(1, targetLong / longSide);
+      const w = Math.round((settings.width * k) / 2) * 2, h = Math.round((settings.height * k) / 2) * 2;
+      if (c.width !== w || c.height !== h) { c.width = w; c.height = h; engine.redraw(); }
+    };
+    fit();
     engine.setCanvas(c);
-    return () => engine.setCanvas(null);
+    let timer = 0;
+    const ro = new ResizeObserver(() => { window.clearTimeout(timer); timer = window.setTimeout(fit, 200); });
+    if (stageRef.current) ro.observe(stageRef.current);
+    return () => { ro.disconnect(); window.clearTimeout(timer); engine.setCanvas(null); };
   }, [settings.width, settings.height]);
 
   // 360°-Clip unter dem Abspielkopf, der ausgewählt ist → mit der Maus umschauen

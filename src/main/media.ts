@@ -106,7 +106,16 @@ export type MediaUpdateFn = (item: MediaItem) => void;
  * Erzeugt Vorschaubild, Hover-Streifen, Proxy und Wellenform.
  * Ruft `update` nach jedem Schritt auf, damit die Oberfläche sofort etwas anzeigen kann.
  */
-export async function prepareMedia(item: MediaItem, update: MediaUpdateFn, proxyHeight = 540, options: { reversed?: boolean; stabilized?: number } = {}): Promise<void> {
+export interface PrepareOptions {
+  reversed?: boolean;
+  stabilized?: number;
+  /** 'quick' = nur Vorschaubild, Streifen, Wellenform; 'heavy' = nur Proxy & Varianten; Standard: alles */
+  stage?: 'quick' | 'heavy' | 'all';
+}
+
+export async function prepareMedia(item: MediaItem, update: MediaUpdateFn, proxyHeight = 540, options: PrepareOptions = {}): Promise<void> {
+  const quick = options.stage !== 'heavy';
+  const heavy = options.stage !== 'quick';
   if (item.status === 'error') return;
   const dir = mediaCacheDir(item.path);
   const work: MediaItem = { ...item };
@@ -151,6 +160,7 @@ export async function prepareMedia(item: MediaItem, update: MediaUpdateFn, proxy
       emit();
     }
 
+    if (quick) {
     const thumb = path.join(dir, 'thumb.jpg');
     if (!fileExists(thumb)) {
       const at = Math.min(Math.max(0, dur * 0.1), 3);
@@ -164,11 +174,19 @@ export async function prepareMedia(item: MediaItem, update: MediaUpdateFn, proxy
     const frames = dur > 0 ? SPRITE_FRAMES : 1;
     if (!fileExists(sprite)) {
       const rate = dur > 0 ? frames / dur : 1;
-      await runFfmpeg([
-        '-i', visualSource,
+      // Nur Schlüsselbilder dekodieren (viel schneller bei langen 4K-Videos); bei sehr kurzen Videos alle Bilder
+      const keyOnly = dur > SPRITE_FRAMES * 1.5 ? ['-skip_frame', 'nokey'] : [];
+      const spriteArgs = (extra: string[]) => [
+        ...extra, '-i', visualSource,
         '-vf', `fps=${rate.toFixed(6)},scale=${SPRITE_WIDTH}:-2,tile=${frames}x1`,
         '-frames:v', '1', '-q:v', '5', sprite,
-      ], { lowPriority: true });
+      ];
+      try {
+        await runFfmpeg(spriteArgs(keyOnly), { lowPriority: true });
+      } catch (e) {
+        if (!keyOnly.length) throw e;
+        await runFfmpeg(spriteArgs([]), { lowPriority: true });
+      }
     }
     const sh = Math.round((SPRITE_WIDTH * work.info.height) / Math.max(1, work.info.width) / 2) * 2;
     work.sprite = { path: sprite, frames, frameWidth: SPRITE_WIDTH, frameHeight: sh || 90 };
@@ -190,6 +208,8 @@ export async function prepareMedia(item: MediaItem, update: MediaUpdateFn, proxy
       } else work.waveform = wave;
       emit();
     }
+    }
+    if (!heavy) return;
 
     // Proxy: kleine, schnell spulbare Vorschau-Datei
     if (!stitched) work.proxy = await buildProxy(work, dir, proxyHeight, emit);
@@ -240,13 +260,21 @@ async function buildProxy(work: MediaItem, dir: string, height: number, emit: ()
     args.push('-map', '0:v:0', '-vf', `scale=-2:${h}`);
   }
   if (work.info.hasAudio) args.push('-map', '0:a:0?');
-  args.push(
-    '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-g', '15', '-pix_fmt', 'yuv420p',
-    '-c:a', 'aac', '-b:a', '128k', '-ac', '2',
-    '-movflags', '+faststart', '-threads', '0', proxy,
-  );
+  const tail = ['-c:a', 'aac', '-b:a', '128k', '-ac', '2', '-movflags', '+faststart', proxy];
+  const software = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-g', '15', '-pix_fmt', 'yuv420p', '-threads', '0'];
   void emit;
-  await runFfmpeg(args, { lowPriority: true });
+  // Mac: Grafikchip dekodiert und kodiert (spart Akku und ist mehrfach schneller); bei Problemen normal weiter
+  if (process.platform === 'darwin' && !stitched) {
+    const bitrate = `${Math.max(1, Math.round((h / 540) * 3.5))}M`;
+    try {
+      await runFfmpeg(['-hwaccel', 'videotoolbox', ...args, '-c:v', 'h264_videotoolbox', '-b:v', bitrate, '-g', '15', '-pix_fmt', 'yuv420p', '-allow_sw', '1', ...tail], { lowPriority: true });
+      return proxy;
+    } catch (e) {
+      log.warn('Proxy per Grafikchip fehlgeschlagen, nehme Software', (e as Error).message);
+      try { fs.rmSync(proxy, { force: true }); } catch { /* egal */ }
+    }
+  }
+  await runFfmpeg([...args, ...software, ...tail], { lowPriority: true });
   return proxy;
 }
 
