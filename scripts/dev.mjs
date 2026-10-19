@@ -67,6 +67,13 @@ const workerCtx = await context({
 });
 await workerCtx.rebuild();
 await workerCtx.watch();
+const mtCtx = await context({
+  ...common,
+  entryPoints: [path.join(root, 'src/main/mtWorker.ts')],
+  outfile: path.join(root, 'dist/main/mtWorker.js'),
+});
+await mtCtx.rebuild();
+await mtCtx.watch();
 await mainCtx.watch();
 
 process.on('SIGINT', async () => {

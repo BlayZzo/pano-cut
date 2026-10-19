@@ -15,6 +15,7 @@ import { prepareMedia, probeMedia } from './media';
 import { ExportJob } from './exporter';
 import { aiAvailable, detectObjects, segmentObject } from './ai';
 import { analyzeBeats, audioEnvelope } from './audio';
+import { stopTranslators, translateLocal } from './mt';
 import { correlateEnvelopes } from '@shared/multicam';
 
 export async function runSmokeTest(): Promise<number> {
@@ -257,6 +258,21 @@ export async function runSmokeTest(): Promise<number> {
     if (flashMid < 200 || flashMid < beforeFlash + 40) throw new Error('Blitz-Übergang fehlt');
     if (!(bright > dark + 25)) throw new Error('Belichtungskurve wirkt nicht');
     log('v0.6 ok');
+
+    // v0.7: Übersetzung Deutsch ↔ Englisch (lädt Programm und Modelle aus dem Netz)
+    step('Übersetzung DE ↔ EN …');
+    try {
+      const t0 = Date.now();
+      const de = await translateLocal(['Hello, how are you today?', 'The car is very fast.'], 'en', 'de', (p) => { if (p.percent % 50 === 0) log(`  ${p.message}`); });
+      const en = await translateLocal(['Das Auto fährt sehr schnell durch den Tunnel.'], 'de', 'en');
+      log(`Übersetzung (${Date.now() - t0} ms): ${JSON.stringify(de)} / ${JSON.stringify(en)}`);
+      if (!de[1] || !/auto|wagen/i.test(de[1]) || !en[0] || !/car/i.test(en[0])) throw new Error('Übersetzung liefert Unsinn');
+    } catch (e) {
+      log('Übersetzung fehlgeschlagen:', (e as Error).message);
+      if (process.env.PANOCUT_REQUIRE_MT) throw e;
+    } finally {
+      stopTranslators();
+    }
 
     // KI: Erkennung und Maske. In der CI liegt ein Testbild (Hund, Fahrrad, Auto) unter PANOCUT_TEST_IMAGE.
     if (aiAvailable()) {
