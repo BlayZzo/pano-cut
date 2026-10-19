@@ -39,6 +39,8 @@ export const VFX_KINDS: VfxKindDef[] = [
     words: ['staub', 'sand', 'sandsturm', 'staubig', 'dust', 'pollen', 'partikel'] },
   { kind: 'confetti', name: 'Konfetti', icon: '🎉', fullFrame: true, light: false, shadow: false, duration: 4, loop: true, aspect: 16 / 9, scale: 1, y: 0,
     words: ['konfetti', 'confetti', 'party', 'feier', 'luftschlangen'] },
+  { kind: 'impact', name: 'Aufprall', icon: '💢', fullFrame: false, light: false, shadow: false, duration: 2.5, loop: false, aspect: 2, scale: 0.6, y: 25,
+    words: ['aufprall', 'einschlag', 'aufschlag', 'landung', 'impact', 'crash', 'trümmer', 'truemmer', 'druckwelle'] },
 ];
 
 export function vfxKind(kind: VfxKind): VfxKindDef {

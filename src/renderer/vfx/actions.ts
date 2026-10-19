@@ -2,7 +2,9 @@
 import type { Clip, MediaItem, VfxSpec } from '@shared/types';
 import { clipAt, clipDuration, createClip, makeId } from '@shared/timeline';
 import { frameStats } from '@shared/color';
-import { matchToScene, shakeKeyframes, vfxKind } from '@shared/vfx';
+import { defaultVfx, matchToScene, shakeKeyframes, vfxKind } from '@shared/vfx';
+import { combineKeyframes, entranceKeyframes, type EntranceStyle, type FrameBox } from '@shared/effects';
+import { trackBoxAt } from '@shared/ai';
 import { beginTransaction, endTransaction, untracked, useProject } from '../store/project';
 import { useUi } from '../store/ui';
 import { engine } from '../engine/instance';
@@ -188,4 +190,90 @@ export function bringObjectToFront(clipId: string, trackId: string): void {
 /** Für die Bibliothek: ist das ein Effekt-Medium? */
 export function isEffectMedia(m: MediaItem | undefined): boolean {
   return !!m?.vfx;
+}
+
+// ---------- Objekt ins Video fallen lassen (Auftritt + Aufprall) ----------
+
+export interface DropInOptions { style: EntranceStyle; strength: number; dust: boolean; shake: boolean }
+
+/** Lage des Objekts im fertigen Bild (0..1): aus der gemerkten Objekt-Box, dem Freistell-Tracking oder dem ganzen Clip. */
+export function objectFrameBox(clip: Clip, media: MediaItem, W: number, H: number, localT: number): FrameBox {
+  let b: { x: number; y: number; w: number; h: number } | null = media.bbox ?? null;
+  if (clip.cutout?.enabled) {
+    const tr = clip.objects?.find((o) => o.id === clip.cutout!.trackId);
+    const tb = tr ? trackBoxAt(tr, localT) : null;
+    if (tb) b = tb;
+  }
+  if (!b) b = { x: 0, y: 0, w: 1, h: 1 };
+  const vw = media.info.width || W, vh = media.info.height || H;
+  const sc = clip.transform.scale;
+  let dw: number, dh: number;
+  if (clip.fit === 'stretch') { dw = W * sc; dh = H * sc; }
+  else { const s = (clip.fit === 'cover' ? Math.max(W / vw, H / vh) : Math.min(W / vw, H / vh)) * sc; dw = vw * s; dh = vh * s; }
+  const cx = W / 2 + (clip.transform.x / 100) * W, cy = H / 2 + (clip.transform.y / 100) * H;
+  return { x: (cx - dw / 2 + b.x * dw) / W, y: (cy - dh / 2 + b.y * dh) / H, w: (b.w * dw) / W, h: (b.h * dh) / H };
+}
+
+/** Erschütterung in einen Szenen-Clip einsetzen (wie bei der Explosion). */
+function shakeScene(scene: Clip, at: number, strength: number): void {
+  if (scene.motion && scene.motion.preset !== 'custom') return;
+  const local = Math.max(0, at - scene.start);
+  const keep = (scene.motion?.keyframes ?? []).filter((k) => k.t < local - 0.1 || k.t > local + 1.2);
+  const kfs = [...keep, ...shakeKeyframes(local, strength, clipDuration(scene))].sort((a, b) => a.t - b.t);
+  useProject.getState().updateClip(scene.id, { motion: { preset: 'custom', intensity: 1, smooth: true, keyframes: kfs } });
+}
+
+/**
+ * Auftritt für ein freigestelltes Objekt: fällt/rast ins Bild, beim Aufprall Staubwolke mit Trümmern und
+ * Erschütterung der Szene. Alles mit einer Stärke (0,3..2).
+ */
+export async function dropObjectIn(clipId: string, opts: DropInOptions, onProgress: Progress): Promise<void> {
+  const p = useProject.getState().project;
+  const clip = p.clips[clipId];
+  const media = clip ? p.media[clip.mediaId] : undefined;
+  if (!clip || !media) return;
+  const { width: W, height: H, fps } = p.settings;
+  const dur = clipDuration(clip);
+  const box = objectFrameBox(clip, media, W, H, Math.min(dur, 1));
+  const { keyframes, impact } = entranceKeyframes(opts.style, opts.strength, dur, box);
+  const shakeStrength = Math.max(0.3, opts.strength * 0.8);
+  let kfs = keyframes;
+  // Das Objekt wackelt beim Aufprall mit der Szene mit (sonst wirkt es losgelöst)
+  if (impact !== null && opts.shake) kfs = combineKeyframes(kfs, shakeKeyframes(impact, shakeStrength, dur));
+  const scene = impact !== null ? sceneClipBelow(clip.trackId, clip.start + impact) : null;
+  beginTransaction();
+  useProject.getState().updateClip(clip.id, { motion: { preset: opts.style, intensity: opts.strength, smooth: false, keyframes: kfs } });
+  if (scene && opts.shake && impact !== null) shakeScene(scene, clip.start + impact + 0.02, shakeStrength);
+  endTransaction();
+  if (impact === null || !opts.dust) { useUi.getState().toast(t.dropIn.done, 'success'); return; }
+
+  // Staubfarbe vom Boden unter dem Objekt nehmen (Staub besteht aus dem, was dort liegt)
+  const spec: VfxSpec = { ...defaultVfx('impact', W, H, fps, 'Aufprall'), intensity: Math.max(0.3, Math.min(2, 0.4 + 0.6 * opts.strength)), size: 1 };
+  if (scene) {
+    const img = await engine.grabFrame(scene, p.media[scene.mediaId]!, clip.start + impact - scene.start, 320).catch(() => null);
+    if (img) {
+      const st = regionStats(img, box.x + box.w / 2, Math.min(0.97, box.y + box.h + 0.03), Math.max(0.05, box.w * 0.4));
+      const lift = (v: number) => Math.round(Math.min(255, (0.35 + 0.65 * v) * 255 * 1.05 + 25));
+      spec.color = `#${[st.meanR, st.meanG, st.meanB].map((v) => lift(v).toString(16).padStart(2, '0')).join('')}`;
+    }
+  }
+  const res = await renderVfx(p.id, spec, { withLight: false, onProgress });
+  untracked(() => useProject.getState().addMedia([res.effect]));
+  // Größe: Wolke etwa 2,4× so breit wie das Objekt; Bodenpunkt des Effekts (75 % der Höhe) auf die Unterkante des Objekts
+  const ew = res.effect.info.width || spec.width, eh = res.effect.info.height || spec.height;
+  const contain = Math.min(W / ew, H / eh);
+  const targetW = Math.max(0.25, Math.min(2.5, box.w * 2.4)) * W;
+  const sc = targetW / (ew * contain);
+  const dispH = eh * contain * sc;
+  const groundX = (box.x + box.w / 2) * W, groundY = Math.min(H * 1.05, (box.y + box.h) * H);
+  beginTransaction();
+  const track = useProject.getState().addVideoTrackAbove(clip.trackId, `Effekt: ${vfxKind('impact').name}`);
+  const fx = createClip(res.effect, track, Math.max(0, clip.start + impact - 0.02));
+  fx.name = res.effect.name;
+  fx.fit = 'contain';
+  fx.transform = { x: (groundX / W - 0.5) * 100, y: ((groundY - 0.275 * dispH) / H - 0.5) * 100, scale: sc, rotation: 0 };
+  useProject.getState().insertClips([fx]);
+  endTransaction();
+  useUi.getState().select([clip.id]);
+  useUi.getState().toast(t.dropIn.done, 'success');
 }

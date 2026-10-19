@@ -518,8 +518,77 @@ vec4 effect() {
 vec3 light() { return vec3(0.0); }
 `;
 
+// ---------------------------------------------------------------- Aufprall (Staubwolke, Druckwelle, Trümmer)
+const IMPACT = `
+float impactDensity(vec3 q, float t) {
+  vec3 np = q * vec3(2.6, 3.2, 2.6) + vec3(uSeed * 1.7, -t * 0.25, uSeed * 0.6 + t * 0.15);
+  float w = fbm3s(np * 0.7);
+  return fbm3(np + w * 1.3);
+}
+vec4 effect() {
+  vec2 P = boxCoord();
+  float t = uTime * uSpeed, T = uDur * uSpeed;
+  vec2 G = vec2(0.0, -0.55);                     // Aufprallpunkt am Boden
+  vec3 dustCol = uHasColor > 0.5 ? uColor : vec3(0.72, 0.64, 0.54);
+  float I = clamp(uIntensity, 0.2, 2.0);
+  float grow = 1.0 - exp(-t * 2.6);
+  float R = (0.3 + 1.3 * grow) * uSize * (0.75 + 0.25 * I);                          // Breite der Wolke
+  float Hh = (0.22 + 0.75 * (1.0 - exp(-t * 1.3))) * uSize * (0.7 + 0.3 * I);         // Höhe der Wolke
+  float fade = smoothstep(0.0, 0.04, t) * (1.0 - smoothstep(0.45 * T, T, t));
+  vec3 acc3 = vec3(0.0); float acc = 0.0;
+  for (int i = 0; i < 18; i++) {
+    float z = ((float(i) + 0.5) / 18.0 * 2.0 - 1.0) * R * 0.5;
+    vec3 q = vec3(P.x - uWind * 0.25 * t * (0.3 + P.y - G.y), P.y - G.y, z);
+    float n = impactDensity(q / max(0.4, uSize), t);
+    float disp = (n - 0.5) * 0.95;
+    // Kuppel aus Staub, unten breit; die Mitte ist etwas lichter (Druck schiebt den Staub nach außen)
+    float e = length(vec3(q.x / max(R, 1e-3), q.y / max(Hh, 1e-3) * (0.75 + 0.25 * abs(q.x) / max(R, 1e-3)), q.z / max(R * 0.5, 1e-3)));
+    float hollow = 0.55 + 0.45 * smoothstep(0.0, 0.55, length(vec2(q.x, q.z)) / max(R, 1e-3) + q.y / max(Hh, 1e-3) * 0.6);
+    float dens = smoothstep(1.0 + disp, 0.62 + disp, e) * smoothstep(-0.12, 0.04, q.y) * hollow;
+    if (dens < 0.003) continue;
+    float hy = q.y / max(Hh, 1e-3);
+    float shade = clamp(0.5 + 0.55 * hy + (n - 0.45) * 1.1 - q.x * 0.12, 0.22, 1.2);
+    float a = dens * 0.3 * I * fade;
+    acc3 += (1.0 - acc) * a * dustCol * shade;
+    acc += (1.0 - acc) * a;
+  }
+  vec4 col = vec4(acc3, acc);
+  // Druckwelle: dünner, heller Ring am Boden in den ersten Augenblicken
+  if (t < 0.4) {
+    float rw = t / 0.35 * 1.9 * uSize;
+    vec2 d = vec2(P.x, (P.y - G.y) * 5.0);
+    float ring = exp(-pow((length(d) - rw) / (0.03 + 0.05 * t), 2.0)) * (1.0 - t / 0.4) * 0.45 * min(I, 1.5);
+    col.rgb += (1.0 - col.a) * min(vec3(1.0), dustCol * 1.3) * ring;
+    col.a += (1.0 - col.a) * ring;
+  }
+  // Trümmer: dunkle Brocken fliegen in Bögen und bleiben am Boden liegen
+  float cnt = 34.0 * I;
+  for (int i = 0; i < 68; i++) {
+    float fi = float(i);
+    if (fi >= cnt) break;
+    float h1 = hash11(fi * 7.31 + uSeed * 3.1), h2 = hash11(fi * 2.17 + uSeed * 9.4), h3 = hash11(fi * 5.9 + uSeed);
+    float age = t - h3 * 0.05;
+    if (age < 0.0) continue;
+    float ang = (0.12 + 0.76 * h1) * PI;
+    float sp = (0.6 + 1.5 * h2) * (0.6 + 0.4 * I) * uSize;
+    vec2 v = vec2(cos(ang) * 1.3, sin(ang)) * sp;
+    vec2 g = vec2(uWind * 0.4, -3.2);
+    vec2 p = G + v * age + 0.5 * g * age * age;
+    if (p.y < G.y - 0.04) continue;
+    float r = (0.008 + 0.016 * h3) * uSize;
+    float d = length(P - p);
+    float k = (1.0 - smoothstep(r * 0.6, r, d)) * fade;
+    vec3 c = dustCol * (0.35 + 0.25 * h2);
+    col.rgb = mix(col.rgb, c, k);
+    col.a = max(col.a, k);
+  }
+  return col;
+}
+vec3 light() { return vec3(0.0); }
+`;
+
 const KIND_SRC: Record<VfxKind, string> = {
-  explosion: EXPLOSION, fire: FIRE, smoke: SMOKE, snow: SNOW, rain: RAIN, fog: FOG, sparks: SPARKS, lightning: LIGHTNING, dust: DUST, confetti: CONFETTI,
+  explosion: EXPLOSION, fire: FIRE, smoke: SMOKE, snow: SNOW, rain: RAIN, fog: FOG, sparks: SPARKS, lightning: LIGHTNING, dust: DUST, confetti: CONFETTI, impact: IMPACT,
 };
 
 /** Fragment-Shader für eine Effektart; `lightPass` = Lichtschein statt Effekt. */

@@ -57,6 +57,7 @@ export interface MediaItem {
   vfx?: VfxSpec;           // erzeugter Effekt (kann neu gerendert werden)
   vfxRole?: 'effect' | 'light';  // Effekt selbst oder sein Lichtschein
   beats?: BeatInfo;        // erkannter Takt (Auto-Musik-Schnitt)
+  bbox?: { x: number; y: number; w: number; h: number };  // freigestelltes Objekt: typische Lage im Bild (0..1)
   addedAt: number;
 }
 
@@ -280,7 +281,9 @@ export interface MotionKeyframe {
 
 export type MotionPreset =
   | 'kenburns' | 'zoomin' | 'zoomout' | 'slidein-left' | 'slidein-right' | 'slidein-up' | 'slidein-down'
-  | 'slideout-left' | 'slideout-right' | 'pop' | 'pulse' | 'shake' | 'spin' | 'fadein' | 'fadeout' | 'float' | 'custom';
+  | 'slideout-left' | 'slideout-right' | 'pop' | 'pulse' | 'shake' | 'spin' | 'fadein' | 'fadeout' | 'float' | 'custom'
+  // Auftritte (Objekt ins Bild fallen lassen …): shared/effects.ts entranceKeyframes
+  | 'dropin' | 'slam' | 'flyin-left' | 'flyin-right' | 'rise';
 
 export interface Motion {
   preset: MotionPreset;
@@ -318,7 +321,7 @@ export interface ClipLink {
 
 // ---------- Effekt-Simulationen (VFX) ----------
 
-export type VfxKind = 'explosion' | 'fire' | 'smoke' | 'snow' | 'rain' | 'fog' | 'sparks' | 'lightning' | 'dust' | 'confetti';
+export type VfxKind = 'explosion' | 'fire' | 'smoke' | 'snow' | 'rain' | 'fog' | 'sparks' | 'lightning' | 'dust' | 'confetti' | 'impact';
 
 export interface VfxSpec {
   kind: VfxKind;

@@ -81,8 +81,13 @@ export async function renderObject(project: Project, clipId: string, trackId: st
   await runFfmpeg(['-c:v', 'libvpx-vp9', '-i', out, '-filter_complex', `color=c=#222222:s=320x180[bg];[0:v]scale=320:-2[o];[bg][o]overlay=(W-w)/2:(H-h)/2:shortest=1`, '-frames:v', '1', thumb]);
   fs.rmSync(list, { force: true });
   const stat = fs.statSync(out);
+  // Typische Lage des Objekts im Bild (Median der getrackten Boxen) – für Auftritte und Aufprall-Effekte
+  const med = (vals: number[]) => { const v = [...vals].sort((a, b) => a - b); return v.length ? v[Math.floor(v.length / 2)] : 0; };
+  const bbox = track.boxes.length
+    ? { x: med(track.boxes.map((b) => b.x)), y: med(track.boxes.map((b) => b.y)), w: med(track.boxes.map((b) => b.w)), h: med(track.boxes.map((b) => b.h)) }
+    : undefined;
   return {
-    id, path: out, name, type: 'video', status: 'ready', addedAt: Date.now(), thumb, proxy: out, hasAlpha: true, isObject: true,
+    id, path: out, name, type: 'video', status: 'ready', addedAt: Date.now(), thumb, proxy: out, hasAlpha: true, isObject: true, bbox,
     info: { duration: dur, width: maxW, height: Math.round((maxW * (media.info.height || 9)) / Math.max(1, media.info.width || 16)), fps: 30, hasVideo: true, hasAudio: false, rotation: 0, is360: false, fileSize: stat.size, videoCodec: 'vp9' },
   };
 }

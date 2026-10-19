@@ -33,6 +33,8 @@ export function motionPreset(preset: MotionPreset, dur: number, intensity = 1): 
     case 'shake':
     case 'float':
       return [kf(0), kf(d)];
+    case 'dropin': case 'slam': case 'flyin-left': case 'flyin-right': case 'rise':
+      return entranceKeyframes(preset, k, d, DEFAULT_BOX).keyframes;
     case 'custom':
     default:
       return [kf(0)];
@@ -40,9 +42,76 @@ export function motionPreset(preset: MotionPreset, dur: number, intensity = 1): 
 }
 
 export function createMotion(preset: MotionPreset, dur: number, intensity = 1): Motion {
-  const m: Motion = { preset, intensity, smooth: true, keyframes: motionPreset(preset, dur, intensity) };
+  // Auftritte sind dicht abgetastet und werden linear verbunden (sonst stockt die Fallbewegung)
+  const m: Motion = { preset, intensity, smooth: !ENTRANCES.has(preset), keyframes: motionPreset(preset, dur, intensity) };
   if (preset === 'shake' || preset === 'pulse' || preset === 'float') m.osc = { kind: preset, amp: intensity };
   return m;
+}
+
+// ---------- Auftritte: Objekt fällt ins Bild, schlägt auf, fährt herein ----------
+
+export type EntranceStyle = 'dropin' | 'slam' | 'flyin-left' | 'flyin-right' | 'rise';
+const ENTRANCES = new Set<MotionPreset>(['dropin', 'slam', 'flyin-left', 'flyin-right', 'rise']);
+export function isEntrance(p: MotionPreset): p is EntranceStyle { return ENTRANCES.has(p); }
+
+/** Lage des Objekts im fertigen Bild (0..1), wenn es angekommen ist. */
+export interface FrameBox { x: number; y: number; w: number; h: number }
+const DEFAULT_BOX: FrameBox = { x: 0.25, y: 0.25, w: 0.5, h: 0.5 };
+
+const r2 = (v: number) => Math.round(v * 100) / 100;
+
+/**
+ * Keyframes eines Auftritts. Das Objekt startet ganz außerhalb des Bildes (abhängig von seiner Lage `box`)
+ * und kommt bei `impact` (Sekunden) auf. Stärke 0,3..2: schwerer/schneller, höherer Rückprall.
+ */
+export function entranceKeyframes(style: EntranceStyle, strength: number, dur: number, box: FrameBox): { keyframes: MotionKeyframe[]; impact: number | null } {
+  const s = Math.max(0.2, Math.min(2, strength));
+  const out: MotionKeyframe[] = [];
+  const add = (t: number, p: Partial<MotionState>) => { if (t <= dur + 1e-6) out.push(kf(r2(t * 1000) / 1000, { x: r2(p.x ?? 0), y: r2(p.y ?? 0), scale: Math.round((p.scale ?? 1) * 1000) / 1000, rotation: r2(p.rotation ?? 0), opacity: r2(p.opacity ?? 1) })); };
+  let impact: number | null = null;
+  if (style === 'dropin') {
+    const y0 = -(box.y + box.h) * 100 - 6;          // ganz oberhalb des Bildes
+    const tf = Math.min(dur * 0.6, 0.62 / Math.sqrt(s));
+    for (let i = 0; i <= 8; i++) { const u = i / 8; add(tf * u, { y: y0 * (1 - u * u) }); }   // Fallen (beschleunigt)
+    impact = tf;
+    // Rückprall: zwei kleiner werdende Hüpfer
+    const h1 = Math.min(14, box.h * 100 * 0.22) * s, t1 = 0.16 + 0.1 * s;
+    const h2 = h1 * 0.3, t2 = t1 * 0.55;
+    for (let i = 1; i <= 6; i++) { const u = i / 6; add(tf + t1 * u, { y: -h1 * 4 * u * (1 - u), scale: i === 1 ? 1 + 0.03 * s : 1 }); }
+    for (let i = 1; i <= 4; i++) { const u = i / 4; add(tf + t1 + t2 * u, { y: -h2 * 4 * u * (1 - u) }); }
+  } else if (style === 'slam') {
+    const S0 = 1 + 1.6 * (0.5 + 0.5 * s);
+    const ts = Math.min(dur * 0.6, 0.42 / Math.pow(s, 0.3));
+    for (let i = 0; i <= 8; i++) { const u = i / 8; add(ts * u, { scale: 1 + (S0 - 1) * (1 - u * u), opacity: Math.min(1, u / 0.25) }); }
+    impact = ts;
+    add(ts + 0.07, { scale: 1 + 0.05 * s }); add(ts + 0.2, { scale: 1 });
+  } else if (style === 'flyin-left' || style === 'flyin-right') {
+    const sign = style === 'flyin-left' ? -1 : 1;
+    const x0 = sign < 0 ? -(box.x + box.w) * 100 - 6 : (1 - box.x) * 100 + 6;
+    const tin = Math.min(dur * 0.6, 0.7 / Math.pow(s, 0.35));
+    for (let i = 0; i <= 8; i++) { const u = i / 8; add(tin * u, { x: x0 * Math.pow(1 - u, 3), rotation: sign * 4 * s * (1 - u) * u * 4 * 0.25 }); }
+    add(tin + 0.12, { x: -sign * 1.6 * s }); add(tin + 0.3, { x: 0 });
+    impact = tin;
+  } else {
+    const y0 = (1 - box.y) * 100 + 6;               // von unten
+    const tin = Math.min(dur * 0.6, 0.7 / Math.pow(s, 0.35));
+    for (let i = 0; i <= 8; i++) { const u = i / 8; add(tin * u, { y: y0 * Math.pow(1 - u, 3) }); }
+    add(tin + 0.12, { y: -1.5 * s }); add(tin + 0.3, { y: 0 });
+  }
+  return { keyframes: out, impact };
+}
+
+/** Zwei Bewegungen addieren (z. B. Auftritt + Erschütterung): Versatz und Drehung addiert, Größe multipliziert. */
+export function combineKeyframes(a: MotionKeyframe[], b: MotionKeyframe[]): MotionKeyframe[] {
+  if (b.length === 0) return a;
+  if (a.length === 0) return b;
+  const ma: Motion = { preset: 'custom', intensity: 1, smooth: false, keyframes: a };
+  const mb: Motion = { preset: 'custom', intensity: 1, smooth: false, keyframes: b };
+  const times = Array.from(new Set([...a, ...b].map((k) => Math.round(k.t * 1000) / 1000))).sort((x, y) => x - y);
+  return times.map((t) => {
+    const p = motionKeyAtPublic(ma, t), q = motionKeyAtPublic(mb, t);
+    return { t, x: r2(p.x + q.x), y: r2(p.y + q.y), scale: Math.round(p.scale * q.scale * 1000) / 1000, rotation: r2(p.rotation + q.rotation), opacity: r2(p.opacity * q.opacity) };
+  });
 }
 
 /** Schwingungsanteil zur Zeit t (dieselben Formeln stehen als FFmpeg-Ausdruck im Export). */
@@ -129,6 +198,9 @@ export const EFFECT_BLOCKS: Array<Omit<EffectBlock, 'apply'> & { apply: (clip: C
   { id: 'm-spin', kind: 'motion', name: 'Drehen', group: 'Animation', icon: '⟳', apply: (c, d) => motion(c, 'spin', d) },
   { id: 'm-fadein', kind: 'motion', name: 'Einblenden', group: 'Animation', icon: '◐', apply: (c, d) => motion(c, 'fadein', d) },
   { id: 'm-fadeout', kind: 'motion', name: 'Ausblenden', group: 'Animation', icon: '◑', apply: (c, d) => motion(c, 'fadeout', d) },
+  { id: 'm-dropin', kind: 'motion', name: 'Herabfallen', group: 'Animation', icon: '⤓', apply: (c, d) => motion(c, 'dropin', d) },
+  { id: 'm-slam', kind: 'motion', name: 'Aufschlagen', group: 'Animation', icon: '💢', apply: (c, d) => motion(c, 'slam', d) },
+  { id: 'm-flyin-left', kind: 'motion', name: 'Hereinrasen', group: 'Animation', icon: '🏎', apply: (c, d) => motion(c, 'flyin-left', d) },
   // Looks
   { id: 'l-warm', kind: 'look', name: 'Warm', group: 'Look', icon: '🌅', apply: (c) => look(c, 'warm') },
   { id: 'l-cool', kind: 'look', name: 'Kühl', group: 'Look', icon: '❄', apply: (c) => look(c, 'cool') },
@@ -214,6 +286,11 @@ export const MOTION_PRESETS: Array<{ id: MotionPreset; name: string }> = [
   { id: 'spin', name: 'Drehen' },
   { id: 'fadein', name: 'Einblenden' },
   { id: 'fadeout', name: 'Ausblenden' },
+  { id: 'dropin', name: 'Herabfallen (mit Aufprall)' },
+  { id: 'slam', name: 'Aufschlagen (aus der Kamera)' },
+  { id: 'flyin-left', name: 'Von links hereinrasen' },
+  { id: 'flyin-right', name: 'Von rechts hereinrasen' },
+  { id: 'rise', name: 'Von unten auftauchen' },
   { id: 'custom', name: 'Eigene Keyframes' },
 ];
 

@@ -13,6 +13,7 @@ import { DuckingFields, InspectorColor, InspectorFx, InspectorMotion, SaveEffect
 import { InspectorLayer, InspectorVfx } from './InspectorLayer';
 import { InspectorMusic } from './InspectorMusic';
 import { SpeedRampFields } from './InspectorRamp';
+import { InspectorDropIn } from './InspectorDropIn';
 
 export function Inspector(): React.ReactElement {
   const selection = useUi((s) => s.selection);
@@ -76,6 +77,7 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
       {!isTitle && media && (isAudioOnly || media.info.hasAudio) && !media.vfx && <InspectorMusic clip={clip} media={media} />}
       {!isTitle && media?.vfx && <InspectorVfx clip={clip} media={media} />}
       {!isTitle && !isAudioOnly && <InspectorLayer clip={clip} ids={ids} />}
+      {!isTitle && count === 1 && media && !media.vfx && (media.hasAlpha || clip.cutout?.enabled) && <InspectorDropIn clip={clip} />}
       {!isTitle && media?.info.is360 && media.type === 'video' && <InspectorPano clip={clip} media={media} />}
       {!isTitle && !isAudioOnly && <InspectorTransition clip={clip} />}
 
