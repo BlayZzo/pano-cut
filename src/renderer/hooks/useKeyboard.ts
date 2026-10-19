@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { useUi } from '../store/ui';
 import { isEditingText } from '../utils/dom';
-import { clearRange, deleteSelection, goEnd, goStart, setRangeIn, setRangeOut, splitAtPlayhead, stepFrames } from '../actions';
+import { clearRange, deleteSelection, goEnd, goStart, setRangeIn, setRangeOut, splitAtPlayhead, stepFrames, zoomBy, zoomToFit } from '../actions';
 import { playPause } from '../engine/instance';
 import { groupAt, switchToAngle } from '../multicamActions';
 
@@ -35,6 +35,9 @@ export function useKeyboard(): void {
         case 'i': case 'I': e.preventDefault(); setRangeIn(); break;
         case 'o': case 'O': e.preventDefault(); setRangeOut(); break;
         case 'x': case 'X': e.preventDefault(); clearRange(); break;
+        case '+': case '=': e.preventDefault(); zoomBy(1.4); break;
+        case '-': case '_': e.preventDefault(); zoomBy(1 / 1.4); break;
+        case 'z': case 'Z': { e.preventDefault(); const el = document.querySelector('.lanes-scroll'); zoomToFit(el ? el.clientWidth : window.innerWidth - 200); break; }
         default:
           // Mehrkamera: Tasten 1–9 wählen die Kamera (nur wenn an der Stelle eine Gruppe liegt)
           if (/^[1-9]$/.test(e.key) && groupAt(ui.playhead)) { e.preventDefault(); switchToAngle(Number(e.key) - 1); }

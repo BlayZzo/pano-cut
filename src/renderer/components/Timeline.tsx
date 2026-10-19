@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Clip, MediaItem, Project, Track } from '@shared/types';
 import { clipDuration, clipEnd, DEFAULT_IMAGE_DURATION, DEFAULT_TITLE_DURATION, formatTime, MIN_CLIP_DURATION, overlaps, projectDuration, sourceLimit } from '@shared/timeline';
 import { useProject } from '../store/project';
-import { useUi, type DragState } from '../store/ui';
+import { useUi, useView, getView, updateView, ZOOM_MAX, ZOOM_MIN, type DragState } from '../store/ui';
+import { Popover } from './Popover';
 import { engine, stopPlayback } from '../engine/instance';
 import { addTitleToTimeline, applyEffectToClips, applyTransitionToClip, deleteSelection, duplicateSelection, splitAtPlayhead, zoomBy, zoomToFit } from '../actions';
 import type { TransitionType } from '@shared/types';
@@ -15,13 +16,13 @@ import { ContextMenu, type MenuEntry } from './ContextMenu';
 import { IconEye, IconEyeOff, IconFit, IconLock, IconMagnet, IconMute, IconPlus, IconScissors, IconTrash, IconUnlock, IconVolume, IconZoomIn, IconZoomOut } from './Icons';
 
 const RULER_H = 24;
-const VIDEO_H = 64;
-const AUDIO_H = 48;
+const TRACK_SIZES = { small: { video: 40, audio: 30 }, medium: { video: 64, audio: 48 }, large: { video: 100, audio: 72 } } as const;
+let trackSize: keyof typeof TRACK_SIZES = 'medium';
 const SNAP_PX = 8;
 const DIVIDER_H = 6;
 
 function trackHeight(tr: Track): number {
-  return tr.kind === 'video' ? VIDEO_H : AUDIO_H;
+  return tr.kind === 'video' ? TRACK_SIZES[trackSize].video : TRACK_SIZES[trackSize].audio;
 }
 
 /** Y-Offset jeder Spur innerhalb des Inhalts (nach dem Lineal). */
@@ -97,6 +98,8 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
   const rangeIn = useUi((s) => s.rangeIn);
   const rangeOut = useUi((s) => s.rangeOut);
   const showBeats = useUi((s) => s.showBeats);
+  const view = useView();
+  trackSize = view.trackSize;
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const headersRef = useRef<HTMLDivElement>(null);
@@ -104,7 +107,7 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
   const [dropPreview, setDropPreview] = useState<{ trackId: string; time: number; media: MediaItem | null; title?: string; transitionClip?: string } | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number; entries: MenuEntry[] } | null>(null);
 
-  const offsets = useMemo(() => trackOffsets(project.tracks), [project.tracks]);
+  const offsets = useMemo(() => trackOffsets(project.tracks), [project.tracks, view.trackSize]);
   const beatMarks = useMemo(() => (showBeats ? collectBeats(project) : null), [showBeats, project.clips, project.media, project.tracks]);
   const contentHeight = (offsets[offsets.length - 1]?.top ?? RULER_H) + (offsets[offsets.length - 1]?.height ?? 0) + 40;
   const duration = projectDuration(project);
@@ -149,7 +152,7 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
       const mouseX = e.clientX - r.left;
       const tAtMouse = (mouseX + el.scrollLeft) / zoom;
       const factor = Math.exp(-e.deltaY * 0.0015);
-      const newZoom = Math.min(2000, Math.max(4, zoom * factor));
+      const newZoom = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom * factor));
       setZoom(newZoom);
       requestAnimationFrame(() => { el.scrollLeft = Math.max(0, tAtMouse * newZoom - mouseX); });
     } else if (e.shiftKey && Math.abs(e.deltaX) < 1) {
@@ -375,6 +378,19 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
         <input type="range" min={0} max={100} value={zoomToSlider(zoom)} onChange={(e) => setZoom(sliderToZoom(Number(e.target.value)))} style={{ width: 110, accentColor: 'var(--accent)' }} title="Zoom" />
         <button className="btn sm icon ghost" title={t.timeline.zoomIn} onClick={() => zoomBy(1.3)}><IconZoomIn /></button>
         <button className="btn sm icon ghost" title={t.timeline.zoomFit} onClick={() => zoomToFit(viewWidth)}><IconFit /></button>
+        <Popover label={`⚙ ${t.view.button}`} title={t.view.timelineTitle}>
+          <div className="form-grid compact">
+            <label>{t.view.trackSize}</label>
+            <select value={view.trackSize} onChange={(e) => updateView({ trackSize: e.target.value as 'small' | 'medium' | 'large' })}>
+              <option value="small">{t.view.small}</option><option value="medium">{t.view.medium}</option><option value="large">{t.view.large}</option>
+            </select>
+          </div>
+          <label className="toggle"><input type="checkbox" checked={view.thumbnails} onChange={(e) => updateView({ thumbnails: e.target.checked })} /> {t.view.thumbnails}</label>
+          <label className="toggle"><input type="checkbox" checked={view.waveforms} onChange={(e) => updateView({ waveforms: e.target.checked })} /> {t.view.waveforms}</label>
+          <label className="toggle"><input type="checkbox" checked={view.followPlayhead} onChange={(e) => updateView({ followPlayhead: e.target.checked })} /> {t.view.follow}</label>
+          <label className="toggle"><input type="checkbox" checked={snapping} onChange={(e) => setSnapping(e.target.checked)} /> {t.timeline.snap}</label>
+          <div className="hint">{t.view.zoomHint}</div>
+        </Popover>
         <div className="sep" />
         <button className="btn sm ghost" title={t.timeline.addVideoTrack} onClick={() => addTrack('video')}><IconPlus />{t.timeline.trackVideo}</button>
         <button className="btn sm ghost" title={t.timeline.addAudioTrack} onClick={() => addTrack('audio')}><IconPlus />{t.timeline.trackAudio}</button>
@@ -420,6 +436,7 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
                   height={height}
                   project={project}
                   zoom={zoom}
+                  strips={(view.thumbnails ? 1 : 0) | (view.waveforms ? 2 : 0)}
                   selection={selection}
                   drag={drag}
                   dropPreview={dropPreview?.trackId === track.id ? dropPreview : null}
@@ -440,16 +457,16 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
 }
 
 function zoomToSlider(zoom: number): number {
-  return Math.round(((Math.log(zoom) - Math.log(4)) / (Math.log(2000) - Math.log(4))) * 100);
+  return Math.round(((Math.log(zoom) - Math.log(ZOOM_MIN)) / (Math.log(ZOOM_MAX) - Math.log(ZOOM_MIN))) * 100);
 }
 function sliderToZoom(v: number): number {
-  return Math.exp(Math.log(4) + (v / 100) * (Math.log(2000) - Math.log(4)));
+  return Math.exp(Math.log(ZOOM_MIN) + (v / 100) * (Math.log(ZOOM_MAX) - Math.log(ZOOM_MIN)));
 }
 
 // ---------- Lineal ----------
 
 function Ruler({ zoom, width, fps, onPointerDown, rangeIn, rangeOut, children }: { zoom: number; width: number; fps: number; onPointerDown: (e: React.PointerEvent) => void; rangeIn: number | null; rangeOut: number | null; children?: React.ReactNode }): React.ReactElement {
-  const steps = [0.04, 0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800];
+  const steps = [0.04, 0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800, 3600];
   const major = steps.find((s) => s * zoom >= 90) ?? 1800;
   const minor = major / (major >= 60 ? 6 : major >= 5 ? 5 : major === 2 ? 4 : major === 1 ? 4 : 2);
   const ticks: React.ReactNode[] = [];
@@ -496,7 +513,7 @@ function Playhead({ zoom, scrollRef }: { zoom: number; scrollRef: React.RefObjec
   // Während der Wiedergabe mitscrollen
   useEffect(() => {
     const el = scrollRef.current;
-    if (!el || !engine.isPlaying) return;
+    if (!el || !engine.isPlaying || !getView().followPlayhead) return;
     const x = playhead * zoom;
     if (x > el.scrollLeft + el.clientWidth - 40 || x < el.scrollLeft) el.scrollLeft = Math.max(0, x - el.clientWidth * 0.1);
   }, [playhead, zoom, scrollRef]);
@@ -506,6 +523,7 @@ function Playhead({ zoom, scrollRef }: { zoom: number; scrollRef: React.RefObjec
 // ---------- Spur ----------
 
 interface LaneProps {
+  strips: number;   // 1 = Vorschaubilder, 2 = Tonwellen
   track: Track;
   top: number;
   height: number;
@@ -518,7 +536,7 @@ interface LaneProps {
   onClipContextMenu: (clip: Clip, x: number, y: number) => void;
 }
 
-const Lane = React.memo(function Lane({ track, top, height, project, zoom, selection, drag, dropPreview, onClipPointerDown, onClipContextMenu }: LaneProps): React.ReactElement {
+const Lane = React.memo(function Lane({ track, top, height, project, zoom, strips, selection, drag, dropPreview, onClipPointerDown, onClipContextMenu }: LaneProps): React.ReactElement {
   const clips = useMemo(() => Object.values(project.clips).filter((c) => c.trackId === track.id), [project.clips, track.id]);
   const dragTarget = drag?.kind === 'move' && drag.trackId === track.id;
   // Clips, die per Spurwechsel hierher gezogen werden (Geister)
@@ -533,6 +551,7 @@ const Lane = React.memo(function Lane({ track, top, height, project, zoom, selec
             clip={clip}
             media={project.media[clip.mediaId]}
             zoom={zoom}
+            strips={strips}
             selected={selection.includes(clip.id) || dropPreview?.transitionClip === clip.id}
             drag={inDrag}
             movedAway={!!inDrag && inDrag.kind === 'move' && !!inDrag.trackId && inDrag.trackId !== track.id && !inDrag.copy}
@@ -565,6 +584,7 @@ function clipClass(media: MediaItem | undefined, clip?: Clip): string {
 // ---------- Clip ----------
 
 interface ClipProps {
+  strips: number;
   clip: Clip;
   media: MediaItem | undefined;
   zoom: number;
@@ -575,7 +595,7 @@ interface ClipProps {
   onContextMenu: (clip: Clip, x: number, y: number) => void;
 }
 
-const TimelineClip = React.memo(function TimelineClip({ clip, media, zoom, selected, drag, movedAway, onPointerDown, onContextMenu }: ClipProps): React.ReactElement {
+const TimelineClip = React.memo(function TimelineClip({ clip, media, zoom, strips, selected, drag, movedAway, onPointerDown, onContextMenu }: ClipProps): React.ReactElement {
   let start = clip.start;
   let end = clipEnd(clip);
   if (drag) {
@@ -590,7 +610,10 @@ const TimelineClip = React.memo(function TimelineClip({ clip, media, zoom, selec
   // Filmstreifen / Wellenform zeitlich passend zum Quellbereich ausrichten
   let strip: React.CSSProperties | undefined;
   const srcLen = Math.max(0.001, clip.out - clip.in);
-  if (media?.sprite && media.type === 'video' && dur > 0) {
+  const thumbs = (strips & 1) !== 0, waves = (strips & 2) !== 0;
+  if (!thumbs && media?.type !== 'audio') { /* keine Vorschaubilder */ }
+  else if (!waves && media?.type === 'audio') { /* keine Tonwelle */ }
+  else if (media?.sprite && media.type === 'video' && dur > 0) {
     const scaled = width * (dur / srcLen);
     strip = { backgroundImage: cssUrl(media.sprite.path), backgroundSize: `${scaled}px 100%`, backgroundPosition: `${-(clip.in / dur) * scaled}px 0`, transform: clip.reverse ? 'scaleX(-1)' : undefined };
   } else if (media?.waveform && dur > 0) {

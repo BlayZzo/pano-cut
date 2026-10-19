@@ -10,7 +10,8 @@ import { NewProjectDialog } from './components/NewProjectDialog';
 import { ShortcutsDialog, AboutDialog } from './components/InfoDialogs';
 import { Toasts } from './components/Toasts';
 import { UpdateBanner } from './components/UpdateBanner';
-import { useUi } from './store/ui';
+import { useUi, useView } from './store/ui';
+import { Splitter } from './components/Splitter';
 import { onDirtyChange, untracked, useProject, isDirty } from './store/project';
 import { useKeyboard } from './hooks/useKeyboard';
 import {
@@ -24,6 +25,7 @@ import { isEditingText } from './utils/dom';
 
 export function App(): React.ReactElement {
   const dialog = useUi((s) => s.dialog);
+  const view = useView();
   const appInfo = useUi((s) => s.appInfo);
   const zoomFitRef = useRef<() => void>(() => {});
 
@@ -97,13 +99,16 @@ export function App(): React.ReactElement {
   const isMac = appInfo?.platform === 'darwin';
 
   return (
-    <div className="app">
+    <div className="app" style={{ '--left-w': `${view.leftWidth}px`, '--right-w': `${view.rightWidth}px`, '--timeline-h': `${view.timelineHeight}px` } as React.CSSProperties}>
       <TopBar mac={isMac} />
-      <div className="upper">
+      <div className={`upper${view.leftWidth === 0 ? ' no-left' : ''}${view.rightWidth === 0 ? ' no-right' : ''}`}>
         <MediaLibrary />
+        <Splitter which="leftWidth" />
         <Preview />
+        <Splitter which="rightWidth" />
         <Inspector />
       </div>
+      <Splitter which="timelineHeight" />
       <Timeline zoomFitRef={zoomFitRef} />
       <UpdateBanner />
       <Toasts />

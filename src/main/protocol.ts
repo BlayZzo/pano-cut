@@ -15,7 +15,7 @@ const MIME: Record<string, string> = {
 /** Muss vor `app.ready` aufgerufen werden. */
 export function registerMediaScheme(): void {
   protocol.registerSchemesAsPrivileged([
-    { scheme: MEDIA_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true } },
+    { scheme: MEDIA_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true, bypassCSP: true, corsEnabled: true } },
   ]);
 }
 
@@ -52,7 +52,7 @@ export function installMediaProtocol(): void {
     try {
       stat = await fs.promises.stat(filePath);
     } catch {
-      return new Response('Nicht gefunden', { status: 404 });
+      return new Response('Nicht gefunden', { status: 404, headers: { 'Access-Control-Allow-Origin': '*' } });
     }
     const mime = MIME[path.extname(filePath).toLowerCase()] ?? 'application/octet-stream';
     const size = stat.size;
@@ -61,13 +61,17 @@ export function installMediaProtocol(): void {
       'Content-Type': mime,
       'Accept-Ranges': 'bytes',
       'Cache-Control': 'no-cache',
+      // Die Oberfläche läuft unter file:// – ohne diese Freigabe gelten Medien als „fremd“ und WebGL/Canvas
+      // dürfen sie nicht lesen (Farbe, 360°, KI und Bild-Assistent bekämen nur ein schwarzes Bild)
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Expose-Headers': 'Content-Range, Content-Length, Accept-Ranges',
     };
     if (range) {
       const m = /bytes=(\d*)-(\d*)/.exec(range);
       let start = m && m[1] ? parseInt(m[1], 10) : 0;
       let end = m && m[2] ? parseInt(m[2], 10) : size - 1;
       if (isNaN(start) || start >= size) {
-        return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${size}` } });
+        return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${size}`, 'Access-Control-Allow-Origin': '*' } });
       }
       end = Math.min(end, size - 1);
       // Große Bereiche in Blöcken liefern (Chromium fragt ohnehin nach)

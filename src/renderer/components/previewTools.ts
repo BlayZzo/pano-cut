@@ -76,6 +76,7 @@ export interface BrushDab { u: number; v: number; r: number }   // u/v relativ z
 /** Graustufen-Maske in ein bearbeitbares Canvas laden. */
 export async function loadMaskCanvas(path: string): Promise<HTMLCanvasElement> {
   const img = new Image();
+  img.crossOrigin = 'anonymous';
   img.src = window.panocut.toMediaUrl(path);
   await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = () => rej(new Error('Maske konnte nicht geladen werden')); });
   const c = document.createElement('canvas');

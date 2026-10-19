@@ -30,6 +30,7 @@ export function maskCanvas(path: string, onLoad: () => void): HTMLCanvasElement 
   let entry = maskImages.get(path);
   if (!entry) {
     const img = new Image();
+    img.crossOrigin = 'anonymous';
     const e: { img: HTMLImageElement; canvas: HTMLCanvasElement | null } = { img, canvas: null };
     img.onload = () => {
       const c = document.createElement('canvas');
@@ -260,6 +261,8 @@ export class PlaybackEngine {
       m.addEventListener('seeked', () => { if (!this.playing) this.render(this.current); });
       m.addEventListener('loadeddata', () => { if (!this.playing) this.render(this.current); });
     }
+    // Medien als „freigegeben“ laden, damit WebGL (Farbe, 360°) und KI sie lesen dürfen
+    (el as HTMLImageElement | HTMLMediaElement).crossOrigin = 'anonymous';
     el.src = src;
     slot = { el, src, isVideo, isImage, lastSeek: -1 };
     this.slots.set(clip.id, slot);
@@ -525,6 +528,7 @@ export class PlaybackEngine {
     let sw = 0, sh = 0;
     if (media.type === 'image') {
       const img = new Image();
+      img.crossOrigin = 'anonymous';
       img.src = window.panocut.toMediaUrl(isDisplayableImage(media.path) ? media.path : (media.thumb ?? media.path));
       await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = () => rej(new Error('Bild konnte nicht geladen werden')); });
       source = img; sw = img.naturalWidth; sh = img.naturalHeight;
@@ -533,7 +537,7 @@ export class PlaybackEngine {
       let v = this.grabVideos.get(src);
       if (!v) {
         v = document.createElement('video');
-        v.muted = true; v.preload = 'auto'; v.src = src;
+        v.crossOrigin = 'anonymous'; v.muted = true; v.preload = 'auto'; v.src = src;
         this.grabVideos.set(src, v);
         await new Promise<void>((res, rej) => { v!.onloadeddata = () => res(); v!.onerror = () => rej(new Error('Video konnte nicht geladen werden')); });
       }

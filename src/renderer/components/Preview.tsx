@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { clipDuration, formatTime, projectDuration } from '@shared/timeline';
 import { keyframeAt, panoViewAt, upsertKeyframe } from '@shared/pano';
 import { beginTransaction, endTransaction, useProject } from '../store/project';
-import { useUi, usePlayheadCoarse } from '../store/ui';
+import { useUi, usePlayheadCoarse, useView, updateView, getView } from '../store/ui';
+import { Popover } from './Popover';
 import { engine, playPause } from '../engine/instance';
 import { goEnd, goStart, stepFrames } from '../actions';
 import { t } from '../i18n/de';
@@ -63,6 +64,9 @@ export function Preview(): React.ReactElement {
   // Während der Wiedergabe nur grob mitzählen (sonst zeichnet sich die ganze Vorschau-Leiste 30× pro Sekunde neu);
   // genau nur, wenn erkannte Objekte live eingezeichnet werden
   const playhead = usePlayheadCoarse(0.5, !!(aiPanel && selectedClip?.objects?.length));
+  const view = useView();
+  const [hover, setHover] = useState(false);
+  const guidesRef = useRef<HTMLDivElement>(null);
 
   // Objekt-Rahmen über der Vorschau zeichnen
   useEffect(() => {
@@ -94,7 +98,7 @@ export function Preview(): React.ReactElement {
           const mw = br.tint.width, mh = br.tint.height;
           ctx.drawImage(br.tint, (cr.left / 100) * mw, (cr.top / 100) * mh, mw * (1 - (cr.left + cr.right) / 100), mh * (1 - (cr.top + cr.bottom) / 100), -box.w / 2, -box.h / 2, box.w, box.h);
           ctx.restore();
-        } else if (!aiPanel || !selectedClip.objects?.length) {
+        } else if ((!aiPanel || !selectedClip.objects?.length) && (view.selectionFrame === 'always' || (view.selectionFrame === 'hover' && (hover || dragging || placing)))) {
           drawSelection(ctx, box, k);
         }
       }
@@ -112,7 +116,7 @@ export function Preview(): React.ReactElement {
       ctx.font = 'bold 12px sans-serif';
       ctx.fillText(tr.labelDe, b.x * ov.width + 4, Math.max(12, b.y * ov.height - 4));
     }
-  }, [selectedClip, selectedMedia, playhead, playing, aiPanel, maskBrush, brushVersion, settings.width, settings.height]);
+  }, [selectedClip, selectedMedia, playhead, playing, aiPanel, maskBrush, brushVersion, settings.width, settings.height, view.selectionFrame, hover, dragging, placing, view.leftWidth, view.rightWidth, view.timelineHeight]);
 
   // Pinsel: Maske an der aktuellen Stelle laden
   const brushTrack = maskBrush ? clips[maskBrush.clipId]?.objects?.find((o) => o.id === maskBrush.trackId) : undefined;
@@ -150,9 +154,14 @@ export function Preview(): React.ReactElement {
       const cssW = rect && rect.width > 50 ? Math.max(50, Math.min(rect.width - 28, (rect.height - 28) * (settings.width / settings.height))) : 0;
       // Anzeigegröße fest vorgeben (unabhängig von der internen Auflösung)
       if (cssW) { c.style.width = `${Math.floor(cssW)}px`; c.style.height = `${Math.floor(cssW * settings.height / settings.width)}px`; }
-      const shown = cssW ? cssW * dpr : 1920;
+      const q = getView().previewQuality;
+      const qk = q === 'half' ? 0.5 : q === 'quarter' ? 0.25 : 1;
+      const shown = (q === 'full' ? 1920 : cssW ? cssW * dpr : 1920) * qk;
       const longSide = Math.max(settings.width, settings.height);
-      const targetLong = Math.max(640, Math.min(1920, Math.ceil((shown * (longSide / settings.width)) / 160) * 160));
+      const targetLong = Math.max(q === 'quarter' ? 320 : q === 'half' ? 480 : 640, Math.min(1920, Math.ceil((shown * (longSide / settings.width)) / 160) * 160));
+      // Hilfslinien genau über das Bild legen
+      const g = guidesRef.current;
+      if (g && rect && cssW) { const cssH = cssW * settings.height / settings.width; g.style.left = `${(rect.width - cssW) / 2}px`; g.style.top = `${(rect.height - cssH) / 2}px`; g.style.width = `${cssW}px`; g.style.height = `${cssH}px`; }
       const k = Math.min(1, targetLong / longSide);
       const w = Math.round((settings.width * k) / 2) * 2, h = Math.round((settings.height * k) / 2) * 2;
       if (c.width !== w || c.height !== h) { c.width = w; c.height = h; engine.redraw(); }
@@ -163,7 +172,7 @@ export function Preview(): React.ReactElement {
     const ro = new ResizeObserver(() => { window.clearTimeout(timer); timer = window.setTimeout(fit, 200); });
     if (stageRef.current) ro.observe(stageRef.current);
     return () => { ro.disconnect(); window.clearTimeout(timer); engine.setCanvas(null); };
-  }, [settings.width, settings.height]);
+  }, [settings.width, settings.height, view.previewQuality]);
 
   // 360°-Clip unter dem Abspielkopf, der ausgewählt ist → mit der Maus umschauen
   const panoClip = selection.map((id) => clips[id]).find((c) => c && c.pano && media[c.mediaId]?.info.is360 && playhead >= c.start && playhead < c.start + clipDuration(c));
@@ -341,9 +350,13 @@ export function Preview(): React.ReactElement {
 
   return (
     <section className="preview">
-      <div className={`preview-stage${panoClip ? ' pano' : ''}${dragging ? ' dragging' : ''}${pickColor ? ' picking' : ''}${placing ? ' placing' : ''}${maskBrush ? ' brushing' : ''}`} ref={stageRef}>
+      <div className={`preview-stage${panoClip ? ' pano' : ''}${dragging ? ' dragging' : ''}${pickColor ? ' picking' : ''}${placing ? ' placing' : ''}${maskBrush ? ' brushing' : ''}${view.previewBackground === 'checker' ? ' checker' : ''}`} ref={stageRef} onPointerEnter={() => setHover(true)} onPointerLeave={() => setHover(false)}>
         <canvas ref={canvasRef} style={{ aspectRatio: `${settings.width} / ${settings.height}` }} onPointerDown={onPointerDown} onWheel={onWheel} />
         <canvas ref={overlayRef} className="preview-overlay" />
+        <div className="preview-guides" ref={guidesRef} style={{ display: view.previewGuides === 'none' ? 'none' : undefined }}>
+          {(view.previewGuides === 'thirds' || view.previewGuides === 'both') && <div className="g3" />}
+          {(view.previewGuides === 'safe' || view.previewGuides === 'both') && <div className="safe"><span>{t.view.guidesSafe}</span></div>}
+        </div>
         {!hasClips && <div className="preview-empty">{t.preview.empty}</div>}
         {panoClip && !pickColor && <div className="preview-badge">360° · ziehen = umschauen · Mausrad = zoomen</div>}
         {pickColor && <div className="preview-badge">{t.ai.picking}</div>}
@@ -375,6 +388,33 @@ export function Preview(): React.ReactElement {
         <button className={`btn sm${aiPanel ? ' active' : ''}`} title={t.ai.title} onClick={() => setAiPanel(!aiPanel)} style={{ fontWeight: 700 }}>✦ {t.ai.button}</button>
         <button className={`btn sm${modelPanel ? ' active' : ''}`} title={t.model3d.title} onClick={() => setModelPanel(modelPanel ? null : {})} style={{ fontWeight: 700 }}>🧊 {t.model3d.button}</button>
         {hasMulticam && <button className={`btn sm${multicamPanel ? ' active' : ''}`} title={t.multicam.title} onClick={() => setMulticamPanel(multicamPanel ? null : (groupAt(useUi.getState().playhead)?.id ?? Object.keys(multicamGroups ?? {})[0] ?? null))}>🎥 {t.multicam.button}</button>}
+        <Popover label={`⚙ ${t.view.button}`} title={t.view.previewTitle} align="right" up>
+          <div className="form-grid compact">
+            <label>{t.view.quality}</label>
+            <select value={view.previewQuality} onChange={(e) => updateView({ previewQuality: e.target.value as 'auto' })}>
+              <option value="auto">{t.view.qualityAuto}</option><option value="full">{t.view.qualityFull}</option>
+              <option value="half">{t.view.qualityHalf}</option><option value="quarter">{t.view.qualityQuarter}</option>
+            </select>
+            <label>{t.view.guides}</label>
+            <select value={view.previewGuides} onChange={(e) => updateView({ previewGuides: e.target.value as 'none' })}>
+              <option value="none">{t.view.guidesNone}</option><option value="thirds">{t.view.guidesThirds}</option>
+              <option value="safe">{t.view.guidesSafe}</option><option value="both">{t.view.guidesBoth}</option>
+            </select>
+            <label>{t.view.frame}</label>
+            <select value={view.selectionFrame} onChange={(e) => updateView({ selectionFrame: e.target.value as 'hover' })}>
+              <option value="always">{t.view.frameAlways}</option><option value="hover">{t.view.frameHover}</option><option value="never">{t.view.frameNever}</option>
+            </select>
+            <label>{t.view.background}</label>
+            <select value={view.previewBackground} onChange={(e) => updateView({ previewBackground: e.target.value as 'black' })}>
+              <option value="black">{t.view.bgBlack}</option><option value="checker">{t.view.bgChecker}</option>
+            </select>
+          </div>
+          <div className="hint">{t.view.qualityHint}</div>
+          <div className="popover-title" style={{ marginTop: 4 }}>{t.view.panels}</div>
+          <label className="toggle"><input type="checkbox" checked={view.leftWidth > 0} onChange={(e) => updateView({ leftWidth: e.target.checked ? 300 : 0 })} /> {t.view.showLibrary}</label>
+          <label className="toggle"><input type="checkbox" checked={view.rightWidth > 0} onChange={(e) => updateView({ rightWidth: e.target.checked ? 300 : 0 })} /> {t.view.showInspector}</label>
+          <button className="btn sm" onClick={() => updateView({ leftWidth: 300, rightWidth: 300, timelineHeight: 300 })}>{t.view.resetLayout}</button>
+        </Popover>
         <button className={`btn icon ghost${loop ? ' active' : ''}`} title={t.preview.loop} onClick={() => setLoop(!loop)}><IconLoop /></button>
         <span className="timecode dim">{formatTime(duration, settings.fps)}</span>
       </div>

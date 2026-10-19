@@ -548,7 +548,29 @@ export interface AppInfo {
   isPackaged: boolean;
 }
 
+/** Ansicht: Größe der Bereiche, Vorschau- und Timeline-Einstellungen (werden gemerkt). */
+export interface ViewSettings {
+  leftWidth: number;          // Mediathek (0 = ausgeblendet)
+  rightWidth: number;         // Inspektor (0 = ausgeblendet)
+  timelineHeight: number;
+  previewQuality: 'auto' | 'full' | 'half' | 'quarter';
+  previewGuides: 'none' | 'thirds' | 'safe' | 'both';
+  selectionFrame: 'always' | 'hover' | 'never';
+  previewBackground: 'black' | 'checker';
+  trackSize: 'small' | 'medium' | 'large';
+  thumbnails: boolean;
+  waveforms: boolean;
+  followPlayhead: boolean;    // Timeline scrollt beim Abspielen mit
+}
+
+export const DEFAULT_VIEW: ViewSettings = {
+  leftWidth: 300, rightWidth: 300, timelineHeight: 300,
+  previewQuality: 'auto', previewGuides: 'none', selectionFrame: 'hover', previewBackground: 'black',
+  trackSize: 'medium', thumbnails: true, waveforms: true, followPlayhead: true,
+};
+
 export interface Settings {
+  view?: Partial<ViewSettings>;
   cloud?: CloudSettings;
   translateUrl?: string;      // eigener LibreTranslate-Server (optional)
   translateKey?: string;

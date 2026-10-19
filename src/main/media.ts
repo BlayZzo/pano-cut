@@ -154,13 +154,25 @@ export async function prepareMedia(item: MediaItem, update: MediaUpdateFn, proxy
     const stitched = needsStitching(work.stitch);
     let visualSource = work.path;
     if (stitched && work.stitch) {
+      if (!heavy) {
+        // Schnell: erst ein Rohbild als Vorschaubild – das Zusammensetzen (dauert) folgt im Hintergrund
+        const done = path.join(dir, 'thumb.jpg');
+        const raw = path.join(dir, 'thumb_raw.jpg');
+        if (!fileExists(done) && !fileExists(raw)) {
+          const at = Math.min(Math.max(0, dur * 0.1), 3);
+          await runFfmpeg(['-ss', at.toFixed(3), '-i', work.path, '-map', '0:v:0', '-vf', 'scale=320:-2', '-frames:v', '1', '-q:v', '4', raw], { lowPriority: true });
+        }
+        work.thumb = fileExists(done) ? done : raw;
+        emit();
+        return;
+      }
       const proxy = await buildProxy(work, dir, Math.max(proxyHeight, PANO_PROXY_HEIGHT), emit);
       work.proxy = proxy;
       visualSource = proxy;
       emit();
     }
 
-    if (quick) {
+    if (quick || stitched) {
     const thumb = path.join(dir, 'thumb.jpg');
     if (!fileExists(thumb)) {
       const at = Math.min(Math.max(0, dur * 0.1), 3);

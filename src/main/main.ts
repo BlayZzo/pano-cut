@@ -219,16 +219,18 @@ ipcMain.handle(IPC.selectMediaFiles, async () => {
 });
 
 ipcMain.handle(IPC.importMedia, async (_e, paths: string[]) => {
-  const items: MediaItem[] = [];
-  for (const p of paths) {
-    if (!mediaTypeFor(p)) continue;
-    try {
-      items.push(await probeMedia(p));
-    } catch (err) {
-      log.warn('Import fehlgeschlagen', p, err);
+  // Mehrere Dateien gleichzeitig untersuchen (je Datei nur ein kurzer Blick in den Dateikopf)
+  const list = paths.filter((p) => mediaTypeFor(p));
+  const results: Array<MediaItem | null> = new Array(list.length).fill(null);
+  let next = 0;
+  const worker = async () => {
+    while (next < list.length) {
+      const i = next++;
+      try { results[i] = await probeMedia(list[i]); } catch (err) { log.warn('Import fehlgeschlagen', list[i], err); }
     }
-  }
-  return items;
+  };
+  await Promise.all(Array.from({ length: Math.min(4, list.length) }, worker));
+  return results.filter((x): x is MediaItem => !!x);
 });
 
 // Vorbereitung in zwei Warteschlangen: zuerst für alle Dateien die schnellen Vorschaubilder/Wellenformen,

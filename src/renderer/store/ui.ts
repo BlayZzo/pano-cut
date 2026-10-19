@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import type { AppInfo, ExportProgress, Settings, UpdateStatus } from '@shared/types';
-import { DEFAULT_SETTINGS } from '@shared/types';
+import type { AppInfo, ExportProgress, Settings, UpdateStatus, ViewSettings } from '@shared/types';
+import { DEFAULT_SETTINGS, DEFAULT_VIEW } from '@shared/types';
 
 export interface DragState {
   kind: 'move' | 'trimStart' | 'trimEnd';
@@ -84,6 +84,10 @@ export interface UiState {
   bumpHistory(): void;
 }
 
+/** Timeline-Zoom in Pixel pro Sekunde: 0,2 = gut 2 Stunden auf einem Bildschirm, 2000 = einzelne Bilder. */
+export const ZOOM_MIN = 0.2;
+export const ZOOM_MAX = 2000;
+
 let toastId = 0;
 
 export const useUi = create<UiState>()((set, get) => ({
@@ -126,7 +130,7 @@ export const useUi = create<UiState>()((set, get) => ({
   setPlayhead: (t) => set({ playhead: Math.max(0, t) }),
   setPlaying: (playing) => set({ playing }),
   setLoop: (loop) => set({ loop }),
-  setZoom: (zoom) => set({ zoom: Math.min(2000, Math.max(4, zoom)) }),
+  setZoom: (zoom) => set({ zoom: Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom)) }),
   setScrollX: (scrollX) => set({ scrollX: Math.max(0, scrollX) }),
   setSnapping: (snapping) => set({ snapping }),
   setDrag: (drag) => set({ drag }),
@@ -161,4 +165,20 @@ export const useUi = create<UiState>()((set, get) => ({
  */
 export function usePlayheadCoarse(step = 0.5, live = false): number {
   return useUi((s) => (s.playing && !live ? Math.floor(s.playhead / step) * step : s.playhead));
+}
+
+/** Ansicht-Einstellungen mit Standardwerten. */
+export function useView(): ViewSettings {
+  const v = useUi((s) => s.settings.view);
+  return { ...DEFAULT_VIEW, ...v };
+}
+export function getView(): ViewSettings {
+  return { ...DEFAULT_VIEW, ...useUi.getState().settings.view };
+}
+/** Ansicht ändern (sofort sichtbar, gespeichert). `persist: false` z. B. während eines Ziehvorgangs. */
+export function updateView(patch: Partial<ViewSettings>, persist = true): void {
+  const st = useUi.getState();
+  const view = { ...st.settings.view, ...patch };
+  st.setSettings({ ...st.settings, view });
+  if (persist) void window.panocut.setSettings({ view });
 }
