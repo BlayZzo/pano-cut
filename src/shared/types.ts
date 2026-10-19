@@ -82,11 +82,14 @@ export type TransitionType =
   | 'wipeleft' | 'wiperight' | 'wipeup' | 'wipedown'
   | 'slideleft' | 'slideright' | 'slideup' | 'slidedown'
   | 'circleopen' | 'circleclose' | 'smoothleft' | 'smoothright'
-  | 'zoomin' | 'pixelize' | 'radial' | 'hblur';
+  | 'zoomin' | 'pixelize' | 'radial' | 'hblur'
+  // dynamisch (mit Stärke): shared/transitions.ts
+  | 'zoomthrough' | 'whipleft' | 'whipright' | 'whipup' | 'whipdown' | 'spin' | 'flash' | 'shake' | 'glitch';
 
 export interface Transition {
   type: TransitionType;
   duration: number;  // Sekunden
+  intensity?: number; // Stärke 0..2 (dynamische Übergänge), Standard 1
 }
 
 export type TitleAnimation = 'none' | 'fade' | 'slideup' | 'typewriter';

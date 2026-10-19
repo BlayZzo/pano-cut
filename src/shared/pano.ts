@@ -134,10 +134,22 @@ export const TRANSITIONS: TransitionDef[] = [
   { type: 'zoomin', name: 'Zoom', group: 'Effekt' },
   { type: 'pixelize', name: 'Pixel', group: 'Effekt' },
   { type: 'hblur', name: 'Unschärfe', group: 'Effekt' },
+  { type: 'zoomthrough', name: 'Zoom-Durchflug', group: 'Dynamisch' },
+  { type: 'whipleft', name: 'Wisch-Schwenk ←', group: 'Dynamisch' },
+  { type: 'whipright', name: 'Wisch-Schwenk →', group: 'Dynamisch' },
+  { type: 'whipup', name: 'Wisch-Schwenk ↑', group: 'Dynamisch' },
+  { type: 'whipdown', name: 'Wisch-Schwenk ↓', group: 'Dynamisch' },
+  { type: 'spin', name: 'Drehung', group: 'Dynamisch' },
+  { type: 'flash', name: 'Blitz', group: 'Dynamisch' },
+  { type: 'shake', name: 'Wackeln', group: 'Dynamisch' },
+  { type: 'glitch', name: 'Glitch', group: 'Dynamisch' },
 ];
 
+const SHORT_TRANSITIONS = new Set<TransitionType>(['whipleft', 'whipright', 'whipup', 'whipdown', 'flash', 'shake', 'glitch', 'zoomthrough', 'spin']);
+
 export function defaultTransition(type: TransitionType = 'fade'): Transition {
-  return { type, duration: 1 };
+  // Dynamische Übergänge wirken kurz am besten
+  return SHORT_TRANSITIONS.has(type) ? { type, duration: 0.6, intensity: 1 } : { type, duration: 1 };
 }
 
 // ---------- Titel ----------

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import type { Clip, MediaItem, SubtitleSegment, TransitionType, WhisperModel, WhisperProgress } from '@shared/types';
 import { clipDuration, clipEnd, clipsOnTrack, formatTime, makeId, sourceTimeAt } from '@shared/timeline';
 import { TRANSITIONS, defaultSubtitleStyle, defaultTransition } from '@shared/pano';
+import { isDynamicTransition } from '@shared/transitions';
 import { beginTransaction, endTransaction, useProject } from '../store/project';
 import { useUi } from '../store/ui';
 import { t } from '../i18n/de';
@@ -22,9 +23,18 @@ export function InspectorTransition({ clip }: { clip: Clip }): React.ReactElemen
   return (
     <Section title={t.transition.section} badge={tr ? TRANSITIONS.find((x) => x.type === tr.type)?.name : undefined}>
       {!prev && <div className="hint warn">{t.transition.needsNeighbor}</div>}
-      <SelectField label={t.transition.type} value={tr?.type ?? ''} onChange={(v) => setTransition(clip.id, v ? { ...(tr ?? defaultTransition()), type: v as TransitionType } : undefined)}
+      <SelectField label={t.transition.type} value={tr?.type ?? ''} onChange={(v) => {
+        if (!v) { setTransition(clip.id, undefined); return; }
+        const def = defaultTransition(v as TransitionType);
+        // Beim Wechsel zwischen normalen und dynamischen Übergängen die passende Standard-Dauer nehmen
+        const keepDur = tr && isDynamicTransition(tr.type) === isDynamicTransition(def.type);
+        setTransition(clip.id, { ...def, duration: keepDur ? tr!.duration : def.duration, intensity: tr?.intensity ?? def.intensity });
+      }}
         options={[{ value: '', label: t.transition.none }, ...TRANSITIONS.map((x) => ({ value: x.type, label: `${x.name} (${x.group})` }))]} />
       {tr && <Slider label={t.transition.duration} value={tr.duration} min={0.2} max={maxDur} step={0.1} unit=" s" onChange={(v) => setTransition(clip.id, { ...tr, duration: v })} />}
+      {tr && isDynamicTransition(tr.type) && (
+        <Slider label={t.transition.intensity} value={tr.intensity ?? 1} min={0.1} max={2} step={0.05} display={(v) => `${Math.round(v * 100)} %`} onChange={(v) => setTransition(clip.id, { ...tr, intensity: v })} />
+      )}
       <div className="hint">{t.transition.hint}</div>
     </Section>
   );

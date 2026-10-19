@@ -1,5 +1,6 @@
-import React from 'react';
-import type { Clip, MediaItem, PanoMode } from '@shared/types';
+import React, { useState } from 'react';
+import type { Clip, MediaItem, PanoMode, PanoSettings } from '@shared/types';
+import { applyCameraMove, CAMERA_MOVES, type CameraMove } from '@shared/cameraMoves';
 import { clipDuration, formatTime } from '@shared/timeline';
 import { defaultPano, defaultStitch, keyframeAt, panoViewAt, removeKeyframe, upsertKeyframe } from '@shared/pano';
 import { beginTransaction, endTransaction, useProject } from '../store/project';
@@ -7,6 +8,44 @@ import { useUi } from '../store/ui';
 import { fmt, t } from '../i18n/de';
 import { Section, SelectField, Slider, Toggle } from './InspectorBits';
 import { seekTo } from '../engine/instance';
+
+let lastMove: { move: CameraMove; strength: number } = { move: 'orbit', strength: 1 };
+
+/** Fertige Kamerafahrten (Rundum-Schwenk, Planet, Peitsche …) ab dem Abspielkopf einsetzen. */
+function CameraMoveFields({ clip, pano, local }: { clip: Clip; pano: PanoSettings; local: number }): React.ReactElement {
+  const setPano = useProject((s) => s.setPano);
+  const [move, setMove] = useState<CameraMove>(lastMove.move);
+  const def = CAMERA_MOVES.find((m) => m.id === move)!;
+  const dur = clipDuration(clip);
+  const [duration, setDuration] = useState(def.duration);
+  const [strength, setStrength] = useState(lastMove.strength);
+  const maxDur = Math.max(0.3, Math.min(20, dur - Math.min(local, dur - 0.3)));
+  const apply = () => {
+    lastMove = { move, strength };
+    setPano(clip.id, applyCameraMove(pano, move, local, Math.min(duration, maxDur), strength, dur));
+    useUi.getState().toast(fmt(t.pano.moveDone, { name: def.name }), 'success');
+  };
+  return (
+    <div className="music-auto">
+      <div className="music-auto-title">{t.pano.moveTitle}</div>
+      <SelectField label={t.pano.move} value={move} onChange={(v) => { const m = v as CameraMove; setMove(m); setDuration(CAMERA_MOVES.find((x) => x.id === m)!.duration); }}
+        options={CAMERA_MOVES.map((m) => ({ value: m.id, label: m.name }))} />
+      <div className="hint">{def.hint}</div>
+      <div className="field">
+        <label>{t.pano.moveDuration}</label>
+        <input type="range" min={0.3} max={maxDur} step={0.1} value={Math.min(duration, maxDur)} onChange={(e) => setDuration(parseFloat(e.target.value))} />
+        <span className="num-label">{Math.min(duration, maxDur).toFixed(1)} s</span>
+      </div>
+      <div className="field">
+        <label>{t.pano.moveStrength}</label>
+        <input type="range" min={0.3} max={2} step={0.05} value={strength} onChange={(e) => setStrength(parseFloat(e.target.value))} />
+        <span className="num-label">{Math.round(strength * 100)} %</span>
+      </div>
+      <button className="btn primary" style={{ width: '100%' }} onClick={apply}>{t.pano.moveApply}</button>
+      <div className="hint">{t.pano.moveHint}</div>
+    </div>
+  );
+}
 
 /** 360°-Abschnitt: Ansicht, Keyframes, Stitching. */
 export function InspectorPano({ clip, media }: { clip: Clip; media: MediaItem }): React.ReactElement | null {
@@ -62,6 +101,7 @@ export function InspectorPano({ clip, media }: { clip: Clip; media: MediaItem })
             <Toggle label={t.pano.smooth} checked={pano.smooth} onChange={(v) => setPano(clip.id, { ...pano, smooth: v })} />
           </>
         )}
+        <CameraMoveFields clip={clip} pano={pano} local={local} />
       </Section>
       {media.stitch && media.stitch.mode !== 'equirect' && (
         <Section title={t.pano.stitch} defaultOpen={false}>

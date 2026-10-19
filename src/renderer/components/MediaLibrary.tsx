@@ -162,6 +162,22 @@ function TransitionIcon({ type }: { type: string }): React.ReactElement {
     inner = <><rect x="0" y="0" width="56" height="32" fill={a} /><rect x={type === 'slideleft' ? 30 : type === 'slideright' ? -4 : 8} y={type === 'slideup' ? 18 : type === 'slidedown' ? -6 : 4} width="30" height="24" fill={b} rx="2" /></>;
   } else if (type.startsWith('circle') || type === 'radial') {
     inner = <><rect x="0" y="0" width="56" height="32" fill={type === 'circleclose' ? b : a} /><circle cx="28" cy="16" r="10" fill={type === 'circleclose' ? a : b} /></>;
+  } else if (type === 'zoomthrough') {
+    inner = <><rect x="0" y="0" width="56" height="32" fill={a} /><rect x="10" y="6" width="36" height="20" fill="none" stroke={b} strokeWidth="2" /><rect x="20" y="11" width="16" height="10" fill={b} /></>;
+  } else if (type.startsWith('whip')) {
+    const vert = type === 'whipup' || type === 'whipdown';
+    const lines = [6, 12, 18, 24].map((p, i) => vert
+      ? <line key={i} x1={p * 2} y1="2" x2={p * 2} y2="30" stroke={b} strokeWidth="2" strokeOpacity={0.4 + i * 0.15} />
+      : <line key={i} x1="4" y1={p + 1} x2="52" y2={p + 1} stroke={b} strokeWidth="2" strokeOpacity={0.4 + i * 0.15} />);
+    inner = <><rect x="0" y="0" width="56" height="32" fill={a} />{lines}</>;
+  } else if (type === 'spin') {
+    inner = <><rect x="0" y="0" width="56" height="32" fill={a} /><rect x="16" y="6" width="24" height="20" fill={b} transform="rotate(30 28 16)" /></>;
+  } else if (type === 'flash') {
+    inner = <><rect x="0" y="0" width="56" height="32" fill={a} /><circle cx="28" cy="16" r="13" fill="#fff" opacity="0.9" /><circle cx="28" cy="16" r="7" fill="#fff" /></>;
+  } else if (type === 'shake') {
+    inner = <><rect x="0" y="0" width="56" height="32" fill={a} /><rect x="12" y="7" width="30" height="18" fill={b} opacity="0.5" /><rect x="16" y="9" width="30" height="18" fill={b} /></>;
+  } else if (type === 'glitch') {
+    inner = <><rect x="0" y="0" width="56" height="32" fill={a} /><rect x="10" y="6" width="34" height="20" fill="#ff3b6b" opacity="0.8" /><rect x="14" y="6" width="34" height="20" fill="#3bd5ff" opacity="0.8" /><rect x="12" y="13" width="34" height="5" fill={b} /></>;
   } else if (type === 'fadeblack' || type === 'fadewhite') {
     inner = <><rect x="0" y="0" width="28" height="32" fill={a} /><rect x="28" y="0" width="28" height="32" fill={type === 'fadeblack' ? '#000' : '#fff'} /></>;
   } else {

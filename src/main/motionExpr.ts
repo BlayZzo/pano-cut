@@ -28,7 +28,8 @@ function piecewise(kfs: MotionKeyframe[], key: keyof Omit<MotionKeyframe, 't'>, 
  * Das Eingangsbild ist eine Fläche in Ausgabegröße (W×H), die um ihre Mitte bewegt wird.
  */
 export function perspectiveCorners(m: Motion, base: Transform, W: number, H: number, fps: number, offset: number, border = 0): string[] {
-  const T = `(in/${f(fps)}+${f(offset)})`;
+  // `in` zählt im perspective-Filter ab 1 (erstes Bild = 1) → Bild k liegt bei (in−1)/fps
+  const T = `((in-1)/${f(fps)}+${f(offset)})`;
   const kfs = m.keyframes.length ? m.keyframes : [{ t: 0, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }];
   let X = `(${f(base.x)}+${piecewise(kfs, 'x', m.smooth, T)})`;
   let Y = `(${f(base.y)}+${piecewise(kfs, 'y', m.smooth, T)})`;
@@ -57,6 +58,54 @@ export function perspectiveCorners(m: Motion, base: Transform, W: number, H: num
   ];
   const hw = W / 2 + border, hh = H / 2 + border;
   return [...corner(-hw, -hh), ...corner(hw, -hh), ...corner(-hw, hh), ...corner(hw, hh)];
+}
+
+/** Ecken (x0,y0 … x3,y3) einer Übergangs-Ebene für `perspective=sense=destination` – wie composeLayer in der Vorschau. */
+export function dynCorners(l: { x: number; y: number; scale: number; rotation: number }, W: number, H: number, border: number): number[] {
+  const cx = W / 2 + border + (l.x / 100) * W;
+  const cy = H / 2 + border + (l.y / 100) * H;
+  const r = (l.rotation * Math.PI) / 180;
+  const c = Math.cos(r), s = Math.sin(r);
+  const hw = W / 2 + border, hh = H / 2 + border;
+  const out: number[] = [];
+  for (const [px, py] of [[-hw, -hh], [hw, -hh], [-hw, hh], [hw, hh]]) {
+    out.push(cx + l.scale * (px * c - py * s), cy + l.scale * (px * s + py * c));
+  }
+  return out;
+}
+
+/**
+ * Werte pro Bild (Index = Bildnummer `in`) als stückweise lineare Funktion. Stützstellen, die sich linear
+ * vorhersagen lassen (Abweichung < tol), werden weggelassen, damit der Ausdruck kurz bleibt.
+ */
+export function framePiecewise(vals: number[], tol: number): string {
+  if (vals.length === 0) return '0';
+  if (vals.every((v) => Math.abs(v - vals[0]) < tol)) return f(vals[0]);
+  const keep = [0];
+  let a = 0;
+  while (a < vals.length - 1) {
+    let b = a + 1;
+    // so weit wie möglich gehen, solange alle Zwischenwerte auf der Geraden liegen
+    while (b + 1 < vals.length) {
+      const nb = b + 1;
+      let ok = true;
+      for (let k = a + 1; k < nb; k++) {
+        const lin = vals[a] + ((vals[nb] - vals[a]) * (k - a)) / (nb - a);
+        if (Math.abs(lin - vals[k]) > tol) { ok = false; break; }
+      }
+      if (!ok) break;
+      b = nb;
+    }
+    keep.push(b);
+    a = b;
+  }
+  let expr = f(vals[keep[keep.length - 1]]);
+  for (let i = keep.length - 2; i >= 0; i--) {
+    const ka = keep[i], kb = keep[i + 1];
+    // `in` beginnt bei 1 → Bildindex = in−1
+    expr = `if(lt(in,${kb + 1}),${f(vals[ka])}+(${f(vals[kb] - vals[ka])})*(in-${ka + 1})/${kb - ka},${expr})`;
+  }
+  return expr;
 }
 
 /** sendcmd-Zeilen für eine Deckkraft-Animation (colorchannelmixer aa). Zeiten relativ zum Kettenanfang. */

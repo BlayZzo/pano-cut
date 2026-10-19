@@ -4,6 +4,7 @@ import { clipDuration, clipEnd, clipsOnTrack, makeId, projectDuration } from '@s
 import { autoEnhance, frameStats, type FrameStats } from '@shared/color';
 import { EFFECT_BLOCKS, applyUserEffect, userEffectFromClip } from '@shared/effects';
 import { TITLE_TEMPLATES, defaultTitle, defaultTransition } from '@shared/pano';
+import { isDynamicTransition } from '@shared/transitions';
 import { beginTransaction, clearHistory, endTransaction, isDirty, redo, setDirty, undo, untracked, useProject } from './store/project';
 import { useUi } from './store/ui';
 import { engine, seekTo, stopPlayback } from './engine/instance';
@@ -87,7 +88,11 @@ export function applyTransitionToClip(clipId: string, type: TransitionType): boo
     useUi.getState().toast(t.transition.needsNeighbor, 'error');
     return false;
   }
-  store.setTransition(clipId, { ...(clip.transition ?? defaultTransition()), type });
+  // Dynamische Übergänge bringen ihre eigene (kürzere) Dauer und Stärke mit
+  const def = defaultTransition(type);
+  const old = clip.transition;
+  const sameKind = old && isDynamicTransition(old.type) === isDynamicTransition(type);
+  store.setTransition(clipId, { ...def, duration: sameKind ? old!.duration : def.duration, intensity: old?.intensity ?? def.intensity });
   useUi.getState().select([clipId]);
   return true;
 }

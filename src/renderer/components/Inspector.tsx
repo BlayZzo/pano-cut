@@ -12,6 +12,7 @@ import { InspectorChroma, InspectorObjects } from './InspectorAi';
 import { DuckingFields, InspectorColor, InspectorFx, InspectorMotion, SaveEffectButton } from './InspectorLook';
 import { InspectorLayer, InspectorVfx } from './InspectorLayer';
 import { InspectorMusic } from './InspectorMusic';
+import { SpeedRampFields } from './InspectorRamp';
 
 export function Inspector(): React.ReactElement {
   const selection = useUi((s) => s.selection);
@@ -94,6 +95,7 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
             {t.inspector.reverse}
           </label>
           {clip.reverse && media?.type === 'video' && !media.proxyReversed && <div className="hint warn">{t.inspector.reversedProxyHint}</div>}
+          {count === 1 && media?.type === 'video' && !media.vfx && <SpeedRampFields clip={clip} />}
         </Section>
       )}
 

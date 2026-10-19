@@ -2,7 +2,8 @@ import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
 import log from 'electron-log';
-import type { Attachment, Clip, ExportOptions, ExportProgress, MediaItem, Project, TitleStyle, Track } from '@shared/types';
+import type { Attachment, Clip, ExportOptions, ExportProgress, MediaItem, Project, TitleStyle, Track, TransitionType } from '@shared/types';
+import { dynTransitionAt, isDynamicTransition, type DynamicTransition, type DynLayer } from '@shared/transitions';
 import { clipDuration, clipEnd, projectDuration, sourceTimeAt, videoTracksBottomUp } from '@shared/timeline';
 import { fontDef, panoViewAt, stereographicVfov, titleAnimationAt, verticalFov } from '@shared/pano';
 import { availableEncoders, availableFilters, FfmpegError, probeFile, runFfmpeg } from './ffmpeg';
@@ -14,7 +15,7 @@ import { maskChain, writeMaskList } from './objects';
 import { blendDef, hasShadow, shadowPixels } from '@shared/layers';
 import { bakeGradeLut, exposureGainAt, gradeForLut, gradeKey, hasExposureCurve, isNeutralGrade, lutToCube, parseCube } from '@shared/color';
 import { hasGeometryMotion, hasOpacityMotion } from '@shared/effects';
-import { exposureCommands, opacityCommands, perspectiveCorners } from './motionExpr';
+import { dynCorners, exposureCommands, framePiecewise, opacityCommands, perspectiveCorners } from './motionExpr';
 import { trackBoxAt } from '@shared/ai';
 
 type ProgressFn = (p: Omit<ExportProgress, 'jobId'>) => void;
@@ -44,7 +45,8 @@ interface Segment {
 interface TransitionSeg {
   a: Segment;
   b: Segment;
-  type: string;
+  type: TransitionType;
+  intensity: number;
   duration: number;
   cut: number;               // Schnittpunkt (relativ zum Exportbereich)
   inputA: number;            // zusätzliche Eingaben (Fenster um den Schnitt)
@@ -301,7 +303,7 @@ export class ExportJob {
         srcB = b.isImage ? 0 : sourceTimeAt(b.clip, cut + r.start) - half * b.clip.speed;
         if (srcB < 0) { padB = -srcB / b.clip.speed; srcB = 0; }
       }
-      out.push({ a, b, type: tr.type, duration: d, cut, inputA: -1, inputB: -1, srcA: Math.max(0, srcA), padA, srcB: Math.max(0, srcB), padB });
+      out.push({ a, b, type: tr.type, intensity: tr.intensity ?? 1, duration: d, cut, inputA: -1, inputB: -1, srcA: Math.max(0, srcA), padA, srcB: Math.max(0, srcB), padB });
     }
     return out;
   }
@@ -484,6 +486,82 @@ export class ExportJob {
       post.push(`colorchannelmixer=aa=${fnum(Math.max(0, c.opacity))}`);
     }
     return { pre, color, post, fullCanvas: geo };
+  }
+
+  /**
+   * Dynamischer Übergang – Spiegel von PlaybackEngine.composeLayer: pro Bild Bewegung (perspective),
+   * Unschärfe (gblur / dblur), Farbversatz (rgbashift) und Deckkraft über sendcmd, weißer Blitz als Fläche.
+   * Eingänge: zwei Fenster in Ausgabegröße (Zeit ab 0, Dauer d). Rückgabe: Label des gemischten Fensters.
+   */
+  private dynamicTransition(type: DynamicTransition, intensity: number, d: number, la: string, lb: string, vi: number, filters: string[]): string {
+    const { width: W, height: H, fps } = this.options;
+    const n = Math.max(2, Math.round(d * fps) + 1);
+    const frames = Array.from({ length: n }, (_, k) => dynTransitionAt(type, intensity, Math.min(1, k / fps / d), d, W / H));
+    const B = 4;
+    const iv = (k: number) => `${fnum(Math.max(0, (k - 0.5) / fps))}-${fnum((k + 0.5) / fps)}`;
+    const layer = (inLbl: string, which: 'a' | 'b'): string => {
+      const L: DynLayer[] = frames.map((f) => f[which]);
+      const id = `dt${which}${vi}`;
+      const head: string[] = ['format=rgba'];
+      const chain: string[] = [];
+      const cmds: string[][] = L.map(() => []);
+      // Bewegung: Ecken pro Bild als stückweise lineare Funktion der Bildnummer
+      const moving = L.some((l) => Math.abs(l.x) + Math.abs(l.y) + Math.abs(l.rotation) > 1e-4 || Math.abs(l.scale - 1) > 1e-4);
+      if (moving) {
+        const corners = L.map((l) => dynCorners(l, W, H, B));
+        const e = (ci: number) => framePiecewise(corners.map((c) => c[ci]), 0.05);
+        chain.push(`pad=${W + 2 * B}:${H + 2 * B}:${B}:${B}:color=black@0`, 'format=yuva444p');
+        chain.push(`perspective=x0='${e(0)}':y0='${e(1)}':x1='${e(2)}':y1='${e(3)}':x2='${e(4)}':y2='${e(5)}':x3='${e(6)}':y3='${e(7)}':sense=destination:eval=frame:interpolation=linear`);
+        chain.push(`crop=${W}:${H}:${B}:${B}`, 'format=rgba');
+      }
+      // Unschärfe (Bewegungsunschärfe in eine Richtung oder rundum); dblur-Radius ≈ Standardabweichung / 1,35
+      const sig = L.map((l) => (l.blur / 100) * H);
+      if (sig.some((s) => s > 0.3)) {
+        const dir = L.find((l) => l.blurDir !== null)?.blurDir ?? null;
+        if (dir !== null && this.filters.has('dblur')) {
+          chain.push(`dblur@${id}b=angle=${fnum(dir)}:radius=0`);
+          sig.forEach((s, k) => cmds[k].push(`dblur@${id}b radius ${fnum(s > 0.3 ? s / 1.35 : 0)}`));
+        } else {
+          chain.push(`gblur@${id}b=sigma=0`);
+          sig.forEach((s, k) => cmds[k].push(`gblur@${id}b sigma ${fnum(s > 0.3 ? s : 0)}`));
+        }
+      }
+      // Glitch: Farbkanäle versetzen
+      if (L.some((l) => Math.abs(l.shift) > 1e-3)) {
+        chain.push(`rgbashift@${id}s=rh=0:bh=0`);
+        L.forEach((l, k) => {
+          const px = Math.max(-255, Math.min(255, Math.round((l.shift / 100) * W)));
+          cmds[k].push(`rgbashift@${id}s rh ${px}`, `rgbashift@${id}s bh ${-px}`);
+        });
+      }
+      // Deckkraft (Überblendung)
+      if (L.some((l) => l.alpha < 0.999)) {
+        chain.push(`colorchannelmixer@${id}a=aa=${fnum(L[0].alpha)}`);
+        L.forEach((l, k) => cmds[k].push(`colorchannelmixer@${id}a aa ${fnum(Math.max(0, Math.min(1, l.alpha)))}`));
+      }
+      if (cmds.some((c) => c.length)) {
+        const file = this.tmpFile(`trans_${id}.txt`);
+        fs.writeFileSync(file, cmds.map((c, k) => (c.length ? `${iv(k)} ${c.join(', ')};` : '')).filter(Boolean).join('\n') + '\n');
+        head.push(`sendcmd=f='${escapeFilterPath(file)}'`);
+      }
+      const out = `${id}o`;
+      filters.push(`[${inLbl}]${[...head, ...chain, 'format=rgba'].join(',')}[${out}]`);
+      return out;
+    };
+    const A = layer(la, 'a');
+    const Bl = layer(lb, 'b');
+    let mixed = `dtm${vi}`;
+    filters.push(`[${A}][${Bl}]overlay=x=0:y=0:format=rgb:eof_action=pass[${mixed}]`);
+    if (frames.some((f) => f.flash > 0.002)) {
+      const id = `dtf${vi}`;
+      const file = this.tmpFile(`trans_${id}.txt`);
+      fs.writeFileSync(file, frames.map((f, k) => `${iv(k)} colorchannelmixer@${id} aa ${fnum(Math.max(0, Math.min(1, f.flash)))};`).join('\n') + '\n');
+      filters.push(`color=c=white:s=${W}x${H}:r=${fps}:d=${fnum(d)},format=rgba,sendcmd=f='${escapeFilterPath(file)}',colorchannelmixer@${id}=aa=0[${id}]`);
+      filters.push(`[${mixed}][${id}]overlay=x=0:y=0:format=rgb:eof_action=pass[${id}m]`);
+      mixed = `${id}m`;
+    }
+    filters.push(`[${mixed}]format=yuva420p[${mixed}y]`);
+    return `${mixed}y`;
   }
 
   /** Farbeinstellung als .cube-Datei (zwischengespeichert pro Einstellung). */
@@ -892,7 +970,12 @@ export class ExportJob {
         const la = make(tr.a, tr.inputA, tr.padA, 'a');
         const lb = make(tr.b, tr.inputB, tr.padB, 'b');
         const xf = `xf${vi}`;
-        filters.push(`[${la}][${lb}]xfade=transition=${tr.type}:duration=${fnum(d)}:offset=0,setpts=PTS+${fnum(wStart)}/TB[${xf}]`);
+        if (isDynamicTransition(tr.type)) {
+          const mixed = this.dynamicTransition(tr.type, tr.intensity, d, la, lb, vi, filters);
+          filters.push(`[${mixed}]setpts=PTS+${fnum(wStart)}/TB[${xf}]`);
+        } else {
+          filters.push(`[${la}][${lb}]xfade=transition=${tr.type}:duration=${fnum(d)}:offset=0,setpts=PTS+${fnum(wStart)}/TB[${xf}]`);
+        }
         const outT = `ovt${vi}`;
         filters.push(`[${last}][${xf}]overlay=x=0:y=0:eof_action=pass:enable='between(t,${fnum(wStart)},${fnum(wStart + d)})'[${outT}]`);
         last = outT;

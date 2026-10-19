@@ -10,6 +10,7 @@ import { motionAt } from '@shared/effects';
 import { drawStyledText } from './text';
 import { blendDef, hasShadow, shadowPixels } from '@shared/layers';
 import { exposureGainAt, gradeForLut } from '@shared/color';
+import { dynTransitionAt, isDynamicTransition, type DynLayer } from '@shared/transitions';
 
 type MediaEl = HTMLVideoElement | HTMLAudioElement | HTMLImageElement;
 
@@ -74,7 +75,22 @@ function sourceTimeUnclamped(clip: Clip, t: number): number {
   return clip.reverse ? clip.out - local : clip.in + local;
 }
 
-interface ActiveTransition { a: Clip; b: Clip; type: TransitionType; progress: number; duration: number; cut: number }
+interface ActiveTransition { a: Clip; b: Clip; type: TransitionType; progress: number; duration: number; cut: number; intensity: number }
+
+/** Zwischen-Canvas in Bildgröße (für dynamische Übergänge), wiederverwendet. */
+const scratch: HTMLCanvasElement[] = [];
+function scratchCanvas(i: number, W: number, H: number): { c: HTMLCanvasElement; x: CanvasRenderingContext2D } {
+  let c = scratch[i];
+  if (!c) { c = document.createElement('canvas'); scratch[i] = c; }
+  if (c.width !== W || c.height !== H) { c.width = W; c.height = H; }
+  const x = c.getContext('2d')!;
+  x.setTransform(1, 0, 0, 1, 0, 0);
+  x.globalAlpha = 1;
+  x.globalCompositeOperation = 'source-over';
+  x.filter = 'none';
+  x.clearRect(0, 0, W, H);
+  return { c, x };
+}
 
 /**
  * Die Vorschau-Engine: zeichnet die Timeline auf ein Canvas und spielt die Proxy-Dateien
@@ -545,7 +561,7 @@ export class PlaybackEngine {
       const d = Math.min(tr.duration, clipDuration(a), clipDuration(b));
       const start = b.start - d / 2;
       if (t >= start && t < start + d) {
-        return { a, b, type: tr.type, progress: (t - start) / d, duration: d, cut: b.start };
+        return { a, b, type: tr.type, progress: (t - start) / d, duration: d, cut: b.start, intensity: tr.intensity ?? 1 };
       }
     }
     return null;
@@ -563,6 +579,30 @@ export class PlaybackEngine {
       this.drawClip(ctx, slot, clip, media, W, H, { ...extra, localT: t - clip.start });
     };
     const type = tr.type;
+    if (isDynamicTransition(type)) {
+      // Dynamisch: beide Clips einzeln zeichnen, dann bewegt/verwischt übereinanderlegen (wie im Export)
+      const f = dynTransitionAt(type, tr.intensity, p, tr.duration, W / H);
+      const layerOf = (clip: Clip, media: MediaItem | undefined, i: number): HTMLCanvasElement => {
+        const { c, x } = scratchCanvas(i, W, H);
+        if (clip.kind === 'title') this.drawTitle(x, clip, W, H, t);
+        else if (media && media.status !== 'error' && media.type !== 'audio') {
+          const slot = this.getSlot(clip, media);
+          if (!slot.isImage) this.syncMedia(slot, clip, media, track, t, true);
+          this.drawClip(x, slot, clip, media, W, H, { localT: t - clip.start });
+        }
+        return c;
+      };
+      if (f.a.alpha > 0.001) this.composeLayer(ctx, layerOf(a, mediaA, 0), f.a, W, H);
+      if (f.b.alpha > 0.001) this.composeLayer(ctx, layerOf(b, mediaB, 1), f.b, W, H);
+      if (f.flash > 0.002) {
+        ctx.save();
+        ctx.globalAlpha = Math.min(1, f.flash);
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(0, 0, W, H);
+        ctx.restore();
+      }
+      return;
+    }
     const rect = (x: number, y: number, w: number, h: number) => (c: CanvasRenderingContext2D) => { c.beginPath(); c.rect(x, y, w, h); c.clip(); };
     const circle = (r: number, inside: boolean) => (c: CanvasRenderingContext2D) => {
       c.beginPath();
@@ -594,6 +634,51 @@ export class PlaybackEngine {
       case 'zoomin': draw(a, mediaA, {}); draw(b, mediaB, { alpha: p }); break;
       default: draw(a, mediaA, {}); draw(b, mediaB, { alpha: p }); break;
     }
+  }
+
+  /** Eine Übergangs-Ebene bewegt, verwischt und mit Farbversatz auf das Bild legen (Spiegel von exporter.dynamicTransition). */
+  private composeLayer(ctx: CanvasRenderingContext2D, src: HTMLCanvasElement, L: DynLayer, W: number, H: number): void {
+    let img: HTMLCanvasElement = src;
+    const shiftPx = (L.shift / 100) * W;
+    if (Math.abs(shiftPx) >= 0.5) {
+      // Glitch: Rot nach rechts, Blau nach links (wie rgbashift rh/bh)
+      const out = scratchCanvas(3, W, H);
+      out.x.globalCompositeOperation = 'lighter';
+      for (const [color, dx] of [['#ff0000', Math.round(shiftPx)], ['#00ff00', 0], ['#0000ff', -Math.round(shiftPx)]] as const) {
+        const ch = scratchCanvas(4, W, H);
+        ch.x.drawImage(src, 0, 0);
+        ch.x.globalCompositeOperation = 'multiply';
+        ch.x.fillStyle = color;
+        ch.x.fillRect(0, 0, W, H);
+        ch.x.globalCompositeOperation = 'destination-in';
+        ch.x.drawImage(src, 0, 0);
+        out.x.drawImage(ch.c, dx, 0);
+      }
+      img = out.c;
+    }
+    const sigma = (L.blur / 100) * H;
+    const directional = sigma > 0.3 && L.blurDir !== null;
+    const tmp = scratchCanvas(2, W, H);
+    const taps = directional ? 11 : 1;
+    const ang = ((L.blurDir ?? 0) * Math.PI) / 180;
+    let acc = 0;
+    for (let k = 0; k < taps; k++) {
+      const o = taps === 1 ? 0 : ((k / (taps - 1)) * 2 - 1) * 2 * sigma;
+      const w = taps === 1 ? 1 : Math.exp(-0.5 * Math.pow(o / sigma, 2));
+      acc += w;
+      tmp.x.save();
+      tmp.x.globalAlpha = w / acc;   // laufender gewichteter Mittelwert
+      tmp.x.translate(W / 2 + (L.x / 100) * W + o * Math.cos(ang), H / 2 + (L.y / 100) * H + o * Math.sin(ang));
+      tmp.x.rotate((L.rotation * Math.PI) / 180);
+      tmp.x.scale(L.scale, L.scale);
+      tmp.x.drawImage(img, -W / 2, -H / 2, W, H);
+      tmp.x.restore();
+    }
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, Math.min(1, L.alpha));
+    ctx.filter = sigma > 0.3 && !directional ? `blur(${sigma}px)` : 'none';
+    ctx.drawImage(tmp.c, 0, 0);
+    ctx.restore();
   }
 
   render(t: number): void {
