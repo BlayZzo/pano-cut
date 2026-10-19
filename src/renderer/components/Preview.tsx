@@ -11,6 +11,7 @@ import { AiPanel } from './AiPanel';
 import { EffectPanel } from './EffectPanel';
 import { ImagePanel } from './ImagePanel';
 import { MulticamStrip } from './MulticamStrip';
+import { Model3DPanel } from './Model3DPanel';
 import { groupAt } from '../multicamActions';
 import { maskAt, trackActiveAt, trackBoxAt } from '@shared/ai';
 import { forgetMask } from '../engine/playback';
@@ -38,6 +39,8 @@ export function Preview(): React.ReactElement {
   const vfxPanel = useUi((s) => s.vfxPanel);
   const imagePanel = useUi((s) => s.imagePanel);
   const multicamPanel = useUi((s) => s.multicamPanel);
+  const modelPanel = useUi((s) => s.modelPanel);
+  const setModelPanel = useUi((s) => s.setModelPanel);
   const setMulticamPanel = useUi((s) => s.setMulticamPanel);
   const multicamGroups = useProject((s) => s.project.multicam);
   const hasMulticam = !!multicamGroups && Object.keys(multicamGroups).length > 0;
@@ -335,6 +338,7 @@ export function Preview(): React.ReactElement {
         <AiPanel clip={selectedClip} media={selectedMedia} />
         <EffectPanel />
         <ImagePanel />
+        <Model3DPanel />
       </div>
       <MulticamStrip />
       <div className="transport">
@@ -348,9 +352,10 @@ export function Preview(): React.ReactElement {
         <button className="btn icon ghost" title={t.preview.nextFrame} onClick={() => stepFrames(1)}><IconStepFwd /></button>
         <button className="btn icon ghost" title={t.preview.toEnd} onClick={goEnd}><IconSkipFwd /></button>
         <div className="spacer" />
-        <button className={`btn sm${imagePanel ? ' active' : ''}`} title={t.imageAssist.title} onClick={() => { setImagePanel(!imagePanel); if (!imagePanel) setVfxPanel(false); }} style={{ fontWeight: 700 }}>✦ {t.imageAssist.button}</button>
-        <button className={`btn sm${vfxPanel ? ' active' : ''}`} title={t.vfx.title} onClick={() => { setVfxPanel(!vfxPanel); if (!vfxPanel) setImagePanel(false); }} style={{ fontWeight: 700 }}>✦ {t.vfx.button}</button>
+        <button className={`btn sm${imagePanel ? ' active' : ''}`} title={t.imageAssist.title} onClick={() => { setImagePanel(!imagePanel); if (!imagePanel) { setVfxPanel(false); setModelPanel(null); } }} style={{ fontWeight: 700 }}>✦ {t.imageAssist.button}</button>
+        <button className={`btn sm${vfxPanel ? ' active' : ''}`} title={t.vfx.title} onClick={() => { setVfxPanel(!vfxPanel); if (!vfxPanel) { setImagePanel(false); setModelPanel(null); } }} style={{ fontWeight: 700 }}>✦ {t.vfx.button}</button>
         <button className={`btn sm${aiPanel ? ' active' : ''}`} title={t.ai.title} onClick={() => setAiPanel(!aiPanel)} style={{ fontWeight: 700 }}>✦ {t.ai.button}</button>
+        <button className={`btn sm${modelPanel ? ' active' : ''}`} title={t.model3d.title} onClick={() => setModelPanel(modelPanel ? null : {})} style={{ fontWeight: 700 }}>🧊 {t.model3d.button}</button>
         {hasMulticam && <button className={`btn sm${multicamPanel ? ' active' : ''}`} title={t.multicam.title} onClick={() => setMulticamPanel(multicamPanel ? null : (groupAt(useUi.getState().playhead)?.id ?? Object.keys(multicamGroups ?? {})[0] ?? null))}>🎥 {t.multicam.button}</button>}
         <button className={`btn icon ghost${loop ? ' active' : ''}`} title={t.preview.loop} onClick={() => setLoop(!loop)}><IconLoop /></button>
         <span className="timecode dim">{formatTime(duration, settings.fps)}</span>

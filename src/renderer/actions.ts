@@ -5,6 +5,7 @@ import { autoEnhance, frameStats, type FrameStats } from '@shared/color';
 import { EFFECT_BLOCKS, applyUserEffect, userEffectFromClip } from '@shared/effects';
 import { TITLE_TEMPLATES, defaultTitle, defaultTransition } from '@shared/pano';
 import { isDynamicTransition } from '@shared/transitions';
+import { modelFormat } from '@shared/model3d';
 import { beginTransaction, clearHistory, endTransaction, isDirty, redo, setDirty, undo, untracked, useProject } from './store/project';
 import { useUi } from './store/ui';
 import { engine, seekTo, stopPlayback } from './engine/instance';
@@ -20,6 +21,13 @@ export async function importFiles(paths: string[]): Promise<void> {
   if (paths.some((p) => /\.braw$/i.test(p))) {
     useUi.getState().toast(t.toast.braw, 'error');
     paths = paths.filter((p) => !/\.braw$/i.test(p));
+    if (paths.length === 0) return;
+  }
+  // 3D-Modelle öffnen das 3D-Fenster (sie werden dort mit Licht und Schatten zu einer Ebene gerendert)
+  const models = paths.filter((p) => modelFormat(p));
+  if (models.length) {
+    useUi.getState().setModelPanel({ file: models[0] });
+    paths = paths.filter((p) => !modelFormat(p));
     if (paths.length === 0) return;
   }
   const items = await api().importMedia(paths);

@@ -1,8 +1,8 @@
 {
   "Name": "PanoCut",
-  "Version": "0.5.0.0",
+  "Version": "0.6.0.0",
   "Author": "BlayZzo",
-  "Description": "Steuert den Videoeditor PanoCut: Abspielen, Schneiden, Markieren, Rückgängig, Export, KI und mehr.",
+  "Description": "Steuert den Videoeditor PanoCut: Abspielen, Schneiden, Markieren, Rückgängig, Export, KI, Mehrkamera-Schnitt und mehr.",
   "URL": "https://github.com/BlayZzo/pano-cut",
   "Icon": "imgs/marketplace",
   "Category": "PanoCut",
@@ -372,6 +372,70 @@
       "States": [
         {
           "Image": "imgs/actions/export-key",
+          "ShowTitle": false
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "de.blayzzo.panocut.cam1",
+      "Name": "Kamera 1",
+      "Tooltip": "Mehrkamera: auf Kamera 1 schneiden (auch live beim Abspielen)",
+      "Icon": "imgs/actions/cam1",
+      "States": [
+        {
+          "Image": "imgs/actions/cam1-key",
+          "ShowTitle": false
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "de.blayzzo.panocut.cam2",
+      "Name": "Kamera 2",
+      "Tooltip": "Mehrkamera: auf Kamera 2 schneiden",
+      "Icon": "imgs/actions/cam2",
+      "States": [
+        {
+          "Image": "imgs/actions/cam2-key",
+          "ShowTitle": false
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "de.blayzzo.panocut.cam3",
+      "Name": "Kamera 3",
+      "Tooltip": "Mehrkamera: auf Kamera 3 schneiden",
+      "Icon": "imgs/actions/cam3",
+      "States": [
+        {
+          "Image": "imgs/actions/cam3-key",
+          "ShowTitle": false
+        }
+      ],
+      "Controllers": [
+        "Keypad"
+      ],
+      "SupportedInMultiActions": true
+    },
+    {
+      "UUID": "de.blayzzo.panocut.cam4",
+      "Name": "Kamera 4",
+      "Tooltip": "Mehrkamera: auf Kamera 4 schneiden",
+      "Icon": "imgs/actions/cam4",
+      "States": [
+        {
+          "Image": "imgs/actions/cam4-key",
           "ShowTitle": false
         }
       ],

@@ -25,6 +25,11 @@ export const REMOTE_ACTIONS: Record<string, string> = {
   ai: 'ai',
   autoenhance: 'autoEnhance',
   loop: 'toggleLoop',
+  // Mehrkamera: Kamera 1–4 live umschalten
+  cam1: 'cam:1',
+  cam2: 'cam:2',
+  cam3: 'cam:3',
+  cam4: 'cam:4',
 };
 
 let server: http.Server | null = null;
@@ -45,7 +50,7 @@ export function startRemote(port: number, onAction: (action: string) => void, ge
       res.end(JSON.stringify({ app: 'PanoCut', ...getStatus(), actions: Object.keys(REMOTE_ACTIONS) }));
       return;
     }
-    const m = /^\/action\/([a-z]+)$/.exec(url.pathname);
+    const m = /^\/action\/([a-z0-9]+)$/.exec(url.pathname);
     if (m && REMOTE_ACTIONS[m[1]] && req.method === 'POST') {
       onAction(REMOTE_ACTIONS[m[1]]);
       res.end(JSON.stringify({ ok: true, action: m[1] }));

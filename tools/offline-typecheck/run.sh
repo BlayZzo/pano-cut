@@ -15,6 +15,11 @@ fi
 [ -d "$T/csstype" ] || git clone --depth 1 https://github.com/frenic/csstype "$T/csstype"
 [ -d "$T/zustand" ] || git clone --depth 1 https://github.com/pmndrs/zustand "$T/zustand"
 [ -d "$T/zundo" ] || git clone --depth 1 https://github.com/charkour/zundo "$T/zundo"
+# three.js-Typen (gleiche Version wie in package.json)
+if [ ! -d "$T/three-types/types/three" ]; then
+  git -c advice.detachedHead=false clone --depth 1 --branch r170 --filter=blob:none --sparse https://github.com/three-types/three-ts-types "$T/three-types"
+  git -C "$T/three-types" sparse-checkout set types/three
+fi
 DT="$T/definitelytyped/types"
 cat > "$T/tsconfig.renderer.json" <<JSON
 {
@@ -27,7 +32,8 @@ cat > "$T/tsconfig.renderer.json" <<JSON
       "react": ["$DT/react/v18/index.d.ts"], "react/jsx-runtime": ["$DT/react/v18/jsx-runtime.d.ts"],
       "react-dom": ["$DT/react-dom/v18/index.d.ts"], "react-dom/client": ["$DT/react-dom/v18/client.d.ts"],
       "csstype": ["$T/csstype/index.d.ts"], "prop-types": ["$DT/prop-types/index.d.ts"],
-      "zustand": ["$T/zustand/src/index.ts"], "zustand/*": ["$T/zustand/src/*"], "zundo": ["$T/zundo/src/index.ts"]
+      "zustand": ["$T/zustand/src/index.ts"], "zustand/*": ["$T/zustand/src/*"], "zundo": ["$T/zundo/src/index.ts"],
+      "three": ["$T/three-types/types/three/index.d.ts"], "three/addons/*": ["$T/three-types/types/three/examples/jsm/*"]
     }
   },
   "files": ["$HERE/electron-stub.d.ts"],

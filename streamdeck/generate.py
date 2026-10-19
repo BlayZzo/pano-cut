@@ -36,6 +36,10 @@ ACTIONS = [
     ('import', 'Importieren', 'Import', '⇩', 'Medien importieren'),
     ('save', 'Speichern', 'Sichern', '⬇', 'Projekt speichern'),
     ('export', 'Exportieren', 'Export', '⇪', 'Export-Fenster öffnen'),
+    ('cam1', 'Kamera 1', 'Kamera 1', '@cam1', 'Mehrkamera: auf Kamera 1 schneiden (auch live beim Abspielen)'),
+    ('cam2', 'Kamera 2', 'Kamera 2', '@cam2', 'Mehrkamera: auf Kamera 2 schneiden'),
+    ('cam3', 'Kamera 3', 'Kamera 3', '@cam3', 'Mehrkamera: auf Kamera 3 schneiden'),
+    ('cam4', 'Kamera 4', 'Kamera 4', '@cam4', 'Mehrkamera: auf Kamera 4 schneiden'),
 ]
 
 def glyph_font(size):
@@ -65,6 +69,12 @@ def draw_symbol(d, sym, cx, cy, h, fill):
             tip = cx + sgn * (r * 0.62 - off)
             back = tip - sgn * r * 0.8
             d.polygon([(back, cy - r * 0.8), (back, cy + r * 0.8), (tip, cy)], fill=fill)
+    elif sym.startswith('@cam'):
+        # Kamera-Körper mit Objektiv und Nummer
+        bw, bh = r * 1.5, r * 1.05
+        d.rounded_rectangle([cx - bw, cy - bh * 0.7, cx + bw * 0.55, cy + bh * 0.7], radius=r * 0.18, outline=fill, width=lw)
+        d.polygon([(cx + bw * 0.6, cy - bh * 0.15), (cx + bw, cy - bh * 0.6), (cx + bw, cy + bh * 0.6), (cx + bw * 0.6, cy + bh * 0.15)], fill=fill)
+        draw_centered(d, (cx - bw * 0.22, cy + h * 0.02), sym[4:], ImageFont.truetype(FONT_BOLD, round(h * 0.5)), fill)
     elif sym == '@duplicate':
         w = r * 1.15
         d.rounded_rectangle([cx - r, cy - r, cx - r + w, cy - r + w], radius=r * 0.15, outline=fill, width=lw)
@@ -112,7 +122,7 @@ def main():
         'Name': 'PanoCut',
         'Version': f'{version}.0',
         'Author': 'BlayZzo',
-        'Description': 'Steuert den Videoeditor PanoCut: Abspielen, Schneiden, Markieren, Rückgängig, Export, KI und mehr.',
+        'Description': 'Steuert den Videoeditor PanoCut: Abspielen, Schneiden, Markieren, Rückgängig, Export, KI, Mehrkamera-Schnitt und mehr.',
         'URL': 'https://github.com/BlayZzo/pano-cut',
         'Icon': 'imgs/marketplace',
         'Category': 'PanoCut',

@@ -83,6 +83,11 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
       {isTitle && <InspectorTitle clip={clip} />}
       {!isTitle && !clip.mc && media && (isAudioOnly || media.info.hasAudio) && !media.vfx && <InspectorMusic clip={clip} media={media} />}
       {!isTitle && media?.vfx && <InspectorVfx clip={clip} media={media} />}
+      {!isTitle && media?.model3d && (
+        <Section title={t.model3d.title} badge="3D">
+          <button className="btn primary" style={{ width: '100%' }} onClick={() => useUi.getState().setModelPanel({ mediaId: media.id })}>{t.model3d.edit}</button>
+        </Section>
+      )}
       {!isTitle && !isAudioOnly && <InspectorLayer clip={clip} ids={ids} />}
       {!isTitle && count === 1 && media && !media.vfx && (media.hasAlpha || clip.cutout?.enabled) && <InspectorDropIn clip={clip} />}
       {!isTitle && media?.info.is360 && media.type === 'video' && <InspectorPano clip={clip} media={media} />}
@@ -121,9 +126,9 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
         </Section>
       )}
 
-      {!isTitle && media && media.type !== 'audio' && !media.vfx && <InspectorObjects clip={clip} media={media} />}
-      {!isTitle && media && media.type !== 'audio' && !media.vfx && <InspectorChroma clip={clip} />}
-      {!isTitle && media?.type === 'video' && !media.vfx && <InspectorStabilize clip={clip} media={media} />}
+      {!isTitle && media && media.type !== 'audio' && !media.vfx && !media.model3d && <InspectorObjects clip={clip} media={media} />}
+      {!isTitle && media && media.type !== 'audio' && !media.vfx && !media.model3d && <InspectorChroma clip={clip} />}
+      {!isTitle && media?.type === 'video' && !media.vfx && !media.model3d && <InspectorStabilize clip={clip} media={media} />}
       {!isTitle && media?.type === 'video' && media.info.hasAudio && <InspectorSubtitles clip={clip} media={media} />}
 
       {!isAudioOnly && !isTitle && (

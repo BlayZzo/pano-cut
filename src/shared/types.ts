@@ -58,6 +58,7 @@ export interface MediaItem {
   vfxRole?: 'effect' | 'light';  // Effekt selbst oder sein Lichtschein
   beats?: BeatInfo;        // erkannter Takt (Auto-Musik-Schnitt)
   bbox?: { x: number; y: number; w: number; h: number };  // freigestelltes Objekt: typische Lage im Bild (0..1)
+  model3d?: Model3DSpec;   // gerendertes 3D-Modell (kann neu gerendert werden)
   addedAt: number;
 }
 
@@ -423,6 +424,37 @@ export interface Project {
   multicam?: Record<string, MulticamGroup>;   // Mehrkamera-Gruppen
   createdAt: number;
   modifiedAt: number;
+}
+
+// ---------- 3D-Modelle ----------
+
+export type Model3DFormat = 'glb' | 'gltf' | 'obj' | 'fbx' | 'stl';
+export type Model3DAnimation = 'none' | 'turntable' | 'swing' | 'float' | 'spinin' | 'flyby' | 'embedded';
+
+/** Einstellungen eines 3D-Modells, das zu einem Video mit Transparenz gerendert wird. */
+export interface Model3DSpec {
+  file: string;            // Pfad der 3D-Datei
+  format: Model3DFormat;
+  name: string;
+  duration: number;        // Sekunden
+  fps: number;
+  width: number;           // Render-Größe
+  height: number;
+  animation: Model3DAnimation;
+  speed: number;           // Tempo der Bewegung (1 = normal)
+  yaw: number;             // Ansicht: Drehung um die Hochachse (Grad)
+  pitch: number;           // Blick von oben (Grad, 0 = von vorn)
+  roll: number;            // Neigung (Grad)
+  lightYaw: number;        // Richtung des Hauptlichts (Grad, 0 = von vorn)
+  lightPitch: number;      // Höhe des Hauptlichts (Grad)
+  lightColor: string;      // Farbe des Hauptlichts
+  lightStrength: number;   // 0..3
+  ambient: number;         // Umgebungslicht 0..2
+  exposure: number;        // Belichtung (Blenden)
+  shadow: number;          // Bodenschatten 0..1
+  color?: string;          // Farbe für Modelle ohne Material (STL, OBJ)
+  metal: number;           // 0..1 (nur ohne eigenes Material)
+  clipIndex: number;       // eingebettete Animation (glTF/FBX)
 }
 
 // ---------- Mehrkamera ----------

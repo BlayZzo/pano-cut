@@ -310,7 +310,7 @@ function ObjectLibrary({ selected, onSelect, onContextMenu }: { selected: string
   const toast = useUi((s) => s.toast);
   const addMedia = useProject((s) => s.addMedia);
   const [busy, setBusy] = React.useState<string | null>(null);
-  const items = Object.values(media).filter((m) => m.isObject).sort((a, b) => b.addedAt - a.addedAt);
+  const items = Object.values(media).filter((m) => m.isObject || m.model3d).sort((a, b) => b.addedAt - a.addedAt);
   const projectId = useProject((s) => s.project.id);
 
   const syncUp = async () => {
@@ -349,6 +349,7 @@ function ObjectLibrary({ selected, onSelect, onContextMenu }: { selected: string
   return (
     <>
       <div className="library-toolbar">
+        <button className="btn sm primary" onClick={() => useUi.getState().setModelPanel({})}>{t.model3d.libraryButton}</button>
         <button className="btn sm" onClick={() => void syncUp()} disabled={!!busy || items.length === 0} title={t.cloud.syncObjects}>☁︎ {t.cloud.syncObjects}</button>
         <button className="btn sm" onClick={() => void syncDown()} disabled={!!busy} title={t.cloud.fetchObjects}>⇩</button>
       </div>

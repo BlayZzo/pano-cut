@@ -60,7 +60,14 @@ Außerdem: **Hilfe → Nach Updates suchen …**
 12. **Green Screen** – Clip auswählen → Inspektor → „Green Screen“ → „Aus Vorschau wählen“ und auf den Hintergrund klicken.
 13. **Effekt-Studio** – unter der Vorschau auf **✦ Effekt** klicken und beschreiben, was passieren soll („große Explosion mit viel Rauch“, „leichter Schneefall“, „Gewitter“ …). Der Effekt wird auf deinem Rechner simuliert, an die Szene angepasst (Helligkeit, Farbe, Lichtschein, Schatten) und als Ebene eingefügt. In der Vorschau ziehen = platzieren, Mausrad = Größe, Umschalt + ziehen = drehen.
 14. **Ebenen** – im Inspektor unter „Ebene“: Mischmodus (z. B. Negativ multiplizieren für Licht) und Schlagschatten. Spuren mit ▲▼ nach vorne oder hinten. Ein freigestelltes Objekt lässt sich im Bereich „Objekte (KI)“ mit **„Vor andere Ebenen holen“** ganz nach vorne legen – z. B. fährt ein Auto dann durch einen Text. Masken lassen sich mit dem **Pinsel** nachbessern.
-15. **Exportieren** – **⌘/Strg + E**: Preset wählen (Handy 9:16, Quadrat, Full HD, 4K, WhatsApp, ProRes, GIF, 360°), Qualität oder **maximale Dateigröße** einstellen, fertig. Auf dem Mac danach direkt **„In Fotos importieren“** – und von dort per WhatsApp teilen.
+15. **Bild-Assistent** – unter der Vorschau auf **✦ Bild**: PanoCut erkennt zu dunkle, zu helle, flaue oder flackernde Clips (z. B. Tunnelfahrten) und passt sie mit einem Klick an – auf Wunsch mit Helligkeit, die sich über die Zeit angleicht. „Vorher“ gedrückt halten zum Vergleichen. Kamera-Profile für **Blackmagic Film** und **DJI D-Log** wandeln flache Log-Aufnahmen in natürliche Farben um.
+16. **Musik-Schnitt** – Musik-Clip auswählen: Der **Takt** wird automatisch erkannt (Taktmarken in der Timeline, Clips rasten darauf ein). „**Auf den Takt schneiden**“ verteilt deine Video-Clips so, dass jeder Schnitt genau auf einem Schlag liegt – mit Zoom-Stoß, Wackeln oder weißem Blitz auf der Takt-Eins.
+17. **Dynamische Übergänge** – im Reiter „Übergänge“ → „Dynamisch“: Zoom-Durchflug, Wisch-Schwenk, Drehung, Blitz, Wackeln, Glitch – jeweils mit einstellbarer **Stärke**.
+18. **Kamerafahrten für 360°** – im Inspektor unter „360°-Ansicht“: Rundum-Schwenk, Peitschen-Schwenk 180°, Planet → Normal, Zoom-Stoß, Drohnen-Aufstieg, Fassrolle u. a. ab dem Abspielkopf einfügen. **Tempo-Rampen** (schnell → Zeitlupe → schnell, Hero-Moment …) im Bereich „Geschwindigkeit“.
+19. **Objekt ins Video fallen lassen** – ein freigestelltes Objekt oder 3D-Objekt auswählen → Inspektor → „Auftritt“: Herabfallen mit Aufprall, Aufschlagen, Hereinrasen … Beim Aufprall entstehen Staubwolke (in der Farbe des Bodens) und Trümmer, das Bild wackelt – alles mit **Stärke**.
+20. **Mehrkamera** – mehrere Clips verschiedener Kameras auswählen → „Mehrkamera erstellen“. PanoCut synchronisiert sie über den **Ton**. Unter der Vorschau erscheinen alle Kameras; mit den Tasten **1–9** (oder Stream Deck „Kamera 1–4“) wird umgeschnitten – auch live beim Abspielen. „Automatisch wechseln“ schneidet im Takt der Musik.
+21. **3D-Objekte** – auf **🧊 3D** klicken (oder eine 3D-Datei importieren): **glTF/GLB, OBJ, FBX, STL**. Bewegung (Drehteller, Schweben, Hereindrehen, Animation der Datei …), Ansicht, Licht und Bodenschatten einstellen – „**Licht an das Video anpassen**“ übernimmt Richtung, Farbe und Helligkeit aus deinem Video. Das Objekt wird als Ebene mit Transparenz eingefügt.
+22. **Exportieren** – **⌘/Strg + E**: Preset wählen (Handy 9:16, Quadrat, Full HD, 4K, WhatsApp, ProRes, GIF, 360°), Qualität oder **maximale Dateigröße** einstellen, fertig. Auf dem Mac danach direkt **„In Fotos importieren“** – und von dort per WhatsApp teilen.
 
 **Musik leiser beim Sprechen (Ducking):** Musik-Clip auswählen → Inspektor → Ton → „Leiser, wenn gesprochen wird“.
 
@@ -69,7 +76,7 @@ Außerdem: **Hilfe → Nach Updates suchen …**
 ### Elgato Stream Deck
 
 1. In den Downloads der aktuellen Version **`PanoCut.streamDeckPlugin`** laden und doppelt anklicken – die Stream-Deck-App installiert das Plugin.
-2. In der Stream-Deck-App gibt es dann die Kategorie **PanoCut** mit 22 Tasten: Abspielen/Pause, Schneiden, Löschen, Rückgängig, Wiederholen, Anfang/Ende markieren, Bild vor/zurück, Zum Anfang/Ende, Schleife, Duplizieren, Zoom, **Natürlich schön**, **KI**, Importieren, Speichern, Exportieren.
+2. In der Stream-Deck-App gibt es dann die Kategorie **PanoCut** mit 26 Tasten: Abspielen/Pause, Schneiden, Löschen, Rückgängig, Wiederholen, Anfang/Ende markieren, Bild vor/zurück, Zum Anfang/Ende, Schleife, Duplizieren, Zoom, **Natürlich schön**, **KI**, Importieren, Speichern, Exportieren und **Kamera 1–4** für den Mehrkamera-Schnitt.
 3. PanoCut muss laufen. Die Verbindung bleibt auf deinem Rechner (Einstellungen → „Stream Deck & Fernsteuerung“).
 
 Ohne Plugin geht es auch mit der Stream-Deck-Aktion **„Tastenkombination“** – z. B. ⌘B / Strg+B (Schneiden), ⌘⇧E / Strg+Umschalt+E (Natürlich schön), ⌘L / Strg+L (Schleife), ⌘⇧K / Strg+Umschalt+K (KI).
@@ -79,8 +86,9 @@ Ohne Plugin geht es auch mit der Stream-Deck-Aktion **„Tastenkombination“** 
 - **Video:** MP4, MOV, M4V, MKV, AVI, WebM, MTS/M2TS, MXF, Insta360 `.insv`/`.lrv`, GoPro `.360`
 - **Audio:** MP3, WAV, AAC/M4A, FLAC, OGG, AIFF
 - **Bilder:** JPG, PNG, WebP, GIF, BMP, TIFF, HEIC, Insta360 `.insp`
+- **3D-Modelle:** glTF/GLB (auch Draco-komprimiert), OBJ, FBX, STL
 
-> **Blackmagic:** ProRes- und H.264/H.265-Aufnahmen funktionieren. **Blackmagic RAW (.braw)** braucht ein eigenes SDK und ist noch nicht dabei.
+> **Blackmagic:** ProRes- und H.264/H.265-Aufnahmen funktionieren; für Aufnahmen in **Blackmagic Film** gibt es im Bild-Assistenten ein passendes Kamera-Profil. **Blackmagic RAW (.braw)** lässt sich nur mit Blackmagics eigener (nicht freier) Software lesen – bitte in DaVinci Resolve (kostenlos) als ProRes exportieren und dann in PanoCut importieren.
 > **Insta360:** `.insv`- und `.lrv`-Rohdateien werden automatisch zusammengesetzt. Die Naht ist nicht ganz so perfekt wie in Insta360 Studio (dort werden Kalibrierdaten der Kamera benutzt); im Inspektor lässt sich das Linsen-Sichtfeld feinjustieren. Bereits in Insta360 Studio exportierte 360°-Videos (2:1) werden ebenfalls erkannt.
 
 ---
@@ -98,7 +106,8 @@ In den Einstellungen lässt sich eine WebDAV-Adresse eintragen (z. B. Nextcloud:
 | **0.3** ✅ | KI-Button: Personen, Tiere und Objekte erkennen und verfolgen · KI-Masken · Freistellen · Green Screen · Titel/Untertitel an Objekte heften · Objekt-Mediathek · eigene Cloud (Nextcloud/WebDAV) |
 | **0.4** ✅ | Effekt- und Animations-Bibliothek · eigene Effekte · Keyframes · Looks und LUTs · „Natürlich schön“ (automatische Bildverbesserung auf Wunsch) · Zuschneiden/Spiegeln · Audio-Ducking · Übersetzung von Untertiteln · Elgato Stream Deck |
 | **0.5** ✅ | Effekt-Studio: Effekte beschreiben und simulieren (Explosion, Feuer, Rauch, Schnee, Regen, Nebel, Funken, Blitz, Staub, Konfetti), an die Szene anpassen (Licht, Schatten, Farbe, Erschütterung) · Ebenen mit Mischmodi und Schatten · Objekt vor andere Ebenen holen · Masken-Pinsel · Platzieren direkt in der Vorschau |
-| **0.6** | Mehrkamera-Schnitt · Blackmagic RAW · Übersetzung in weitere Sprachen ohne eigenen Server · weitere Effekte (Wasser, Glas, Partikel-Spuren) · bei Bedarf ein zweites Programm für Bild-/Objektbearbeitung |
+| **0.6** ✅ | Bild-Assistent für zu dunkle/helle Clips · Kamera-Profile (Blackmagic Film, DJI D-Log) · Auto-Musik-Schnitt mit Takterkennung · dynamische Übergänge mit Stärke · 360°-Kamerafahrten · Tempo-Rampen · Objekte ins Video fallen lassen (Aufprall, Staub, Trümmer) · Mehrkamera mit Ton-Synchronisierung · 3D-Objekte (glTF, OBJ, FBX, STL) · Stream Deck „Kamera 1–4“ |
+| **0.7** | Übersetzung in weitere Sprachen ohne eigenen Server · weitere Effekte (Wasser, Glas, Partikel-Spuren) · Mehrkamera mit Winkeln in der Timeline bearbeiten · bei Bedarf ein zweites Programm für Bild-/Objektbearbeitung |
 
 Alles läuft lokal auf deinem Rechner – ohne Abo, ohne Cloud-Zwang.
 

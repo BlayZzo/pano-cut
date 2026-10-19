@@ -19,6 +19,7 @@ import {
   toggleLoop, toggleAiPanel, autoEnhanceClips,
 } from './actions';
 import { playPause } from './engine/instance';
+import { switchToAngle } from './multicamActions';
 import { isEditingText } from './utils/dom';
 
 export function App(): React.ReactElement {
@@ -77,6 +78,7 @@ export function App(): React.ReactElement {
         case 'toggleLoop': toggleLoop(); break;
         case 'ai': toggleAiPanel(); break;
         case 'autoEnhance': void autoEnhanceClips(); break;
+        case 'cam': if (arg) switchToAngle(Number(arg) - 1); break;
       }
     });
     return () => { offMedia(); offExport(); offUpdate(); offDirty(); offMenu(); };

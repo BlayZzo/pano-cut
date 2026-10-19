@@ -14,6 +14,8 @@ import { availableFilters, probeFile, runFfmpeg } from './ffmpeg';
 import { prepareMedia, probeMedia } from './media';
 import { ExportJob } from './exporter';
 import { aiAvailable, detectObjects, segmentObject } from './ai';
+import { analyzeBeats, audioEnvelope } from './audio';
+import { correlateEnvelopes } from '@shared/multicam';
 
 export async function runSmokeTest(): Promise<number> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'panocut-smoke-'));
@@ -204,6 +206,57 @@ export async function runSmokeTest(): Promise<number> {
     if (!(shadowPx[1] < plain[1] - 40)) throw new Error('Ebenen: Schlagschatten fehlt');
     if (!(lit[1] > plain[1] + 25)) throw new Error('Ebenen: Lichtschein (Negativ multiplizieren) fehlt');
     log('Ebenen ok');
+
+    // v0.6: Takterkennung (Hintergrund-Thread), Ton-Synchronisierung, dynamische Übergänge, Belichtungskurve
+    step('Takterkennung …');
+    const beatWav = path.join(dir, 'beat.wav');
+    // 120 BPM: dumpfer Schlag alle 0,5 s, erster Schlag bei 0,25 s
+    await runFfmpeg(['-f', 'lavfi', '-i', "aevalsrc='0.8*sin(2*PI*(55+90*exp(-mod(t-0.25,0.5)*40))*mod(t-0.25,0.5))*exp(-mod(t-0.25,0.5)*14)*gte(t,0.25)':s=22050:d=12", '-c:a', 'pcm_s16le', beatWav]);
+    const beatInfo = await analyzeBeats(beatWav);
+    const phaseErr = beatInfo.beats.length ? Math.max(...beatInfo.beats.slice(2, -2).map((b) => Math.abs(((b - 0.25 + 0.25) % 0.5) - 0.25))) : 1;
+    log(`Takt: ${beatInfo.bpm} BPM, ${beatInfo.beats.length} Schläge, größte Abweichung ${(phaseErr * 1000).toFixed(0)} ms`);
+    if (Math.abs(beatInfo.bpm - 120) > 3 && Math.abs(beatInfo.bpm - 60) > 2 && Math.abs(beatInfo.bpm - 240) > 5) throw new Error(`Takt falsch erkannt: ${beatInfo.bpm}`);
+    if (phaseErr > 0.04) throw new Error('Schläge liegen nicht auf dem Takt');
+
+    step('Mehrkamera: Ton-Synchronisierung …');
+    const syncSrc = path.join(dir, 'sync.wav'), camA = path.join(dir, 'camA.wav'), camB = path.join(dir, 'camB.wav');
+    await runFfmpeg(['-f', 'lavfi', '-i', 'anoisesrc=d=20:c=pink:a=0.3:seed=7', '-af', "volume='if(lt(random(0),0.12),1,0.06)':eval=frame", '-ar', '22050', syncSrc]);
+    await runFfmpeg(['-ss', '2', '-t', '15', '-i', syncSrc, camA]);
+    await runFfmpeg(['-ss', '5.4', '-t', '12', '-i', syncSrc, '-af', 'highpass=f=400,volume=0.5', camB]);
+    const envA = await audioEnvelope(camA), envB = await audioEnvelope(camB);
+    const sync = correlateEnvelopes(envA.env, envB.env, envA.hop);
+    log(`Sync: Versatz ${sync.lag.toFixed(3)} s (erwartet 3,400), Sicherheit ${sync.confidence.toFixed(2)}`);
+    if (Math.abs(sync.lag - 3.4) > 0.04 || sync.confidence < 0.15) throw new Error('Ton-Synchronisierung ungenau');
+
+    step('Dynamische Übergänge und Belichtungskurve …');
+    const dynProject = createProject('SmokeDyn', 640, 360, 30);
+    dynProject.media[vid.id] = vid; dynProject.media[greyM.id] = greyM;
+    const dv = dynProject.tracks.filter((t) => t.kind === 'video');
+    const types: Array<'zoomthrough' | 'flash' | 'glitch' | 'whipleft' | 'spin'> = ['zoomthrough', 'flash', 'glitch', 'whipleft', 'spin'];
+    for (let i = 0; i <= types.length; i++) {
+      const c = createClip(i % 2 === 0 ? vid : greyM, dv[1].id, i * 1.2);
+      c.in = 0.5; c.out = 1.7;
+      if (i > 0) c.transition = { type: types[i - 1], duration: 0.6, intensity: 1.2 };
+      if (i === 0) c.color = { ...c.color, exposureCurve: [{ t: 0, ev: -2 }, { t: 1.0, ev: 0 }] };
+      dynProject.clips[c.id] = c;
+    }
+    const outDyn = path.join(dir, 'export_dyn.mp4');
+    await new ExportJob(dynProject, { ...options, outputPath: outDyn }, (p) => { if (p.phase === 'error') log(' Fehler:', p.message); }).run();
+    const probeDyn = await probeFile(outDyn);
+    if (Math.abs((probeDyn.format.duration ?? 0) - 7.2) > 0.25) throw new Error(`Übergänge: falsche Länge ${probeDyn.format.duration}`);
+    const meanAt = async (t: number): Promise<number> => {
+      const raw = path.join(dir, `dyn_${t}.gray`);
+      await runFfmpeg(['-ss', t.toFixed(3), '-i', outDyn, '-frames:v', '1', '-vf', 'scale=64:36', '-f', 'rawvideo', '-pix_fmt', 'gray', raw]);
+      const b = fs.readFileSync(raw);
+      let s = 0; for (const x of b) s += x;
+      return s / b.length;
+    };
+    const flashMid = await meanAt(2.4), beforeFlash = await meanAt(2.05);
+    const dark = await meanAt(0.05), bright = await meanAt(0.9);
+    log(`Blitz: Mitte ${flashMid.toFixed(0)}, vorher ${beforeFlash.toFixed(0)} · Belichtung: Anfang ${dark.toFixed(0)}, später ${bright.toFixed(0)}`);
+    if (flashMid < 200 || flashMid < beforeFlash + 40) throw new Error('Blitz-Übergang fehlt');
+    if (!(bright > dark + 25)) throw new Error('Belichtungskurve wirkt nicht');
+    log('v0.6 ok');
 
     // KI: Erkennung und Maske. In der CI liegt ein Testbild (Hund, Fahrrad, Auto) unter PANOCUT_TEST_IMAGE.
     if (aiAvailable()) {

@@ -18,6 +18,7 @@ import { translateTexts } from './translate';
 import { startRemote, stopRemote } from './remote';
 import { vfxBegin, vfxCancel, vfxEnd, vfxFrame, type VfxBeginRequest } from './vfx';
 import { analyzeBeats, audioEnvelope } from './audio';
+import { MODEL_EXTENSIONS } from '@shared/model3d';
 import { aiAvailable, aiModelStatus, detectObjects, segmentObject } from './ai';
 import { maskDir, renderObject } from './objects';
 import { cloudDownload, cloudList, cloudTest, cloudUpload } from './cloud';
@@ -203,10 +204,11 @@ ipcMain.handle(IPC.selectMediaFiles, async () => {
     title: 'Medien importieren',
     properties: ['openFile', 'multiSelections'],
     filters: [
-      { name: 'Alle Medien', extensions: SUPPORTED_EXTENSIONS },
+      { name: 'Alle Medien', extensions: [...SUPPORTED_EXTENSIONS, ...MODEL_EXTENSIONS] },
       { name: 'Videos', extensions: ['mp4', 'mov', 'm4v', 'mkv', 'avi', 'webm', 'mts', 'm2ts', 'mxf', 'insv', '360', 'lrv'] },
       { name: 'Audio', extensions: ['mp3', 'wav', 'aac', 'm4a', 'flac', 'ogg', 'aif', 'aiff'] },
       { name: 'Bilder', extensions: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'heic', 'insp'] },
+      { name: '3D-Modelle', extensions: MODEL_EXTENSIONS },
     ],
   });
   return res.canceled ? [] : res.filePaths;

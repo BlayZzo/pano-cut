@@ -62,14 +62,24 @@ transparente Vollbild-Fläche), Schlagschatten (Canvas shadowBlur = 2σ ↔ `gbl
 (Store-Setter führt sie per `syncLinkedClips` nach). Objekt nach vorne = verknüpfte Kopie mit Freistellen auf neuer
 oberster Spur. Masken-Pinsel in der Vorschau (`components/previewTools.ts`), Masken sind Graustufen-PNGs (Vorschau rechnet
 Helligkeit → Alpha). Ziehen/Mausrad in der Vorschau verschiebt/skaliert den ausgewählten Clip.
-0.6: Mehrkamera, Blackmagic RAW, Übersetzung in weitere Sprachen ohne Server; bei Bedarf zweites Programm für
-Bild/Objekte (gleiche Codebasis `src/shared`).
+0.6 ✅: Bild-Assistent (`shared/rescue.ts`: `analyzeClip`/`rescueGrade`; Belichtungskurve `exposureCurve` = Faktor vor der LUT,
+Export per `sendcmd`/`colorchannelmixer` in rgb48le), Kamera-Profile (`decodeLog` in `color.ts`). Takt (`shared/beats.ts`: Mel-Onset,
+Tempo per Autokorrelation, DP-Beat-Tracking; Rechnung im Worker `main/audioWorker.ts` → `dist/main/audioWorker.js`), Auto-Schnitt
+`shared/beatcut.ts`. Clip-Teilen über `shared/clipslice.ts` (verschiebt alle Clip-lokalen Zeiten). Dynamische Übergänge
+(`shared/transitions.ts` `dynTransitionAt` ↔ Export `exporter.dynamicTransition`: perspective-Ecken pro Bild + sendcmd für
+gblur/dblur/rgbashift/Deckkraft/Blitz; `perspective`-Variable `in` zählt ab 1!). 360°-Fahrten/Tempo-Rampen `shared/cameraMoves.ts`.
+Auftritte `entranceKeyframes` (effects.ts) + VFX-Art `impact`. Mehrkamera `shared/multicam.ts` (Kreuzkorrelation der
+Onset-Hüllkurven, `project.multicam`, Stücke mit `clip.mc`, stabile IDs). 3D: three.js 0.170 (devDependency, per `import()`
+nachgeladen) `renderer/three/` → Bilder über die VFX-Jobs (`vfxBegin` mit `model`) zu VP9-Alpha; Draco-Dekoder in
+`renderer/public/draco` (im fertigen Programm über `pcmedia:` geladen, CSP `wasm-unsafe-eval`, `worker-src blob:`).
+0.7: Übersetzung in weitere Sprachen ohne Server, weitere Effekte, Mehrkamera-Winkel in der Timeline; bei Bedarf zweites
+Programm für Bild/Objekte (gleiche Codebasis `src/shared`).
 Leistung: muss auf einem MacBook Air (M-Serie, 2024) flüssig laufen – Proxys, WebGL, Hintergrund-Jobs mit niedriger Priorität.
 
 ## Lokale Prüfung ohne npm
 
 `tools/offline-typecheck/run.sh` prüft beide TypeScript-Projekte ohne `node_modules` (globales `tsc`, Typquellen per git,
-Electron-Stub). Für den FFmpeg-Teil lässt sich `src/main/smoke.ts` mit esbuild bündeln (Alias `electron` → kleiner Shim
+Electron-Stub, three.js-Typen aus three-ts-types r170). Für den FFmpeg-Teil lässt sich `src/main/smoke.ts` mit esbuild bündeln (Alias `electron` → kleiner Shim
 mit `app.getPath`, `electron-log` → console) und mit `PANOCUT_FFMPEG=/usr/bin/ffmpeg PANOCUT_FFPROBE=/usr/bin/ffprobe`
 direkt unter Node ausführen. Vollständige CI-Logs sind aus der Cloud nicht abrufbar (`gh run view <id> --json jobs`
 zeigt nur den Schritt-Status).

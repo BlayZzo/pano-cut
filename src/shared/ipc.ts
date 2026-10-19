@@ -1,5 +1,5 @@
 import type { BeatInfo } from './beats';
-import type { AiDetectModel, AiProgress, AiSegmentModel, AppInfo, CloudSettings, Detection, ExportOptions, ExportProgress, MediaItem, Project, ProjectFile, Settings, SubtitleSegment, UpdateStatus, VfxSpec, WhisperModel, WhisperProgress } from './types';
+import type { AiDetectModel, AiProgress, AiSegmentModel, AppInfo, CloudSettings, Detection, ExportOptions, ExportProgress, MediaItem, Model3DSpec, Project, ProjectFile, Settings, SubtitleSegment, UpdateStatus, VfxSpec, WhisperModel, WhisperProgress } from './types';
 
 export interface FramePayload { data: Uint8Array; width: number; height: number }
 export interface MaskPayload { width: number; height: number; alpha: Uint8Array }
@@ -45,7 +45,7 @@ export interface PanoCutApi {
   renderObject(req: { project: Project; clipId: string; trackId: string; name: string }): Promise<MediaItem>;
 
   // Effekt-Simulationen: Bilder aus der Oberfläche → Video
-  vfxBegin(req: { projectId: string; spec: VfxSpec; role: 'effect' | 'light'; width: number; height: number; mediaId?: string; name?: string }): Promise<string>;
+  vfxBegin(req: { projectId: string; spec?: VfxSpec; model?: Model3DSpec; fps?: number; role: 'effect' | 'light'; width: number; height: number; mediaId?: string; name?: string }): Promise<string>;
   vfxFrame(jobId: string, rgba: Uint8Array): Promise<void>;
   vfxEnd(jobId: string): Promise<MediaItem>;
   vfxCancel(jobId: string): Promise<void>;

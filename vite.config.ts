@@ -7,7 +7,7 @@ const cspPlugin: Plugin = {
   name: 'panocut-csp',
   apply: 'build',
   transformIndexHtml(html) {
-    const csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' pcmedia: data: blob:; media-src 'self' pcmedia: blob:; connect-src 'self' pcmedia:; font-src 'self' data:;";
+    const csp = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' pcmedia: data: blob:; media-src 'self' pcmedia: blob:; connect-src 'self' pcmedia:; font-src 'self' data:;";
     return html.replace('<meta charset="UTF-8" />', `<meta charset="UTF-8" />\n    <meta http-equiv="Content-Security-Policy" content="${csp}" />`);
   },
 };
