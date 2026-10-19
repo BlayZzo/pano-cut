@@ -323,3 +323,16 @@ textarea:focus { border-color: var(--accent); }
 .histogram { width: 100%; height: 70px; border-radius: var(--radius-sm); border: 1px solid var(--border); }
 .hist-legend { display: flex; gap: 12px; font-size: 10.5px; color: var(--text-dim); margin-top: -4px; }
 .hist-legend .hb { color: #9aa3b5; } .hist-legend .ha { color: var(--accent); }
+
+/* ---------- Musik-Schnitt ---------- */
+.music-tempo { flex-wrap: wrap; }
+.music-bpm { flex: 1; font-variant-numeric: tabular-nums; color: var(--text); font-size: 12px; }
+.music-auto { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; }
+.music-auto-title { font-weight: 600; font-size: 12px; }
+.num-label { font-size: 11px; color: var(--text-dim); text-align: right; font-variant-numeric: tabular-nums; }
+.beat-marks { position: absolute; left: 0; top: 0; height: 100%; pointer-events: none; z-index: 1; }
+.beat-mark { position: absolute; top: 14px; width: 1px; height: 10px; background: rgba(250, 204, 21, 0.55); }
+.beat-mark.down { top: 8px; height: 16px; width: 2px; background: #facc15; }
+.beat-lines { position: absolute; left: 0; pointer-events: none; z-index: 0; }
+.beat-line { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(250, 204, 21, 0.10); }
+.beat-line.down { background: rgba(250, 204, 21, 0.22); }

@@ -7,6 +7,7 @@ import {
 } from '@shared/timeline';
 import { defaultPano, defaultSubtitleStyle } from '@shared/pano';
 import { syncLinkedClips } from '@shared/layers';
+import { sliceClip } from '@shared/clipslice';
 
 export interface ProjectState {
   project: Project;
@@ -217,15 +218,10 @@ export const useProject = create<ProjectState>()(
         if (!c) return null;
         const end = clipEnd(c);
         if (time <= c.start + MIN_CLIP_DURATION || time >= end - MIN_CLIP_DURATION) return null;
-        const srcT = sourceTimeAt(c, time);
-        const left: Clip = c.reverse ? { ...c, in: srcT } : { ...c, out: srcT };
+        // Clip-lokale Zeiten (360°-Blick, Animation, Untertitel, Objekte) mit aufteilen
         const rightId = makeId('clip');
-        const right: Clip = c.reverse
-          ? { ...c, id: rightId, start: time, out: srcT }
-          : { ...c, id: rightId, start: time, in: srcT };
-        // Ein-/Ausblenden sinnvoll verteilen
-        left.fadeOut = 0;
-        right.fadeIn = 0;
+        const left = sliceClip(c, 0, time - c.start, c.id);
+        const right = sliceClip(c, time - c.start, end - c.start, rightId);
         set({ project: { ...s.project, clips: { ...s.project.clips, [id]: left, [rightId]: right } } });
         return rightId;
       },

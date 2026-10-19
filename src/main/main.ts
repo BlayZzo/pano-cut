@@ -17,6 +17,7 @@ import { downloadModel, transcribe, whisperStatus } from './whisper';
 import { translateTexts } from './translate';
 import { startRemote, stopRemote } from './remote';
 import { vfxBegin, vfxCancel, vfxEnd, vfxFrame, type VfxBeginRequest } from './vfx';
+import { analyzeBeats, audioEnvelope } from './audio';
 import { aiAvailable, aiModelStatus, detectObjects, segmentObject } from './ai';
 import { maskDir, renderObject } from './objects';
 import { cloudDownload, cloudList, cloudTest, cloudUpload } from './cloud';
@@ -308,6 +309,8 @@ ipcMain.handle(IPC.vfxBegin, (_e, req: VfxBeginRequest) => vfxBegin(req));
 ipcMain.handle(IPC.vfxFrame, (_e, jobId: string, rgba: Uint8Array) => vfxFrame(jobId, rgba));
 ipcMain.handle(IPC.vfxEnd, (_e, jobId: string) => vfxEnd(jobId));
 ipcMain.handle(IPC.vfxCancel, (_e, jobId: string) => { vfxCancel(jobId); });
+ipcMain.handle(IPC.analyzeBeats, (_e, p: string) => analyzeBeats(p));
+ipcMain.handle(IPC.audioEnvelope, (_e, p: string, start?: number, duration?: number) => audioEnvelope(p, start, duration));
 
 // ---- Cloud ----
 

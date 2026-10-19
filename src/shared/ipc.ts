@@ -1,3 +1,4 @@
+import type { BeatInfo } from './beats';
 import type { AiDetectModel, AiProgress, AiSegmentModel, AppInfo, CloudSettings, Detection, ExportOptions, ExportProgress, MediaItem, Project, ProjectFile, Settings, SubtitleSegment, UpdateStatus, VfxSpec, WhisperModel, WhisperProgress } from './types';
 
 export interface FramePayload { data: Uint8Array; width: number; height: number }
@@ -48,6 +49,10 @@ export interface PanoCutApi {
   vfxFrame(jobId: string, rgba: Uint8Array): Promise<void>;
   vfxEnd(jobId: string): Promise<MediaItem>;
   vfxCancel(jobId: string): Promise<void>;
+
+  // Ton-Analyse: Takt (Auto-Musik-Schnitt), Hüllkurve (Mehrkamera-Sync)
+  analyzeBeats(path: string): Promise<BeatInfo>;
+  audioEnvelope(path: string, start?: number, duration?: number): Promise<{ env: number[]; hop: number }>;
 
   // Cloud (WebDAV)
   cloudTest(settings: CloudSettings): Promise<{ ok: boolean; message?: string }>;
@@ -121,6 +126,8 @@ export const IPC = {
   vfxFrame: 'vfx:frame',
   vfxEnd: 'vfx:end',
   vfxCancel: 'vfx:cancel',
+  analyzeBeats: 'audio:beats',
+  audioEnvelope: 'audio:envelope',
 
   cloudTest: 'cloud:test',
   cloudList: 'cloud:list',

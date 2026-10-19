@@ -60,6 +60,13 @@ const preloadCtx = await context({
 });
 await preloadCtx.rebuild();
 await preloadCtx.watch();
+const workerCtx = await context({
+  ...common,
+  entryPoints: [path.join(root, 'src/main/audioWorker.ts')],
+  outfile: path.join(root, 'dist/main/audioWorker.js'),
+});
+await workerCtx.rebuild();
+await workerCtx.watch();
 await mainCtx.watch();
 
 process.on('SIGINT', async () => {

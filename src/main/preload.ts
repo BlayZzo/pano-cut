@@ -54,6 +54,8 @@ const api: PanoCutApi = {
   vfxFrame: (jobId, rgba) => ipcRenderer.invoke(IPC.vfxFrame, jobId, rgba),
   vfxEnd: (jobId) => ipcRenderer.invoke(IPC.vfxEnd, jobId),
   vfxCancel: (jobId) => ipcRenderer.invoke(IPC.vfxCancel, jobId),
+  analyzeBeats: (p) => ipcRenderer.invoke(IPC.analyzeBeats, p),
+  audioEnvelope: (p, start, duration) => ipcRenderer.invoke(IPC.audioEnvelope, p, start, duration),
 
   cloudTest: (s) => ipcRenderer.invoke(IPC.cloudTest, s),
   cloudList: (s, dir) => ipcRenderer.invoke(IPC.cloudList, s, dir),

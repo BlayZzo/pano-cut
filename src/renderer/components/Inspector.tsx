@@ -11,11 +11,17 @@ import { InspectorStabilize, InspectorSubtitles, InspectorTransition } from './I
 import { InspectorChroma, InspectorObjects } from './InspectorAi';
 import { DuckingFields, InspectorColor, InspectorFx, InspectorMotion, SaveEffectButton } from './InspectorLook';
 import { InspectorLayer, InspectorVfx } from './InspectorLayer';
+import { InspectorMusic } from './InspectorMusic';
 
 export function Inspector(): React.ReactElement {
   const selection = useUi((s) => s.selection);
   const clips = useProject((s) => s.project.clips);
   const selected = selection.map((id) => clips[id]).filter(Boolean) as Clip[];
+  const media = useProject((s) => s.project.media);
+  // Musik zusammen mit Video-Clips ausgewählt → Musik-Schnitt trotzdem anbieten
+  const music = selected.length > 1 && media[selected[0].mediaId]?.type !== 'audio'
+    ? selected.find((c) => media[c.mediaId]?.type === 'audio')
+    : undefined;
 
   return (
     <aside className="panel">
@@ -27,7 +33,10 @@ export function Inspector(): React.ReactElement {
             {t.inspector.noSelectionHint}
           </div>
         ) : (
-          <ClipInspector clip={selected[0]} ids={selected.map((c) => c.id)} count={selected.length} />
+          <>
+            {music && media[music.mediaId] && <InspectorMusic clip={music} media={media[music.mediaId]} />}
+            <ClipInspector clip={selected[0]} ids={selected.map((c) => c.id)} count={selected.length} />
+          </>
         )}
       </div>
     </aside>
@@ -63,6 +72,7 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
       </Section>
 
       {isTitle && <InspectorTitle clip={clip} />}
+      {!isTitle && media && (isAudioOnly || media.info.hasAudio) && !media.vfx && <InspectorMusic clip={clip} media={media} />}
       {!isTitle && media?.vfx && <InspectorVfx clip={clip} media={media} />}
       {!isTitle && !isAudioOnly && <InspectorLayer clip={clip} ids={ids} />}
       {!isTitle && media?.info.is360 && media.type === 'video' && <InspectorPano clip={clip} media={media} />}

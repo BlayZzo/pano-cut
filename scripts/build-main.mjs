@@ -22,6 +22,7 @@ const common = {
 const targets = [
   { entryPoints: [path.join(root, 'src/main/main.ts')], outfile: path.join(root, 'dist/main/main.js') },
   { entryPoints: [path.join(root, 'src/main/preload.ts')], outfile: path.join(root, 'dist/main/preload.js') },
+  { entryPoints: [path.join(root, 'src/main/audioWorker.ts')], outfile: path.join(root, 'dist/main/audioWorker.js') },
 ];
 
 for (const t of targets) {

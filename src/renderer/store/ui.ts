@@ -44,6 +44,8 @@ export interface UiState {
   imagePanel: boolean;  // Bild-Assistent offen
   vfxPreset: string | null;  // vorgewählte Effektart (aus der Bibliothek)
   maskBrush: { clipId: string; trackId: string; size: number; all: boolean } | null;  // Masken-Pinsel aktiv
+  showBeats: boolean;   // Taktmarken in der Timeline
+  beatJobs: string[];   // Medien-IDs, deren Takt gerade erkannt wird
   dirty: boolean;
   historyVersion: number;
 
@@ -72,6 +74,8 @@ export interface UiState {
   setVfxPanel(open: boolean, preset?: string | null): void;
   setImagePanel(open: boolean): void;
   setMaskBrush(b: UiState['maskBrush']): void;
+  setShowBeats(v: boolean): void;
+  setBeatJob(mediaId: string, busy: boolean): void;
   setDirty(d: boolean): void;
   bumpHistory(): void;
 }
@@ -103,6 +107,8 @@ export const useUi = create<UiState>()((set, get) => ({
   imagePanel: false,
   vfxPreset: null,
   maskBrush: null,
+  showBeats: true,
+  beatJobs: [],
   dirty: false,
   historyVersion: 0,
 
@@ -135,6 +141,8 @@ export const useUi = create<UiState>()((set, get) => ({
   setVfxPanel: (vfxPanel, preset) => set({ vfxPanel, vfxPreset: preset ?? null }),
   setImagePanel: (imagePanel) => set({ imagePanel }),
   setMaskBrush: (maskBrush) => set({ maskBrush }),
+  setShowBeats: (showBeats) => set({ showBeats }),
+  setBeatJob: (id, busy) => set((s) => ({ beatJobs: busy ? [...s.beatJobs.filter((x) => x !== id), id] : s.beatJobs.filter((x) => x !== id) })),
   setDirty: (dirty) => set({ dirty }),
   bumpHistory: () => set((s) => ({ historyVersion: s.historyVersion + 1 })),
 }));

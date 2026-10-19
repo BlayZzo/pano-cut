@@ -1,4 +1,5 @@
 // Gemeinsame Typen für Hauptprozess und Oberfläche.
+import type { BeatInfo } from './beats';
 
 export type MediaType = 'video' | 'audio' | 'image';
 
@@ -55,6 +56,7 @@ export interface MediaItem {
   isObject?: boolean;      // gehört zur Objekt-Mediathek des Projekts
   vfx?: VfxSpec;           // erzeugter Effekt (kann neu gerendert werden)
   vfxRole?: 'effect' | 'light';  // Effekt selbst oder sein Lichtschein
+  beats?: BeatInfo;        // erkannter Takt (Auto-Musik-Schnitt)
   addedAt: number;
 }
 

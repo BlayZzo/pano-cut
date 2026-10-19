@@ -9,6 +9,7 @@ import type { TransitionType } from '@shared/types';
 import { TITLE_TEMPLATES } from '@shared/pano';
 import { t } from '../i18n/de';
 import { cssUrl } from '../utils/dom';
+import { beatsOnTimeline } from '@shared/beats';
 import { DRAG_EFFECT, DRAG_MIME, DRAG_TITLE, DRAG_TRANSITION, getDragging, getDraggingMedia } from '../utils/dnd';
 import { ContextMenu, type MenuEntry } from './ContextMenu';
 import { IconEye, IconEyeOff, IconFit, IconLock, IconMagnet, IconMute, IconPlus, IconScissors, IconTrash, IconUnlock, IconVolume, IconZoomIn, IconZoomOut } from './Icons';
@@ -38,12 +39,29 @@ function trackOffsets(tracks: Track[]): { top: number; height: number; track: Tr
   return out;
 }
 
+/** Taktmarken aller Musik-Clips (Timeline-Zeit). */
+function collectBeats(project: Project, exclude: Set<string> = new Set()): { beats: number[]; downs: number[] } {
+  const beats: number[] = [], downs: number[] = [];
+  for (const c of Object.values(project.clips)) {
+    if (exclude.has(c.id)) continue;
+    const m = project.media[c.mediaId];
+    if (!m?.beats || m.beats.beats.length === 0) continue;
+    const tr = project.tracks.find((x) => x.id === c.trackId);
+    if (!tr || tr.muted || c.muted) continue;
+    beats.push(...beatsOnTimeline(m.beats, c, 'beats'));
+    downs.push(...beatsOnTimeline(m.beats, c, 'downbeats'));
+  }
+  return { beats, downs };
+}
+
 function snapTargets(project: Project, exclude: Set<string>, playhead: number): number[] {
   const pts = [0, playhead];
   for (const c of Object.values(project.clips)) {
     if (exclude.has(c.id)) continue;
     pts.push(c.start, clipEnd(c));
   }
+  // Clips rasten auf den Schlägen der Musik ein
+  if (useUi.getState().showBeats) pts.push(...collectBeats(project, exclude).beats);
   return pts;
 }
 
@@ -78,6 +96,7 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
   const setDrag = useUi((s) => s.setDrag);
   const rangeIn = useUi((s) => s.rangeIn);
   const rangeOut = useUi((s) => s.rangeOut);
+  const showBeats = useUi((s) => s.showBeats);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const headersRef = useRef<HTMLDivElement>(null);
@@ -86,6 +105,7 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
   const [menu, setMenu] = useState<{ x: number; y: number; entries: MenuEntry[] } | null>(null);
 
   const offsets = useMemo(() => trackOffsets(project.tracks), [project.tracks]);
+  const beatMarks = useMemo(() => (showBeats ? collectBeats(project) : null), [showBeats, project.clips, project.media, project.tracks]);
   const contentHeight = (offsets[offsets.length - 1]?.top ?? RULER_H) + (offsets[offsets.length - 1]?.height ?? 0) + 40;
   const duration = projectDuration(project);
   const [viewWidth, setViewWidth] = useState(800);
@@ -387,7 +407,10 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
         <div className="lanes-scroll" ref={scrollRef} onWheel={onWheel} onScroll={onScroll} onDragOver={onDragOver} onDragLeave={() => setDropPreview(null)} onDrop={onDrop}
           onPointerDown={(e) => { if (e.target === e.currentTarget || (e.target as HTMLElement).classList.contains('lane')) { select([]); } }}>
           <div className="lanes-content" style={{ width: contentWidth, height: contentHeight }}>
-            <Ruler zoom={zoom} width={contentWidth} fps={fps} onPointerDown={onRulerPointerDown} rangeIn={rangeIn} rangeOut={rangeOut} />
+            <Ruler zoom={zoom} width={contentWidth} fps={fps} onPointerDown={onRulerPointerDown} rangeIn={rangeIn} rangeOut={rangeOut}>
+              {beatMarks && beatMarks.beats.length > 0 && <BeatMarks marks={beatMarks} zoom={zoom} part="ruler" />}
+            </Ruler>
+            {beatMarks && beatMarks.beats.length > 0 && <BeatMarks marks={beatMarks} zoom={zoom} part="lines" height={contentHeight} />}
             {offsets.map(({ track, height, top }, i) => (
               <React.Fragment key={track.id}>
                 {i > 0 && offsets[i - 1].track.kind !== track.kind && <div className="track-divider" style={{ position: 'absolute', top: top - DIVIDER_H, left: 0, right: 0 }} />}
@@ -425,7 +448,7 @@ function sliderToZoom(v: number): number {
 
 // ---------- Lineal ----------
 
-function Ruler({ zoom, width, fps, onPointerDown, rangeIn, rangeOut }: { zoom: number; width: number; fps: number; onPointerDown: (e: React.PointerEvent) => void; rangeIn: number | null; rangeOut: number | null }): React.ReactElement {
+function Ruler({ zoom, width, fps, onPointerDown, rangeIn, rangeOut, children }: { zoom: number; width: number; fps: number; onPointerDown: (e: React.PointerEvent) => void; rangeIn: number | null; rangeOut: number | null; children?: React.ReactNode }): React.ReactElement {
   const steps = [0.04, 0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 30, 60, 120, 300, 600, 1800];
   const major = steps.find((s) => s * zoom >= 90) ?? 1800;
   const minor = major / (major >= 60 ? 6 : major >= 5 ? 5 : major === 2 ? 4 : major === 1 ? 4 : 2);
@@ -445,8 +468,27 @@ function Ruler({ zoom, width, fps, onPointerDown, rangeIn, rangeOut }: { zoom: n
     <div className="ruler" style={{ width }} onPointerDown={onPointerDown}>
       {ticks}
       {rangeIn !== null && rangeOut !== null && rangeOut > rangeIn && <div className="range" style={{ left: rangeIn * zoom, width: (rangeOut - rangeIn) * zoom }} />}
+      {children}
     </div>
   );
+}
+
+/** Taktmarken im Lineal und schwache Linien durch die Spuren. */
+function BeatMarks({ marks, zoom, part, height = 0 }: { marks: { beats: number[]; downs: number[] }; zoom: number; part: 'ruler' | 'lines'; height?: number }): React.ReactElement | null {
+  const downSet = new Set(marks.downs.map((d) => d.toFixed(3)));
+  const spacing = marks.beats.length > 1 ? ((marks.beats[marks.beats.length - 1] - marks.beats[0]) / (marks.beats.length - 1)) * zoom : 99;
+  const showAll = spacing >= 5;
+  if (spacing * 4 < 5) return null;
+  const items: React.ReactNode[] = [];
+  const lines: React.ReactNode[] = [];
+  for (const b of marks.beats) {
+    const down = downSet.has(b.toFixed(3));
+    if (!down && !showAll) continue;
+    if (part === 'ruler') items.push(<div key={`m${b.toFixed(3)}`} className={`beat-mark${down ? ' down' : ''}`} style={{ left: b * zoom }} />);
+    else if (down || spacing >= 14) lines.push(<div key={`l${b.toFixed(3)}`} className={`beat-line${down ? ' down' : ''}`} style={{ left: b * zoom }} />);
+  }
+  if (part === 'ruler') return <div className="beat-marks">{items}</div>;
+  return <div className="beat-lines" style={{ top: RULER_H, height: height - RULER_H }}>{lines}</div>;
 }
 
 function Playhead({ zoom, scrollRef }: { zoom: number; scrollRef: React.RefObject<HTMLDivElement> }): React.ReactElement {

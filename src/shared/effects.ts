@@ -225,7 +225,8 @@ export function insertKeyframe(m: Motion, t: number): Motion {
   return { ...m, preset: 'custom', keyframes: kfs };
 }
 
-function motionKeyAtPublic(m: Motion, t: number): MotionState {
+/** Keyframe-Zustand ohne Schwingung (für das Teilen von Clips). */
+export function motionKeyAtPublic(m: Motion, t: number): MotionState {
   if (m.keyframes.length === 0) return { ...MOTION_IDENTITY };
   return motionKeyAt(m, t);
 }
