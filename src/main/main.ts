@@ -15,6 +15,7 @@ import { buildMenu } from './menu';
 import { checkForUpdates, downloadUpdate, initUpdater, installUpdate } from './updater';
 import { downloadModel, transcribe, whisperStatus } from './whisper';
 import { translateTexts } from './translate';
+import { stopTranslators, translateLocal, type MtLang } from './mt';
 import { startRemote, stopRemote } from './remote';
 import { vfxBegin, vfxCancel, vfxEnd, vfxFrame, type VfxBeginRequest } from './vfx';
 import { analyzeBeats, audioEnvelope } from './audio';
@@ -258,6 +259,8 @@ ipcMain.handle(IPC.transcribe, async (_e, req: { mediaPath: string; start: numbe
   }
 });
 ipcMain.handle(IPC.cancelTranscribe, () => { transcribeController?.abort(); });
+ipcMain.handle(IPC.translateLocal, (_e, texts: string[], from: MtLang, to: MtLang) =>
+  translateLocal(texts, from, to, (p) => sendToWindow(IPC.whisperProgress, { phase: p.percent >= 100 ? 'translate' : 'download', percent: p.percent, message: p.message })));
 ipcMain.handle(IPC.translateTexts, async (_e, texts: string[], source: string, target: string) => {
   const s = loadSettings();
   if (!s.translateUrl) throw new Error('Kein Übersetzungs-Server eingerichtet (Einstellungen → Übersetzung).');
@@ -453,6 +456,7 @@ ipcMain.on(IPC.quitApp, () => {
 
 app.on('window-all-closed', () => {
   killAll();
+  stopTranslators();
   stopRemote();
   app.quit();
 });

@@ -106,21 +106,6 @@ export function SettingsDialog(): React.ReactElement {
           </div>
         </div>
         <div className="modal-body" style={{ paddingTop: 0 }}>
-          <div className="panel-header" style={{ padding: '0 0 6px', border: 'none' }}>{t.translateSettings.section}</div>
-          <div className="form-grid">
-            <label>{t.translateSettings.url}</label>
-            <input type="text" value={settings.translateUrl ?? ''} placeholder="http://localhost:5000" onChange={(e) => void patch({ translateUrl: e.target.value.trim() || undefined })} spellCheck={false} />
-            <label />
-            <div className="hint">{t.translateSettings.urlHint}</div>
-            {settings.translateUrl && (
-              <>
-                <label>{t.translateSettings.key}</label>
-                <input type="password" value={settings.translateKey ?? ''} onChange={(e) => void patch({ translateKey: e.target.value || undefined })} />
-              </>
-            )}
-          </div>
-        </div>
-        <div className="modal-body" style={{ paddingTop: 0 }}>
           <div className="panel-header" style={{ padding: '0 0 6px', border: 'none' }}>{t.remote.section}</div>
           <div className="form-grid">
             <label />

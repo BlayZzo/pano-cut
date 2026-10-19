@@ -31,7 +31,13 @@ async function download(url: string, dest: string, onBytes?: (got: number, total
   if (fs.existsSync(dest)) return;
   const ctrl = new AbortController();
   let idle = setTimeout(() => ctrl.abort(), 60_000);
-  const res = await net.fetch(url, { signal: ctrl.signal });
+  const headers = { Accept: '*/*', 'Accept-Encoding': 'identity' };
+  let res = await net.fetch(url, { signal: ctrl.signal, headers });
+  // Manche Server lehnen die Chromium-Anfrage ab (z. B. 406) → mit dem Node-eigenen fetch erneut versuchen
+  if (!res.ok && typeof globalThis.fetch === 'function') {
+    log.warn(`Download ${res.status} über net.fetch, versuche erneut`, url, JSON.stringify(Object.fromEntries(res.headers.entries())));
+    res = await globalThis.fetch(url, { signal: ctrl.signal, headers: { ...headers, 'User-Agent': 'PanoCut' } });
+  }
   if (!res.ok || !res.body) { clearTimeout(idle); throw new Error(`Download fehlgeschlagen (${res.status}): ${url}`); }
   const total = Number(res.headers.get('content-length') ?? 0);
   const tmp = `${dest}.part`;

@@ -80,3 +80,47 @@ function hexWithAlpha(hex: string, alpha: number): string {
   const r = parseInt(h.slice(0, 2), 16), g = parseInt(h.slice(2, 4), 16), b = parseInt(h.slice(4, 6), 16);
   return `rgba(${r},${g},${b},${Math.max(0, Math.min(1, alpha))})`;
 }
+
+/** Untertitel mit hervorgehobenem Wort zeichnen (Spiegel der ASS-Ausgabe im Export: \c-Farbwechsel je Wort). */
+export function drawSubtitleView(ctx: CanvasRenderingContext2D, style: Omit<TitleStyle, 'text'>, view: { lines: Array<Array<{ text: string; active: boolean }>>; second?: string }, W: number, H: number, highlight: string | undefined, secondColor: string): void {
+  const px = Math.max(4, (style.size / 100) * H);
+  const def = fontDef(style.font);
+  const weight = style.bold || def.key === 'sans-bold' ? 'bold ' : '';
+  ctx.save();
+  ctx.filter = 'none';
+  ctx.textBaseline = 'middle';
+  const rows: Array<{ runs: Array<{ text: string; color: string }>; px: number }> = view.lines.map((ln) => ({
+    px,
+    runs: ln.map((r, i) => ({ text: (i ? ' ' : '') + r.text, color: r.active && highlight ? highlight : style.color })),
+  }));
+  if (view.second) rows.push({ px: Math.round(px * 0.8), runs: [{ text: view.second, color: secondColor }] });
+  const widths = rows.map((r) => { ctx.font = `${weight}${r.px}px ${def.css}`; return r.runs.reduce((s, x) => s + ctx.measureText(x.text).width, 0); });
+  const heights = rows.map((r) => r.px * 1.2);
+  const blockH = heights.reduce((a, b) => a + b, 0);
+  const blockW = Math.max(...widths, 1);
+  const cx = (style.x / 100) * W, cy = (style.y / 100) * H;
+  const left = style.align === 'left' ? cx : style.align === 'right' ? cx - blockW : cx - blockW / 2;
+  const top = cy - blockH / 2;
+  const pad = px * 0.35;
+  if (style.background) {
+    ctx.fillStyle = hexWithAlpha(style.background, style.backgroundOpacity);
+    ctx.fillRect(left - pad, top - pad, blockW + pad * 2, blockH + pad * 2);
+  }
+  let y0 = top;
+  rows.forEach((row, i) => {
+    ctx.font = `${weight}${row.px}px ${def.css}`;
+    let x = style.align === 'center' ? left + (blockW - widths[i]) / 2 : style.align === 'right' ? left + blockW - widths[i] : left;
+    const y = y0 + heights[i] / 2;
+    y0 += heights[i];
+    ctx.textAlign = 'left';
+    for (const run of row.runs) {
+      if (style.shadow) { ctx.shadowColor = 'rgba(0,0,0,0.6)'; ctx.shadowBlur = row.px * 0.08; ctx.shadowOffsetX = row.px * 0.04; ctx.shadowOffsetY = row.px * 0.04; }
+      else { ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0; }
+      if (style.outline) { ctx.lineWidth = Math.max(1, row.px * 0.08) * 2; ctx.strokeStyle = '#000'; ctx.lineJoin = 'round'; ctx.strokeText(run.text, x, y); }
+      ctx.fillStyle = run.color;
+      ctx.fillText(run.text, x, y);
+      x += ctx.measureText(run.text).width;
+    }
+  });
+  ctx.restore();
+}

@@ -124,7 +124,10 @@ export interface SubtitleSegment {
   end: number;
   text: string;
   translation?: string;  // Übersetzung (wird darunter angezeigt)
+  words?: SubWord[];     // Wort-Zeiten (für „Wort für Wort“ hervorheben)
 }
+
+export interface SubWord { start: number; end: number; text: string }
 
 export type WhisperModel = 'base' | 'small';
 
@@ -208,7 +211,7 @@ export interface CloudSettings {
 }
 
 export interface WhisperProgress {
-  phase: 'download' | 'extract' | 'transcribe' | 'done' | 'error';
+  phase: 'download' | 'extract' | 'transcribe' | 'translate' | 'done' | 'error';
   percent: number;
   message?: string;
 }
@@ -379,7 +382,14 @@ export interface Clip {
   pano?: PanoSettings;          // nur 360°-Clips
   transition?: Transition;      // Übergang VOM vorherigen Clip der Spur in diesen Clip
   stabilize?: Stabilization;
-  subtitles?: { segments: SubtitleSegment[]; style: Omit<TitleStyle, 'text'>; enabled: boolean; attach?: Attachment; showTranslation?: boolean; translationColor?: string; translationOnly?: boolean };
+  subtitles?: {
+    segments: SubtitleSegment[]; style: Omit<TitleStyle, 'text'>; enabled: boolean; attach?: Attachment;
+    showTranslation?: boolean; translationColor?: string; translationOnly?: boolean;
+    spoken?: 'de' | 'en';      // Sprache der Aufnahme
+    highlight?: string;        // Farbe für das gerade gesprochene Wort (leer = aus)
+    chunk?: number;            // höchstens so viele Wörter gleichzeitig (0 = ganze Zeile)
+    uppercase?: boolean;       // GROSSBUCHSTABEN
+  };
   fx?: ImageFx;                 // Vignette, Schärfen, Entrauschen, Weichzeichnen, Körnung, Spiegeln
   crop?: Crop;                  // Zuschnitt
   motion?: Motion;              // Animation (Bewegung/Zoom/Drehen/Deckkraft über die Zeit)

@@ -52,7 +52,7 @@ export interface ProjectState {
   setTransition(id: string, transition: Transition | undefined): void;
   setStabilize(id: string, s: Stabilization | undefined): void;
   setSubtitles(id: string, segments: SubtitleSegment[] | null, style?: Partial<Omit<TitleStyle, 'text'>>, enabled?: boolean): void;
-  setSubtitleOptions(id: string, patch: { showTranslation?: boolean; translationColor?: string; translationOnly?: boolean }): void;
+  setSubtitleOptions(id: string, patch: Partial<Omit<NonNullable<Clip['subtitles']>, 'segments' | 'style' | 'enabled'>>): void;
   updateMediaStitch(mediaId: string, patch: Partial<StitchSettings>): void;
 
   addObjectTrack(clipId: string, track: ObjectTrack): void;

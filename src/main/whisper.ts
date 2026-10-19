@@ -7,7 +7,8 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import log from 'electron-log';
-import type { SubtitleSegment, WhisperModel, WhisperProgress } from '@shared/types';
+import type { SubtitleSegment, SubWord, WhisperModel, WhisperProgress } from '@shared/types';
+import { groupWords } from '@shared/subtitles';
 import { makeId } from '@shared/timeline';
 import { runFfmpeg } from './ffmpeg';
 
@@ -88,7 +89,7 @@ export interface TranscribeRequest {
 }
 
 /** Transkribiert einen Abschnitt und liefert Segmente relativ zum Abschnittsanfang (Quellzeit). */
-export async function transcribe(req: TranscribeRequest, onProgress: (p: WhisperProgress) => void, signal?: AbortSignal): Promise<SubtitleSegment[]> {
+export async function transcribe(req: TranscribeRequest, onProgress: (p: WhisperProgress) => void, signal?: AbortSignal): Promise<{ segments: SubtitleSegment[]; language: string }> {
   const bin = whisperBinary();
   if (!bin) throw new Error('Das Untertitel-Modul (whisper-cli) ist in dieser Installation nicht enthalten.');
   await downloadModel(req.model, onProgress, signal);
@@ -99,7 +100,7 @@ export async function transcribe(req: TranscribeRequest, onProgress: (p: Whisper
     await runFfmpeg(['-ss', req.start.toFixed(3), '-t', req.duration.toFixed(3), '-i', req.mediaPath, '-vn', '-ac', '1', '-ar', '16000', '-c:a', 'pcm_s16le', wav], { signal });
     onProgress({ phase: 'transcribe', percent: 0, message: 'Sprache wird erkannt …' });
     const outBase = path.join(work, 'out');
-    const args = ['-m', modelPath(req.model), '-f', wav, '-oj', '-of', outBase, '-pp', '-t', String(Math.max(2, Math.min(8, os.cpus().length - 1))), '-ml', String(Math.max(10, req.maxChars)), '-sow'];
+    const args = ['-m', modelPath(req.model), '-f', wav, '-oj', '-of', outBase, '-pp', '-t', String(Math.max(2, Math.min(8, os.cpus().length - 1))), '-ml', '1', '-sow'];   // Wort für Wort (mit Zeiten) – Zeilen bilden wir selbst
     if (req.language && req.language !== 'auto') args.push('-l', req.language);
     else args.push('-l', 'auto');
     if (req.translate) args.push('-tr');
@@ -123,15 +124,28 @@ export async function transcribe(req: TranscribeRequest, onProgress: (p: Whisper
         resolve();
       });
     });
-    const json = JSON.parse(fs.readFileSync(outBase + '.json', 'utf8')) as { transcription?: Array<{ offsets: { from: number; to: number }; text: string }> };
-    const segs: SubtitleSegment[] = [];
+    const json = JSON.parse(fs.readFileSync(outBase + '.json', 'utf8')) as { result?: { language?: string }; transcription?: Array<{ offsets: { from: number; to: number }; text: string }> };
+    const words: SubWord[] = [];
+    let skip = false;
     for (const t of json.transcription ?? []) {
       const text = t.text.trim();
-      if (!text || /^\[.*\]$|^\(.*\)$/.test(text)) continue; // [Musik], (Applaus) …
-      segs.push({ id: makeId('sub'), start: t.offsets.from / 1000, end: Math.max(t.offsets.from / 1000 + 0.3, t.offsets.to / 1000), text });
+      if (!text) continue;
+      // Geräusch-Markierungen wie [Musik] oder (Applaus) überspringen (können über mehrere Wörter gehen)
+      if (/^[[(]/.test(text)) skip = true;
+      const wasSkip = skip;
+      if (/[\])]$/.test(text)) skip = false;
+      if (wasSkip) continue;
+      words.push({ start: t.offsets.from / 1000, end: Math.max(t.offsets.from / 1000 + 0.05, t.offsets.to / 1000), text });
     }
+    // Satzzeichen, die whisper als eigenes „Wort“ liefert, an das vorige Wort hängen
+    const merged: SubWord[] = [];
+    for (const w of words) {
+      if (merged.length && /^[.,!?;:…»«"')\]]+$/.test(w.text)) { const p = merged[merged.length - 1]; merged[merged.length - 1] = { ...p, text: p.text + w.text, end: w.end }; }
+      else merged.push(w);
+    }
+    const segs = groupWords(merged, Math.max(10, req.maxChars), () => makeId('sub'));
     onProgress({ phase: 'done', percent: 100, message: `${segs.length} Untertitel erkannt` });
-    return segs;
+    return { segments: segs, language: json.result?.language ?? (req.language !== 'auto' ? req.language : '') };
   } finally {
     fs.rmSync(work, { recursive: true, force: true });
   }

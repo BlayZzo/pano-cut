@@ -42,7 +42,7 @@ export function shiftClipTimes(c: Clip, from: number, dur: number): Clip {
   if (c.subtitles) {
     const segs = c.subtitles.segments
       .filter((s) => s.end > from + EPS && s.start < from + dur - EPS)
-      .map((s) => ({ ...s, start: Math.max(0, s.start - from), end: Math.min(dur, s.end - from) }));
+      .map((s) => ({ ...s, start: Math.max(0, s.start - from), end: Math.min(dur, s.end - from), words: s.words?.map((w) => ({ ...w, start: w.start - from, end: w.end - from })) }));
     out.subtitles = { ...c.subtitles, segments: segs };
   }
   if (c.objects) {
@@ -84,7 +84,7 @@ export function scaleClipTimes(c: Clip, k: number): Clip {
   if (c.pano) out.pano = { ...c.pano, keyframes: c.pano.keyframes.map((x) => ({ ...x, t: x.t * k })) };
   if (c.motion) out.motion = { ...c.motion, keyframes: c.motion.keyframes.map((x) => ({ ...x, t: x.t * k })) };
   if (c.color.exposureCurve) out.color = { ...c.color, exposureCurve: c.color.exposureCurve.map((x) => ({ ...x, t: x.t * k })) };
-  if (c.subtitles) out.subtitles = { ...c.subtitles, segments: c.subtitles.segments.map((s) => ({ ...s, start: s.start * k, end: s.end * k })) };
+  if (c.subtitles) out.subtitles = { ...c.subtitles, segments: c.subtitles.segments.map((s) => ({ ...s, start: s.start * k, end: s.end * k, words: s.words?.map((w) => ({ ...w, start: w.start * k, end: w.end * k })) })) };
   if (c.objects) out.objects = c.objects.map((o) => ({ ...o, boxes: o.boxes.map((b) => ({ ...b, t: b.t * k })), masks: o.masks?.map((m) => ({ ...m, t: m.t * k })) }));
   return out;
 }

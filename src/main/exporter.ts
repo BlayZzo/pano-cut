@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import log from 'electron-log';
 import type { Attachment, Clip, ExportOptions, ExportProgress, MediaItem, Project, TitleStyle, Track, TransitionType } from '@shared/types';
+import { charsPerLine, subtitleChangeTimes, subtitleViewAt } from '@shared/subtitles';
 import { dynTransitionAt, isDynamicTransition, type DynamicTransition, type DynLayer } from '@shared/transitions';
 import { clipDuration, clipEnd, projectDuration, sourceTimeAt, videoTracksBottomUp } from '@shared/timeline';
 import { fontDef, panoViewAt, stereographicVfov, titleAnimationAt, verticalFov } from '@shared/pano';
@@ -725,7 +726,7 @@ export class ExportJob {
    * ASS-Untertiteldatei (libass) für Text-Einblendungen – wird für Untertitel benutzt und für Titel,
    * wenn FFmpeg kein drawtext hat (z. B. Linux-Build).
    */
-  private assFilter(events: Array<{ a: number; b: number; text: string; second?: { text: string; color: string }; animation?: TitleStyle['animation']; from?: { x: number; y: number }; to?: { x: number; y: number } }>, style: Omit<TitleStyle, 'text'>, name: string): string | null {
+  private assFilter(events: Array<{ a: number; b: number; text: string; rich?: (toAss: (hex: string, alpha: number) => string, clean: (t: string) => string) => string; second?: { text: string; color: string }; animation?: TitleStyle['animation']; from?: { x: number; y: number }; to?: { x: number; y: number } }>, style: Omit<TitleStyle, 'text'>, name: string): string | null {
     if (!this.filters.has('subtitles') || events.length === 0) return null;
     const { width: W, height: H } = this.options;
     const toAss = (hex: string, alpha: number) => {
@@ -774,7 +775,8 @@ export class ExportJob {
         continue;
       }
       const second = ev.second && ev.second.text.trim() ? `\\N{\\c${toAss(ev.second.color, 1)}\\fs${Math.round(fontSize * 0.8)}}${clean(ev.second.text)}` : '';
-      lines.push(`Dialogue: 0,${fmt(ev.a)},${fmt(ev.b)},PanoCut,,0,0,0,,${tag}${clean(ev.text)}${second}`);
+      const body = ev.rich ? ev.rich(toAss, clean) : clean(ev.text);
+      lines.push(`Dialogue: 0,${fmt(ev.a)},${fmt(ev.b)},PanoCut,,0,0,0,,${tag}${body}${second}`);
     }
     const file = this.tmpFile(`${name}.ass`);
     fs.writeFileSync(file, header.concat(lines).join('\n') + '\n', 'utf8');
@@ -795,8 +797,30 @@ export class ExportJob {
     const showTr = !!subs.showTranslation;
     const trColor = subs.translationColor ?? '#ffe066';
     const mainText = (sg: { text: string; translation?: string }) => (showTr && subs.translationOnly && sg.translation ? sg.translation : sg.text);
-    const secondText = (sg: { translation?: string }) => (showTr && !subs.translationOnly && sg.translation ? { text: sg.translation, color: trColor } : undefined);
-    const ass = this.assFilter(visible.map((sg) => ({ a: sg.a, b: sg.b, text: mainText(sg), second: secondText(sg), from: att ? { x: att.xAt(sg.a), y: att.yAt(sg.a) } : undefined, to: att ? { x: att.xAt(sg.b), y: att.yAt(sg.b) } : undefined })), style, `subs_${seg.clip.id}`);
+    const secondText = (sg: { translation?: string }) => (showTr && !subs.translationOnly && sg.translation ? { text: subs.uppercase ? sg.translation.toLocaleUpperCase('de-DE') : sg.translation, color: trColor } : undefined);
+    // Je Segment ein Ereignis pro Wortwechsel (Hervorhebung/Wortgruppen) – gleiche Rechnung wie die Vorschau
+    const { width: W, height: H } = this.options;
+    const perLine = charsPerLine(style, W, H);
+    const toTl = (local: number) => seg.tlStart + (local - seg.localOffset);
+    const events: Parameters<ExportJob['assFilter']>[0] = [];
+    for (const sg of visible) {
+      const times = subtitleChangeTimes(subs, sg).concat([sg.end]);
+      for (let i = 0; i < times.length - 1; i++) {
+        const a = Math.max(sg.a, toTl(times[i])), b = Math.min(sg.b, toTl(times[i + 1]));
+        if (b - a < 0.01) continue;
+        const view = subtitleViewAt(subs, sg, times[i] + 1e-4, perLine);
+        if (!view) continue;
+        const plain = view.lines.map((ln) => ln.map((r) => r.text).join(' ')).join('\n');
+        events.push({
+          a, b, text: plain,
+          rich: (toAss, clean) => view.lines.map((ln) => ln.map((r) => (r.active && subs.highlight ? `{\\c${toAss(subs.highlight, 1)}}${clean(r.text)}{\\c${toAss(style.color, 1)}}` : clean(r.text))).join(' ')).join('\\N'),
+          second: secondText(sg),
+          from: att ? { x: att.xAt(a), y: att.yAt(a) } : undefined, to: att ? { x: att.xAt(b), y: att.yAt(b) } : undefined,
+        });
+      }
+    }
+    void mainText;
+    const ass = this.assFilter(events, style, `subs_${seg.clip.id}`);
     if (ass) return [ass];
     // Rückfall ohne libass: drawtext pro Segment
     const out: string[] = [];

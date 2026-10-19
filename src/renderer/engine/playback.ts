@@ -7,7 +7,8 @@ import { sharedPanoGL } from './panogl';
 import { sharedChromaGL } from './chromagl';
 import { sharedColorGL } from './colorgl';
 import { motionAt } from '@shared/effects';
-import { drawStyledText } from './text';
+import { drawStyledText, drawSubtitleView } from './text';
+import { charsPerLine, subtitleViewAt } from '@shared/subtitles';
 import { blendDef, hasShadow, shadowPixels } from '@shared/layers';
 import { exposureGainAt, gradeForLut } from '@shared/color';
 import { dynTransitionAt, isDynamicTransition, type DynLayer } from '@shared/transitions';
@@ -499,14 +500,13 @@ export class PlaybackEngine {
     const local = t - clip.start;
     const pos = this.attachedPosition(subs.attach, t);
     const style = pos ? { ...subs.style, x: pos.x, y: pos.y } : subs.style;
-    const showTr = !!subs.showTranslation;
     const trColor = subs.translationColor ?? '#ffe066';
+    const perLine = charsPerLine(style, W, H);
     for (const seg of subs.segments) {
       if (local >= seg.start && local < seg.end && seg.text.trim()) {
-        // gleiche Regeln wie im Export (exporter.ts: mainText/secondText)
-        const main = showTr && subs.translationOnly && seg.translation ? seg.translation : seg.text;
-        const second = showTr && !subs.translationOnly && seg.translation ? { text: seg.translation, color: trColor } : undefined;
-        drawStyledText(ctx, style, main, W, H, { localT: 0, duration: 1, animate: false }, second);
+        // gleiche Rechnung wie im Export (shared/subtitles.ts → exporter.subtitleFilters)
+        const view = subtitleViewAt(subs, seg, local, perLine);
+        if (view) drawSubtitleView(ctx, style, view, W, H, subs.highlight || undefined, trColor);
       }
     }
   }
