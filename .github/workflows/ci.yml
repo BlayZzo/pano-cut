@@ -45,7 +45,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p /tmp/cilogs
-          cat build.log smoke.log > /tmp/cilogs/smoke-${{ github.run_id }}.log 2>/dev/null || echo "kein Protokoll" > /tmp/cilogs/smoke-${{ github.run_id }}.log
+          { cat build.log 2>/dev/null; cat smoke.log 2>/dev/null; echo "(Ende)"; } > /tmp/cilogs/smoke-${{ github.run_id }}.log
           cd /tmp/cilogs
           git init -q && git checkout -q -b ci-logs
           git config user.email "ci@panocut" && git config user.name "PanoCut CI"
