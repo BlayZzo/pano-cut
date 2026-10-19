@@ -154,8 +154,8 @@ vec3 light() {
   float flicker = 0.85 + 0.15 * noise2(vec2(t * 9.0, uSeed));
   float Lv = (flash * 0.9 + heat * 0.75 * flicker) * uIntensity;
   float d = length(P - c);
-  float sigma = 0.8 + 0.7 * min(t, 1.0);
-  vec3 col = fireRamp(0.6 + 0.25 * heat) * Lv * exp(-d * d / (sigma * sigma));
+  float sigma = 1.0 + 0.6 * min(t, 1.0);
+  vec3 col = fireRamp(0.6 + 0.25 * heat) * Lv * (0.6 * exp(-d * d / (sigma * sigma)) + 0.4 * exp(-d * d / 7.5));
   col += vec3(1.0, 0.95, 0.85) * flash * 0.35 * exp(-d * d / 5.0);
   return col;
 }
@@ -212,7 +212,7 @@ vec3 light() {
   float fl = mix(noise2(vec2(t * 7.0, uSeed)), noise2(vec2((t - T) * 7.0, uSeed)), ph);
   float L = (0.55 + 0.3 * fl) * uIntensity;
   float d = length(P - vec2(0.0, -0.35));
-  return fireRamp(0.6) * L * exp(-d * d / 1.1);
+  return fireRamp(0.6) * L * (0.6 * exp(-d * d / 1.2) + 0.4 * exp(-d * d / 5.0));
 }
 `;
 
@@ -373,7 +373,7 @@ vec3 light() {
   float ph = fract(uTime / uDur);
   float fl = 0.75 + 0.25 * mix(noise2(vec2(t * 12.0, 1.0)), noise2(vec2((t - T) * 12.0, 1.0)), ph);
   float d = length(P - vec2(0.0, -0.85));
-  return fireRamp(0.75) * 0.45 * uIntensity * fl * exp(-d * d / 0.8);
+  return fireRamp(0.75) * 0.45 * uIntensity * fl * (0.6 * exp(-d * d / 0.8) + 0.4 * exp(-d * d / 3.5));
 }
 `;
 
