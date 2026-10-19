@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { MediaItem, Project } from '@shared/types';
 import { clipDuration, makeId, sourceTimeAt } from '@shared/timeline';
-import { runFfmpeg } from './ffmpeg';
+import { probeFile, runFfmpeg } from './ffmpeg';
 import { mediaCacheDir } from './paths';
 
 export function objectsDir(projectId: string): string {
@@ -59,12 +59,20 @@ export async function renderObject(project: Project, clipId: string, trackId: st
   const source = clip.reverse && media.proxyReversed ? media.proxyReversed : media.path;
   const maxW = Math.min(media.info.width || 1920, 1920);
   const feather = clip.cutout?.feather ?? 2, grow = clip.cutout?.grow ?? 0;
-  const chain = [
-    `[0:v]setpts=PTS-STARTPTS${clip.speed !== 1 ? `,setpts=PTS/${clip.speed}` : ''},fps=30,scale=w=${maxW}:h=-2,format=rgba[v]`,
-    `[1:v]fps=30,${maskChain(feather, grow, false)}[m0]`,
-    `[m0][v]scale2ref[m][vref]`,
-    `[vref][m]alphamerge,format=yuva420p[out]`,
-  ].join(';');
+  const videoChain = `[0:v]setpts=PTS-STARTPTS${clip.speed !== 1 ? `,setpts=PTS/${clip.speed}` : ''},fps=30,scale=w=${maxW}:h=-2,format=rgba[v]`;
+  // Bildgröße einmal messen und die Maske mit einem normalen `scale` anpassen (`scale2ref` bleibt in FFmpeg 7 hängen)
+  let size: { w: number; h: number } | null = null;
+  try {
+    const probePng = path.join(dir, `${id}_size.png`);
+    await runFfmpeg(['-ss', srcIn.toFixed(4), '-t', srcDur.toFixed(4), '-i', source, '-filter_complex', videoChain, '-map', '[v]', '-frames:v', '1', probePng]);
+    const v = (await probeFile(probePng)).streams.find((x) => x.codec_type === 'video');
+    if (v?.width && v?.height) size = { w: v.width, h: v.height };
+    fs.rmSync(probePng, { force: true });
+  } catch { /* Rückfall auf scale2ref */ }
+  const chain = (size
+    ? [videoChain, `[1:v]fps=30,${maskChain(feather, grow, false)},scale=${size.w}:${size.h}[m]`, `[v][m]alphamerge,format=yuva420p[out]`]
+    : [videoChain, `[1:v]fps=30,${maskChain(feather, grow, false)}[m0]`, `[m0][v]scale2ref[m][vref]`, `[vref][m]alphamerge,format=yuva420p[out]`]
+  ).join(';');
   const args = ['-ss', srcIn.toFixed(4), '-t', srcDur.toFixed(4), '-i', source, '-f', 'concat', '-safe', '0', '-i', list,
     '-filter_complex', chain, '-map', '[out]', '-c:v', 'libvpx-vp9', '-pix_fmt', 'yuva420p', '-b:v', '0', '-crf', '28', '-row-mt', '1', '-deadline', 'good', '-cpu-used', '4',
     '-t', dur.toFixed(4), '-an', out];

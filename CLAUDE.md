@@ -25,6 +25,9 @@ fertige Installer über GitHub Releases.
   beiden Stellen umsetzen.
 - Keine Menü-Accelerator ohne Modifier (würden Tastatureingaben in Textfeldern schlucken); Einzeltasten in `useKeyboard.ts`.
 - Alle Texte nach `i18n/de.ts`.
+- FFmpeg-Versionen: ffmpeg-static liefert für Mac/Windows 6.1, für Linux (CI) 7.0 ohne `drawtext`. Keine `scale2ref`
+  (hängt in FFmpeg 7 im großen Export-Graphen) – Größen vorher mit einem 1-Bild-Durchlauf messen (`prepareCutoutSizes`).
+  Neue Filter immer mit beiden Versionen testen (Binärdateien liegen unter github.com/eugeneware/ffmpeg-static/releases).
 - Version in `package.json` erhöhen und auf `main` pushen → `release.yml` baut und veröffentlicht Mac + Windows (Tags/API-Writes sind aus der Cloud-Umgebung nicht möglich; `gh workflow run release.yml` geht).
   `ci.yml` läuft bei jedem Push auf `main` (Typecheck, Build, Selbsttest, Linux-Paket).
 - Der Cloud-Arbeitsplatz erreicht npm nicht; prüfen mit `tools/offline-typecheck/run.sh` und über die CI (`gh run list`).

@@ -5,7 +5,7 @@ import log from 'electron-log';
 import type { Attachment, Clip, ExportOptions, ExportProgress, MediaItem, Project, TitleStyle, Track } from '@shared/types';
 import { clipDuration, clipEnd, projectDuration, sourceTimeAt, videoTracksBottomUp } from '@shared/timeline';
 import { fontDef, panoViewAt, stereographicVfov, titleAnimationAt, verticalFov } from '@shared/pano';
-import { availableEncoders, availableFilters, FfmpegError, runFfmpeg } from './ffmpeg';
+import { availableEncoders, availableFilters, FfmpegError, probeFile, runFfmpeg } from './ffmpeg';
 import { reverseVideo } from './reverse';
 import { needsStitching, stitchChain } from './stitch';
 import { escapeFilterPath, fontFamilyName, resolveFontFile } from './fonts';
@@ -37,6 +37,7 @@ interface Segment {
   stabFile?: string;         // vidstab-Transformdatei
   maskInput?: number;        // Eingabe-Index der Maskensequenz (Freistellen)
   maskList?: string;
+  cutSize?: { w: number; h: number };  // Bildgröße des freigestellten Clips vor dem Einrechnen der Maske
 }
 
 interface TransitionSeg {
@@ -113,6 +114,7 @@ export class ExportJob {
       const total = this.totalDuration();
       if (total <= 0 || segments.length === 0) throw new Error('Die Timeline ist leer – es gibt nichts zu exportieren.');
       await this.prepareStabilization(segments);
+      await this.prepareCutoutSizes(segments);
 
       const encoders = await availableEncoders();
       let hardware = this.options.hardware;
@@ -321,6 +323,39 @@ export class ExportJob {
       const args = ['-ss', fnum(s.srcIn), '-t', fnum(s.srcDur), '-i', s.file, '-filter_complex', chain, '-f', 'null', '-'];
       await runFfmpeg(args, { signal: this.controller.signal });
       s.stabFile = trf;
+    }
+  }
+
+  /** Hat dieses Segment eine Freistell-Maske, die im Export eingerechnet wird? */
+  private cutoutTrack(s: Segment) {
+    const cut = s.clip.cutout;
+    const track = cut?.enabled ? s.clip.objects?.find((tr) => tr.id === cut.trackId) : undefined;
+    return s.hasVideo && track?.masks?.length ? track : undefined;
+  }
+
+  /**
+   * Freistellen: Bildgröße des Clips vor dem Einrechnen der Maske einmal messen (ein Bild rendern).
+   * Damit lässt sich die Maske mit einem normalen `scale` anpassen – `scale2ref` bleibt in FFmpeg 7 hängen.
+   */
+  private async prepareCutoutSizes(segs: Segment[]): Promise<void> {
+    for (const s of segs) {
+      if (!this.cutoutTrack(s)) continue;
+      try {
+        const parts = this.videoChainParts(s);
+        const chain = [...parts.pre, ...parts.color, 'format=rgba'].join(',');
+        const args: string[] = [];
+        if (s.media?.hasAlpha) args.push('-c:v', 'libvpx-vp9');
+        if (s.isImage) args.push('-loop', '1', '-framerate', String(this.options.fps), '-t', '1', '-i', s.file);
+        else args.push('-ss', fnum(s.srcIn), '-t', fnum(Math.max(0.1, s.srcDur)), '-i', s.file);
+        const out = this.tmpFile(`cutsize_${s.clip.id}.png`);
+        await runFfmpeg([...args, '-filter_complex', `${this.inputLabel(s, 0)}${chain}[o]`, '-map', '[o]', '-frames:v', '1', out], { signal: this.controller.signal });
+        const info = await probeFile(out);
+        const v = info.streams.find((x) => x.codec_type === 'video');
+        if (v?.width && v?.height) s.cutSize = { w: v.width, h: v.height };
+      } catch (err) {
+        if (this.controller.signal.aborted) throw err;
+        log.warn('Größe des freigestellten Clips nicht ermittelt – benutze scale2ref', (err as Error).message);
+      }
     }
   }
 
@@ -704,9 +739,8 @@ export class ExportJob {
     }
     // Maskensequenzen für freigestellte Clips
     for (const s of segs) {
-      const cut = s.clip.cutout;
-      const track = cut?.enabled ? s.clip.objects?.find((tr) => tr.id === cut.trackId) : undefined;
-      if (!s.hasVideo || !track?.masks?.length) continue;
+      const track = this.cutoutTrack(s);
+      if (!track?.masks?.length) continue;
       const list = this.tmpFile(`masks_${s.clip.id}.txt`);
       writeMaskList(track.masks, s.localOffset + s.tlDur, list);
       args.push('-ss', fnum(s.localOffset), '-f', 'concat', '-safe', '0', '-i', list);
@@ -768,9 +802,16 @@ export class ExportJob {
         }
         if (c.fx?.mirror) maskGeo.push('hflip');
         if (c.fx?.flip) maskGeo.push('vflip');
-        filters.push(`[${s.maskInput}:v]fps=${fps},${[...maskGeo, maskChain(c.cutout.feather, c.cutout.grow, c.cutout.invert)].join(',')}[cm${vi}]`);
-        filters.push(`[cm${vi}][cc${vi}]scale2ref[cms${vi}][ccr${vi}]`);
-        filters.push(`[ccr${vi}][cms${vi}]alphamerge,${parts.post.join(',')},setpts=PTS+${fnum(s.tlStart)}/TB[${label}]`);
+        const maskOps = [...maskGeo, maskChain(c.cutout.feather, c.cutout.grow, c.cutout.invert)];
+        if (s.cutSize) {
+          // Maske direkt auf die gemessene Größe bringen (stabil in FFmpeg 6 und 7)
+          filters.push(`[${s.maskInput}:v]fps=${fps},${[...maskOps, `scale=${s.cutSize.w}:${s.cutSize.h}`].join(',')}[cms${vi}]`);
+          filters.push(`[cc${vi}][cms${vi}]alphamerge,${parts.post.join(',')},setpts=PTS+${fnum(s.tlStart)}/TB[${label}]`);
+        } else {
+          filters.push(`[${s.maskInput}:v]fps=${fps},${maskOps.join(',')}[cm${vi}]`);
+          filters.push(`[cm${vi}][cc${vi}]scale2ref[cms${vi}][ccr${vi}]`);
+          filters.push(`[ccr${vi}][cms${vi}]alphamerge,${parts.post.join(',')},setpts=PTS+${fnum(s.tlStart)}/TB[${label}]`);
+        }
       } else {
         const chain = this.videoChainPrefix(s);
         chain.push(`setpts=PTS+${fnum(s.tlStart)}/TB`);
