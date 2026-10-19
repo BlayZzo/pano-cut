@@ -1,3 +1,21 @@
+## PanoCut 0.7.1 – Vorschau repariert, Bereiche verschiebbar, Ansicht-Einstellungen
+
+**Installieren**
+- Mac mit Apple-Chip (M1–M4): `PanoCut-0.7.1-mac-arm64.dmg`
+- Mac mit Intel: `PanoCut-0.7.1-mac-x64.dmg`
+- Windows 10/11: `PanoCut-0.7.1-win-x64.exe`
+
+Wenn PanoCut schon installiert ist, wird das Update beim Start angeboten.
+
+**Neu in 0.7.1**
+- **Vorschau zeigt wieder das Bild**: Eine unsichtbare Ebene (für den Auswahlrahmen) hatte einen schwarzen Hintergrund und lag über dem Bild. Behoben – und ab jetzt prüft ein automatischer Test auf einem echten Mac und unter Linux bei jeder Änderung, dass die Vorschau ein Bild zeigt.
+- **Bereiche verschiebbar**: Die Trennlinien zwischen Mediathek, Vorschau, Inspektor und Timeline lassen sich mit der Maus ziehen. Ganz zusammenschieben blendet eine Seite aus, Doppelklick stellt die Standardgröße wieder her. Die Größen werden gemerkt.
+- **⚙ Ansicht (Vorschau)**: Qualität (Automatisch / Voll / Halb / Viertel), Hilfslinien (Drittel-Raster, sicherer Bereich für Social Media), Auswahlrahmen (immer / nur mit Maus über der Vorschau / nie), Karomuster-Hintergrund, Mediathek/Inspektor ein- und ausblenden.
+- **⚙ Ansicht (Timeline)**: Spurhöhe klein/mittel/groß, Vorschaubilder und Tonwellen ein/aus, Mitscrollen beim Abspielen, Einrasten. Viel weiter herauszoomen (über 2 Stunden auf einen Blick); Tasten **+** / **−** zoomen, **Z** zeigt alles.
+- **Schnellerer Import**: Mehrere Dateien werden gleichzeitig eingelesen; 360°-Rohdateien zeigen sofort ein Vorschaubild, das Zusammensetzen läuft im Hintergrund. Ein kleines Symbol auf der Karte zeigt, dass noch eine Vorschau-Datei erstellt wird – die Datei kann trotzdem schon benutzt werden.
+- **Nichts läuft mehr ungefragt**: Der Takt von Musik wird nur noch auf Knopfdruck erkannt; KI-Erkennung lief schon bisher nur über den Knopf „Objekte erkennen“. Der Rahmen um den ausgewählten Clip erscheint nur noch, wenn die Maus über der Vorschau ist.
+- KI, Bild-Assistent, Masken und 3D-Texturen dürfen die Medien jetzt sicher lesen (vorher konnten sie im fertigen Programm blockiert sein).
+
 ## PanoCut 0.7.0 – Untertitel für Social Media, neue Effekte, flüssiger
 
 **Installieren**

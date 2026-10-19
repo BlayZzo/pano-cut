@@ -70,6 +70,7 @@ export function MediaCard({ item, selected, onSelect, onOpen, onContextMenu }: P
         {item.info.duration > 0 && <div className="media-dur">{formatDuration(item.info.duration)}</div>}
         {item.status === 'analyzing' && <div className="media-status"><span className="spinner" />&nbsp;{t.library.analyzing}</div>}
         {item.status === 'processing' && !item.thumb && <div className="media-status"><span className="spinner" />&nbsp;{t.library.processing}</div>}
+        {item.status === 'processing' && item.thumb && <div className="media-working" title={t.library.workingHint}><span className="spinner" /></div>}
         {item.status === 'error' && <div className="media-status error">{t.library.error}: {item.error}</div>}
       </div>
       <div className="media-name">{item.name}</div>

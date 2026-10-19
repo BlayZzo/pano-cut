@@ -18,11 +18,7 @@ export function InspectorMusic({ clip, media }: { clip: Clip; media: MediaItem }
   const beats = media.beats;
   const isMusic = media.type === 'audio';
 
-  // Musikdateien automatisch analysieren (geht schnell und wird zwischengespeichert)
-  useEffect(() => {
-    if (isMusic && !beats && !busy && media.status === 'ready') void detectBeats(media.id);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [media.id, isMusic, media.status]);
+  // Takt wird nur auf Knopfdruck erkannt (keine Rechenarbeit im Hintergrund)
 
   const update = (p: Partial<BeatCutOptions>) => {
     const next = { ...opts, ...p };

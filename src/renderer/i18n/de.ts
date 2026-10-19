@@ -30,6 +30,7 @@ export const de = {
     image: 'Bilder',
     analyzing: 'Wird gelesen …',
     processing: 'Vorschau wird erstellt …',
+    workingHint: 'Die schnelle Vorschau-Datei wird im Hintergrund erstellt – die Datei kann schon benutzt werden.',
     error: 'Fehler',
     remove: 'Aus Mediathek entfernen',
     addToTimeline: 'Zur Timeline hinzufügen',

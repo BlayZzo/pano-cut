@@ -89,3 +89,8 @@ mit `app.getPath`, `electron-log` → console) und mit `PANOCUT_FFMPEG=/usr/bin/
 direkt unter Node ausführen. Vollständige CI-Logs sind aus der Cloud nicht abrufbar (`gh run view <id> --json jobs`
 zeigt nur den Schritt-Status).
 Build- und Selbsttest-Protokoll jedes CI-Laufs liegt im Branch `ci-logs` (`git clone --depth 1 --branch ci-logs …`).
+Oberflächen-Test im echten Electron: `electron . --ui-test` (`main/uitest.ts`, Hook `renderer/testHook.ts` nur mit `--pc-ui-test`):
+importiert Testvideos, prüft per `capturePage`, dass die Vorschau sichtbar ist (Linux-CI + Job `mac-ui` auf macos-14,
+Mac-Protokoll + Screenshot im Branch `ci-logs-mac`). Lehre aus 0.7.0: `.preview-stage canvas` traf auch das Overlay-Canvas →
+schwarzes Bild über der Vorschau; Playwright-Element-Screenshots zeigten das, wurden aber als GPU-Problem fehlgedeutet.
+Ansicht/Layout: `ViewSettings` (`settings.view`, `useView`/`updateView`), `Splitter.tsx`, `Popover.tsx`.
