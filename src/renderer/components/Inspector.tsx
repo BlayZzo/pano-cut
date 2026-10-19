@@ -14,6 +14,7 @@ import { InspectorLayer, InspectorVfx } from './InspectorLayer';
 import { InspectorMusic } from './InspectorMusic';
 import { SpeedRampFields } from './InspectorRamp';
 import { InspectorDropIn } from './InspectorDropIn';
+import { createMulticam, multicamCandidates } from '../multicamActions';
 
 export function Inspector(): React.ReactElement {
   const selection = useUi((s) => s.selection);
@@ -36,6 +37,12 @@ export function Inspector(): React.ReactElement {
           </div>
         ) : (
           <>
+            {selected.length >= 2 && multicamCandidates(selection).length >= 2 && (
+              <Section title={t.multicam.title} defaultOpen={new Set(selected.map((c) => c.trackId)).size > 1}>
+                <button className="btn primary" style={{ width: '100%' }} onClick={() => void createMulticam(selection)}>{t.multicam.create}</button>
+                <div className="hint">{t.multicam.createHint}</div>
+              </Section>
+            )}
             {music && media[music.mediaId] && <InspectorMusic clip={music} media={media[music.mediaId]} />}
             <ClipInspector clip={selected[0]} ids={selected.map((c) => c.id)} count={selected.length} />
           </>
@@ -74,7 +81,7 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
       </Section>
 
       {isTitle && <InspectorTitle clip={clip} />}
-      {!isTitle && media && (isAudioOnly || media.info.hasAudio) && !media.vfx && <InspectorMusic clip={clip} media={media} />}
+      {!isTitle && !clip.mc && media && (isAudioOnly || media.info.hasAudio) && !media.vfx && <InspectorMusic clip={clip} media={media} />}
       {!isTitle && media?.vfx && <InspectorVfx clip={clip} media={media} />}
       {!isTitle && !isAudioOnly && <InspectorLayer clip={clip} ids={ids} />}
       {!isTitle && count === 1 && media && !media.vfx && (media.hasAlpha || clip.cutout?.enabled) && <InspectorDropIn clip={clip} />}
@@ -97,7 +104,7 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
             {t.inspector.reverse}
           </label>
           {clip.reverse && media?.type === 'video' && !media.proxyReversed && <div className="hint warn">{t.inspector.reversedProxyHint}</div>}
-          {count === 1 && media?.type === 'video' && !media.vfx && <SpeedRampFields clip={clip} />}
+          {count === 1 && media?.type === 'video' && !media.vfx && !clip.mc && <SpeedRampFields clip={clip} />}
         </Section>
       )}
 

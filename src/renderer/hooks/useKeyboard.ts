@@ -3,6 +3,7 @@ import { useUi } from '../store/ui';
 import { isEditingText } from '../utils/dom';
 import { clearRange, deleteSelection, goEnd, goStart, setRangeIn, setRangeOut, splitAtPlayhead, stepFrames } from '../actions';
 import { playPause } from '../engine/instance';
+import { groupAt, switchToAngle } from '../multicamActions';
 
 /**
  * Globale Einzeltasten-Kürzel. Alles mit Cmd/Strg (Speichern, Rückgängig, …)
@@ -34,6 +35,9 @@ export function useKeyboard(): void {
         case 'i': case 'I': e.preventDefault(); setRangeIn(); break;
         case 'o': case 'O': e.preventDefault(); setRangeOut(); break;
         case 'x': case 'X': e.preventDefault(); clearRange(); break;
+        default:
+          // Mehrkamera: Tasten 1–9 wählen die Kamera (nur wenn an der Stelle eine Gruppe liegt)
+          if (/^[1-9]$/.test(e.key) && groupAt(ui.playhead)) { e.preventDefault(); switchToAngle(Number(e.key) - 1); }
       }
     };
     window.addEventListener('keydown', onKey);

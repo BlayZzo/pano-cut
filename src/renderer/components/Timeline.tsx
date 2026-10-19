@@ -558,7 +558,8 @@ const Lane = React.memo(function Lane({ track, top, height, project, zoom, selec
 function clipClass(media: MediaItem | undefined, clip?: Clip): string {
   if (clip?.kind === 'title') return 'title';
   if (!media) return '';
-  return media.type === 'audio' ? 'audio' : media.type === 'image' ? 'image' : '';
+  const base = media.type === 'audio' ? 'audio' : media.type === 'image' ? 'image' : '';
+  return clip?.mc ? `${base} mc-piece` : base;
 }
 
 // ---------- Clip ----------

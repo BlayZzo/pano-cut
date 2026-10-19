@@ -9,7 +9,7 @@ export interface BeatInfo {
 }
 
 /** In-place-FFT (Radix 2). re/im Länge = Zweierpotenz. */
-function fft(re: Float32Array, im: Float32Array): void {
+export function fft(re: Float32Array, im: Float32Array): void {
   const n = re.length;
   for (let i = 1, j = 0; i < n; i++) {
     let bit = n >> 1;

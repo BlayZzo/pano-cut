@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { temporal } from 'zundo';
-import type { Clip, MediaItem, Project, ProjectSettings, Track, TrackKind } from '@shared/types';
+import type { Clip, MediaItem, MulticamGroup, Project, ProjectSettings, Track, TrackKind } from '@shared/types';
 import type { Attachment, ChromaKey, Cutout, ObjectTrack, PanoSettings, Stabilization, StitchSettings, SubtitleSegment, TitleStyle, Transition } from '@shared/types';
 import {
   clipDuration, clipEnd, createClip, createProject, createTitleClip, createTrack, makeId, MIN_CLIP_DURATION, nextFreeStart, overlaps, sourceLimit, sourceTimeAt,
@@ -42,6 +42,10 @@ export interface ProjectState {
   addVideoTrackAbove(aboveTrackId: string | null, name?: string): string;
   /** Fertige Clips einfügen (Effekte, Objekt-Kopien). */
   insertClips(clips: Clip[]): void;
+  /** Neue Tonspur (unten) mit Namen. Gibt die ID zurück. */
+  addAudioTrack(name?: string): string;
+  /** Mehrkamera-Gruppe setzen (null = entfernen) und ihre Clips in einem Schritt ersetzen. */
+  setMulticam(groupId: string, group: MulticamGroup | null, clips: Clip[]): void;
 
   addTitleClip(trackId: string, start: number, title: TitleStyle): Clip | null;
   setPano(id: string, pano: PanoSettings | undefined): void;
@@ -285,6 +289,22 @@ export const useProject = create<ProjectState>()(
         set({ project: { ...s.project, tracks } });
         return track.id;
       },
+      addAudioTrack: (name) => {
+        const s = get();
+        const count = s.project.tracks.filter((t) => t.kind === 'audio').length + 1;
+        const track = createTrack('audio', count);
+        if (name) track.name = name;
+        set({ project: { ...s.project, tracks: [...s.project.tracks, track] } });
+        return track.id;
+      },
+      setMulticam: (groupId, group, newClips) => set((s) => {
+        const clips: Record<string, Clip> = {};
+        for (const c of Object.values(s.project.clips)) if (c.mc?.groupId !== groupId) clips[c.id] = c;
+        for (const c of newClips) clips[c.id] = c;
+        const multicam = { ...(s.project.multicam ?? {}) };
+        if (group) multicam[groupId] = group; else delete multicam[groupId];
+        return { project: { ...s.project, clips, multicam } };
+      }),
       insertClips: (newClips) => set((s) => {
         const clips = { ...s.project.clips };
         for (const c of newClips) clips[c.id] = c;

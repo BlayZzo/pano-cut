@@ -390,6 +390,7 @@ export interface Clip {
   blend?: BlendMode;            // Mischmodus der Ebene (Standard: normal)
   shadow?: LayerShadow;         // Schlagschatten
   link?: ClipLink;              // folgt einem anderen Clip
+  mc?: { groupId: string; angle: number };  // Stück einer Mehrkamera-Gruppe (angle −1 = Ton)
 }
 
 export type TrackKind = 'video' | 'audio';
@@ -419,8 +420,31 @@ export interface Project {
   media: Record<string, MediaItem>;
   tracks: Track[];
   clips: Record<string, Clip>;
+  multicam?: Record<string, MulticamGroup>;   // Mehrkamera-Gruppen
   createdAt: number;
   modifiedAt: number;
+}
+
+// ---------- Mehrkamera ----------
+
+export interface MulticamAngle {
+  mediaId: string;
+  name: string;
+  shift: number;        // Beginn der Datei auf der Gruppen-Zeitachse (Sekunden, ≥ 0)
+  template: Clip;       // Einstellungen (Farbe, Größe, 360°-Blick …), die jedes Stück dieser Kamera übernimmt
+}
+
+export interface MulticamGroup {
+  id: string;
+  name: string;
+  trackId: string;       // Videospur mit dem geschnittenen Ergebnis
+  audioTrackId: string;  // Tonspur
+  start: number;         // Beginn auf der Timeline
+  duration: number;      // Länge der Gruppe
+  angles: MulticamAngle[];
+  audioAngle: number;    // Ton von dieser Kamera
+  cuts: Array<{ t: number; angle: number }>;  // Gruppen-Zeit → Kamera (erster Schnitt bei 0)
+  confidence: number[];  // Sicherheit der Ton-Synchronisierung je Kamera (0..1)
 }
 
 export interface ProjectFile {

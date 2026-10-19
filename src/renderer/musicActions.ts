@@ -38,7 +38,7 @@ export function changeBeatTempo(mediaId: string, factor: 2 | 0.5): void {
 function isVisualClip(project: Project, c: Clip): boolean {
   const tr = project.tracks.find((x) => x.id === c.trackId);
   if (!tr || tr.kind !== 'video' || tr.locked) return false;
-  if (c.link) return false;
+  if (c.link || c.mc) return false;
   if (c.kind === 'title') return false;
   const m = project.media[c.mediaId];
   return !!m && m.type !== 'audio' && !m.vfx;

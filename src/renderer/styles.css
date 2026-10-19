@@ -336,3 +336,22 @@ textarea:focus { border-color: var(--accent); }
 .beat-lines { position: absolute; left: 0; pointer-events: none; z-index: 0; }
 .beat-line { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(250, 204, 21, 0.10); }
 .beat-line.down { background: rgba(250, 204, 21, 0.22); }
+
+/* ---------- Mehrkamera ---------- */
+.multicam-strip { display: flex; gap: 10px; padding: 8px 12px; border-top: 1px solid var(--border); background: var(--panel); min-height: 0; }
+.multicam-strip.empty { align-items: center; justify-content: space-between; }
+.multicam-tiles { flex: 1; display: flex; gap: 8px; overflow-x: auto; min-width: 0; }
+.multicam-tile { position: relative; flex: 0 0 auto; width: 168px; aspect-ratio: 16 / 9; padding: 0; border-radius: var(--radius-sm); border: 2px solid var(--border); background: #000; overflow: hidden; cursor: pointer; }
+.multicam-tile video { width: 100%; height: 100%; object-fit: contain; display: block; pointer-events: none; }
+.multicam-tile.active { border-color: #ff4d5e; box-shadow: 0 0 0 1px #ff4d5e; }
+.multicam-tile:hover { border-color: var(--accent); }
+.multicam-key { position: absolute; left: 4px; top: 4px; min-width: 18px; height: 18px; border-radius: 4px; background: rgba(0,0,0,0.65); color: #fff; font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
+.multicam-tile.active .multicam-key { background: #ff4d5e; }
+.multicam-name { position: absolute; left: 4px; right: 4px; bottom: 3px; font-size: 10px; color: #fff; text-shadow: 0 1px 2px #000; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: left; }
+.multicam-off { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: var(--text-faint); font-size: 11px; }
+.multicam-warn { position: absolute; right: 4px; top: 3px; color: var(--warn); font-size: 12px; }
+.multicam-side { width: 210px; flex: 0 0 auto; display: flex; flex-direction: column; gap: 6px; }
+.multicam-title { font-weight: 600; font-size: 12px; }
+.multicam-audio { display: flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--text-dim); }
+.multicam-audio select { flex: 1; min-width: 0; }
+.clip.mc-piece { box-shadow: inset 0 -3px 0 #ff4d5e; }
