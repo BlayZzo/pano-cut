@@ -82,6 +82,7 @@ const api: PanoCutApi = {
   downloadUpdate: () => ipcRenderer.invoke(IPC.downloadUpdate),
   installUpdate: () => ipcRenderer.invoke(IPC.installUpdate),
   onUpdateStatus: subscribe(IPC.updateStatus),
+  testMode: process.argv.includes('--pc-ui-test'),
 };
 
 contextBridge.exposeInMainWorld('panocut', api);

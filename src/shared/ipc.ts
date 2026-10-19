@@ -7,6 +7,8 @@ export interface CloudEntry { name: string; path: string; size: number; isDir: b
 
 /** Die API, die das Preload-Skript der Oberfläche als `window.panocut` bereitstellt. */
 export interface PanoCutApi {
+  /** Nur im automatischen Oberflächen-Test gesetzt. */
+  testMode?: boolean;
   // App
   getAppInfo(): Promise<AppInfo>;
   getSettings(): Promise<Settings>;

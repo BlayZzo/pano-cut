@@ -25,7 +25,7 @@ declare module 'electron' {
   export class BrowserWindow {
     constructor(opts?: any);
     static getAllWindows(): BrowserWindow[];
-    webContents: { send(ch: string, ...args: any[]): void; openDevTools(o?: any): void; setWindowOpenHandler(h: (d: { url: string }) => any): void };
+    webContents: { send(ch: string, ...args: any[]): void; openDevTools(o?: any): void; setWindowOpenHandler(h: (d: { url: string }) => any): void; capturePage(r?: any): Promise<NativeImage>; isLoading(): boolean; once(ev: string, fn: (...a: any[]) => void): void; on(ev: string, fn: (...a: any[]) => void): void; executeJavaScript(code: string): Promise<any> };
     once(ev: string, cb: (...a: any[]) => void): void;
     on(ev: string, cb: (...a: any[]) => void): void;
     loadURL(u: string): Promise<void>;

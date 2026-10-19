@@ -56,6 +56,8 @@ function sendToWindow(channel: string, payload: unknown): void {
   mainWindow?.webContents.send(channel, payload);
 }
 
+const UI_TEST = process.argv.includes('--ui-test');
+
 function createWindow(): void {
   const iconPath = path.join(__dirname, '..', '..', 'build', 'icon.png');
   mainWindow = new BrowserWindow({
@@ -76,6 +78,7 @@ function createWindow(): void {
       sandbox: false,
       spellcheck: false,
       backgroundThrottling: false,
+      additionalArguments: UI_TEST ? ['--pc-ui-test'] : [],
     },
   });
   mainWindow.once('ready-to-show', () => mainWindow?.show());
@@ -449,6 +452,15 @@ app.whenReady().then(async () => {
   }
   installMediaProtocol();
   createWindow();
+  if (UI_TEST) {
+    const { runUiTest, waitForLoad } = await import('./uitest');
+    await waitForLoad(mainWindow!);
+    mainWindow!.show();
+    const code = await runUiTest(mainWindow!);
+    forceQuit = true; dirty = false;
+    app.exit(code);
+    return;
+  }
   refreshMenu();
   applyRemoteSetting();
   initUpdater((s: UpdateStatus) => sendToWindow(IPC.updateStatus, s));

@@ -38,6 +38,12 @@ jobs:
           curl -sSL -o /tmp/dog.jpg https://raw.githubusercontent.com/Megvii-BaseDetection/YOLOX/main/assets/dog.jpg || true
           set -o pipefail
           PANOCUT_TEST_IMAGE=/tmp/dog.jpg PANOCUT_REQUIRE_AI=1 xvfb-run -a npx electron . --smoke-test --no-sandbox 2>&1 | tee smoke.log
+      - name: Oberflächen-Test (Vorschau zeigt Bild)
+        if: always()
+        timeout-minutes: 10
+        run: |
+          set -o pipefail
+          xvfb-run -a -s "-screen 0 1920x1200x24" npx electron . --ui-test --no-sandbox 2>&1 | tee ui.log
       # Bei Fehlern das Protokoll in den Branch `ci-logs` legen (von der Cloud-Umgebung aus lesbar)
       - name: Protokoll sichern
         if: always()
@@ -45,12 +51,18 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p /tmp/cilogs
-          { cat build.log 2>/dev/null; cat smoke.log 2>/dev/null; echo "(Ende)"; } > /tmp/cilogs/smoke-${{ github.run_id }}.log
+          { cat build.log 2>/dev/null; cat smoke.log 2>/dev/null; cat ui.log 2>/dev/null; echo "(Ende)"; } > /tmp/cilogs/smoke-${{ github.run_id }}.log
           cd /tmp/cilogs
           git init -q && git checkout -q -b ci-logs
           git config user.email "ci@panocut" && git config user.name "PanoCut CI"
           git add -A && git commit -q -m "Protokoll Lauf ${{ github.run_id }}"
           git push -q -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ci-logs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ui-test-linux
+          path: /tmp/panocut-ui-test.png
+          if-no-files-found: ignore
       - name: Linux-Paket bauen (Packaging-Check)
         run: npx electron-builder --linux AppImage --publish never
       - uses: actions/upload-artifact@v4
@@ -58,3 +70,34 @@ jobs:
           name: panocut-linux
           path: release/*.AppImage
           if-no-files-found: ignore
+
+  mac-ui:
+    name: Oberflächen-Test auf dem Mac
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+        env:
+          ONNXRUNTIME_NODE_INSTALL: skip
+      - run: npm run build:main && npm run build:renderer
+      - name: Oberflächen-Test (Vorschau zeigt Bild)
+        timeout-minutes: 15
+        run: |
+          set -o pipefail
+          npx electron . --ui-test 2>&1 | tee ui-mac.log
+      - name: Protokoll sichern
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p /tmp/cilogs-mac && cp ui-mac.log /tmp/cilogs-mac/mac-${{ github.run_id }}.log 2>/dev/null || echo "kein Protokoll" > /tmp/cilogs-mac/mac-${{ github.run_id }}.log
+          cp /tmp/panocut-ui-test.png /tmp/cilogs-mac/mac-${{ github.run_id }}.png 2>/dev/null || true
+          cp "$TMPDIR/panocut-ui-test.png" /tmp/cilogs-mac/mac-${{ github.run_id }}.png 2>/dev/null || true
+          cd /tmp/cilogs-mac
+          git init -q && git checkout -q -b ci-logs-mac
+          git config user.email "ci@panocut" && git config user.name "PanoCut CI"
+          git add -A && git commit -q -m "Mac-Protokoll ${{ github.run_id }}"
+          git push -q -f "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ci-logs-mac
