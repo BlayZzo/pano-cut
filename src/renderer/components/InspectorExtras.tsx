@@ -3,7 +3,7 @@ import type { Clip, MediaItem, SubtitleSegment, TransitionType, WhisperModel, Wh
 import { clipDuration, clipEnd, clipsOnTrack, formatTime, makeId, sourceTimeAt } from '@shared/timeline';
 import { TRANSITIONS, defaultSubtitleStyle, defaultTransition } from '@shared/pano';
 import { isDynamicTransition } from '@shared/transitions';
-import { SUBTITLE_PRESETS } from '@shared/subtitles';
+import { DEFAULT_TRANSLATION_COLOR, SUBTITLE_PRESETS } from '@shared/subtitles';
 import { beginTransaction, endTransaction, useProject } from '../store/project';
 import { useUi } from '../store/ui';
 import { t } from '../i18n/de';
@@ -230,7 +230,7 @@ export function InspectorSubtitles({ clip, media }: { clip: Clip; media: MediaIt
           {subs.showTranslation && !subs.translationOnly && (
             <div className="field">
               <label>{t.subtitles.translationColor}</label>
-              <input type="color" value={subs.translationColor ?? '#ffe066'} onChange={(e) => setSubtitleOptions(clip.id, { translationColor: e.target.value })} style={{ gridColumn: '2 / span 2' }} />
+              <input type="color" value={subs.translationColor ?? DEFAULT_TRANSLATION_COLOR} onChange={(e) => setSubtitleOptions(clip.id, { translationColor: e.target.value })} style={{ gridColumn: '2 / span 2' }} />
             </div>
           )}
           <button className="btn sm ghost" onClick={() => setCustom(!custom)}>{custom ? '▾' : '▸'} {t.subtitles.customize}</button>

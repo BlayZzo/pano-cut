@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import log from 'electron-log';
 import type { Attachment, Clip, ExportOptions, ExportProgress, MediaItem, Project, TitleStyle, Track, TransitionType } from '@shared/types';
-import { charsPerLine, subtitleChangeTimes, subtitleViewAt } from '@shared/subtitles';
+import { DEFAULT_TRANSLATION_COLOR, charsPerLine, subtitleChangeTimes, subtitleViewAt } from '@shared/subtitles';
 import { dynTransitionAt, isDynamicTransition, type DynamicTransition, type DynLayer } from '@shared/transitions';
 import { clipDuration, clipEnd, projectDuration, sourceTimeAt, videoTracksBottomUp } from '@shared/timeline';
 import { fontDef, panoViewAt, stereographicVfov, titleAnimationAt, verticalFov } from '@shared/pano';
@@ -795,7 +795,7 @@ export class ExportJob {
     if (visible.length === 0) return [];
     const att = subs.attach ? this.attachmentExpr(subs.attach, this.currentSegments, this.range().start) : null;
     const showTr = !!subs.showTranslation;
-    const trColor = subs.translationColor ?? '#ffe066';
+    const trColor = subs.translationColor ?? DEFAULT_TRANSLATION_COLOR;
     const mainText = (sg: { text: string; translation?: string }) => (showTr && subs.translationOnly && sg.translation ? sg.translation : sg.text);
     const secondText = (sg: { translation?: string }) => (showTr && !subs.translationOnly && sg.translation ? { text: subs.uppercase ? sg.translation.toLocaleUpperCase('de-DE') : sg.translation, color: trColor } : undefined);
     // Je Segment ein Ereignis pro Wortwechsel (Hervorhebung/Wortgruppen) – gleiche Rechnung wie die Vorschau

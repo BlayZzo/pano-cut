@@ -41,6 +41,18 @@ export const VFX_KINDS: VfxKindDef[] = [
     words: ['konfetti', 'confetti', 'party', 'feier', 'luftschlangen'] },
   { kind: 'impact', name: 'Aufprall', icon: '💢', fullFrame: false, light: false, shadow: false, duration: 2.5, loop: false, aspect: 2, scale: 0.6, y: 25,
     words: ['aufprall', 'einschlag', 'aufschlag', 'landung', 'impact', 'crash', 'trümmer', 'truemmer', 'druckwelle'] },
+  { kind: 'flare', name: 'Linsenreflex', icon: '🌞', fullFrame: true, light: false, shadow: false, duration: 6, loop: true, aspect: 16 / 9, scale: 1, y: 0,
+    words: ['linsenreflex', 'lens flare', 'flare', 'gegenlicht', 'sonnenstrahl', 'sonnenlicht', 'reflex'] },
+  { kind: 'bokeh', name: 'Bokeh-Lichter', icon: '🔆', fullFrame: true, light: false, shadow: false, duration: 8, loop: true, aspect: 16 / 9, scale: 1, y: 0,
+    words: ['bokeh', 'lichterkette', 'lichtpunkte', 'unscharfe lichter', 'lichter', 'romantisch'] },
+  { kind: 'speedlines', name: 'Speed-Linien', icon: '🏎️', fullFrame: true, light: false, shadow: false, duration: 2, loop: true, aspect: 16 / 9, scale: 1, y: 0,
+    words: ['speed', 'tempo', 'geschwindigkeit', 'anime', 'comic', 'speedlines', 'speed-linien'] },
+  { kind: 'leaks', name: 'Lichtlecks (Film-Look)', icon: '🎞️', fullFrame: true, light: false, shadow: false, duration: 8, loop: true, aspect: 16 / 9, scale: 1, y: 0,
+    words: ['lichtleck', 'light leak', 'leak', 'film-look', 'filmlook', 'analog', 'vintage', 'retro'] },
+  { kind: 'hearts', name: 'Herzen', icon: '💖', fullFrame: true, light: false, shadow: false, duration: 6, loop: true, aspect: 16 / 9, scale: 1, y: 0,
+    words: ['herz', 'herzen', 'liebe', 'love', 'heart', 'valentin', 'verliebt'] },
+  { kind: 'glitter', name: 'Glitzer', icon: '🌟', fullFrame: true, light: false, shadow: false, duration: 5, loop: true, aspect: 16 / 9, scale: 1, y: 0,
+    words: ['glitzer', 'glitzern', 'funkeln', 'sterne', 'sternchen', 'glitter', 'sparkle', 'magie', 'magisch', 'zauber'] },
 ];
 
 export function vfxKind(kind: VfxKind): VfxKindDef {
@@ -164,7 +176,7 @@ export function matchToScene(spec: VfxSpec, scene: FrameStats): SceneMatch {
   const warm = (scene.meanR - scene.meanB) / avg;          // >0 warm, <0 kühl
   const green = (scene.meanG - (scene.meanR + scene.meanB) / 2) / avg;
   const color: Partial<ColorGrade> = {};
-  const emissive = spec.kind === 'explosion' || spec.kind === 'fire' || spec.kind === 'sparks' || spec.kind === 'lightning';
+  const emissive = ['explosion', 'fire', 'sparks', 'lightning', 'flare', 'bokeh', 'leaks', 'glitter'].includes(spec.kind);
   // Belichtung: nicht leuchtende Effekte (Rauch, Schnee, Nebel …) an die Szenenhelligkeit angleichen
   const exp = Math.log2(Math.max(0.04, mid) / 0.42);
   color.exposure = round2(Math.max(-2.2, Math.min(0.4, exp * (emissive ? 0.25 : 0.75))));

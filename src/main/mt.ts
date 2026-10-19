@@ -5,7 +5,6 @@ import { app, net } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { spawn } from 'node:child_process';
 import { Worker } from 'node:worker_threads';
 import log from 'electron-log';
 
@@ -19,7 +18,6 @@ const ENGINE_FILES = ['bergamot-translator-worker.js', 'bergamot-translator-work
 const RS_BASE = 'https://firefox.settings.services.mozilla.com/v1';
 const RS_RECORDS = `${RS_BASE}/buckets/main/collections/translations-models/records`;
 // Ersatzquelle: Modelle des Bergamot-Projekts (Universität Edinburgh)
-const STATMT = (pair: string) => `https://data.statmt.org/bergamot/models/deen/${pair}.student.tiny11.tar.gz`;
 
 function dir(...p: string[]): string {
   const d = path.join(app.getPath('userData'), 'models', 'translate', ...p);
@@ -125,38 +123,6 @@ async function modelsFromFirefox(from: MtLang, to: MtLang, onProgress: (p: MtPro
   return out;
 }
 
-/** Ersatz: Bergamot-Modell als .tar.gz von data.statmt.org (mit dem System-Programm „tar“ entpackt). */
-async function modelsFromStatmt(from: MtLang, to: MtLang, onProgress: (p: MtProgress) => void): Promise<ModelFiles> {
-  const pair = `${from}${to}`;
-  const target = dir(`${pair}-statmt`);
-  const done = path.join(target, 'files.json');
-  if (fs.existsSync(done)) return JSON.parse(fs.readFileSync(done, 'utf8')) as ModelFiles;
-  const archive = path.join(target, 'model.tar.gz');
-  await download(STATMT(pair), archive, (got, total) => onProgress({ percent: total ? Math.round((got / total) * 100) : 0, message: `Sprachmodell wird geladen … ${Math.round(got / 1048576)} MB` }));
-  await new Promise<void>((resolve, reject) => {
-    const p = spawn('tar', ['-xzf', archive, '-C', target], { windowsHide: true });
-    p.on('error', reject);
-    p.on('close', (c) => (c === 0 ? resolve() : reject(new Error(`Entpacken fehlgeschlagen (${c})`))));
-  });
-  const found: string[] = [];
-  const walk = (d: string) => { for (const f of fs.readdirSync(d)) { const p = path.join(d, f); if (fs.statSync(p).isDirectory()) walk(p); else found.push(p); } };
-  walk(target);
-  const model = found.find((f) => /model.*\.bin$/.test(path.basename(f)));
-  let lex = found.find((f) => /lex.*s2t(\.bin)?$/.test(path.basename(f))) ?? null;
-  const lexGz = found.find((f) => /lex.*s2t(\.bin)?\.gz$/.test(path.basename(f)));
-  if (!lex && lexGz) {
-    const zlib = await import('node:zlib');
-    lex = lexGz.replace(/\.gz$/, '');
-    fs.writeFileSync(lex, zlib.gunzipSync(fs.readFileSync(lexGz)));
-  }
-  const vocabs = found.filter((f) => /vocab.*\.spm$/.test(path.basename(f)));
-  if (!model || vocabs.length === 0) throw new Error('Sprachmodell unvollständig');
-  const out: ModelFiles = { model, lex, vocabs: vocabs.slice(0, 2), alphas: /alphas/.test(model) };
-  fs.writeFileSync(done, JSON.stringify(out));
-  fs.rmSync(archive, { force: true });
-  return out;
-}
-
 async function ensureEngine(onProgress: (p: MtProgress) => void): Promise<{ js: string; wasm: string }> {
   const d = dir('engine', ENGINE_VERSION);
   for (const f of ENGINE_FILES) {
@@ -169,8 +135,8 @@ async function ensureModel(from: MtLang, to: MtLang, onProgress: (p: MtProgress)
   try {
     return await modelsFromFirefox(from, to, onProgress);
   } catch (e) {
-    log.warn(`Firefox-Modell ${from}→${to} nicht verfügbar, versuche Ersatzquelle`, (e as Error).message);
-    return modelsFromStatmt(from, to, onProgress);
+    log.warn(`Sprachmodell ${from}→${to} nicht verfügbar`, (e as Error).message);
+    throw new Error(`Das Sprachmodell konnte nicht geladen werden – bitte Internetverbindung prüfen. (${(e as Error).message})`);
   }
 }
 
@@ -222,6 +188,10 @@ async function getWorker(from: MtLang, to: MtLang, onProgress: (p: MtProgress) =
 /** Texte lokal übersetzen (Deutsch ↔ Englisch). Leere Zeilen bleiben leer. */
 export async function translateLocal(texts: string[], from: MtLang, to: MtLang, onProgress: (p: MtProgress) => void = () => undefined): Promise<string[]> {
   if (from === to) return texts.slice();
+  // Fortschritt nur melden, wenn sich die Anzeige ändert
+  const report = onProgress;
+  let lastMsg = '';
+  onProgress = (p) => { const m = `${p.percent}|${p.message}`; if (m !== lastMsg) { lastMsg = m; report(p); } };
   const w = await getWorker(from, to, onProgress);
   onProgress({ percent: 100, message: 'Wird übersetzt …' });
   const idx = texts.map((t, i) => (t.trim() ? i : -1)).filter((i) => i >= 0);

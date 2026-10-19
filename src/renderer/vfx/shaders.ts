@@ -587,8 +587,220 @@ vec4 effect() {
 vec3 light() { return vec3(0.0); }
 `;
 
+// ---------------------------------------------------------------- Linsenreflex (ganzes Bild)
+const FLARE = `
+vec3 flareTint() { return uHasColor > 0.5 ? uColor : vec3(1.0, 0.78, 0.5); }
+vec4 effect() {
+  float aspect = uRes.x / uRes.y;
+  float th = 2.0 * PI * uTime / uDur;
+  // Lichtquelle oben links, wandert sanft (periodisch) – Wind verschiebt sie zur Seite
+  vec2 src = vec2(0.28 + 0.25 * uWind + 0.05 * sin(th), 0.27 + 0.04 * cos(th));
+  vec2 P = vec2(vUv.x * aspect, vUv.y), S = vec2(src.x * aspect, src.y), C = vec2(0.5 * aspect, 0.5);
+  float d = length(P - S);
+  vec3 tint = flareTint();
+  float pulse = 0.92 + 0.08 * sin(th * 3.0);
+  vec3 col = vec3(0.0);
+  col += tint * exp(-d * d / (0.003 * uSize)) * 1.6 * pulse;                    // Kern
+  col += tint * exp(-d / (0.16 * uSize)) * 0.45;                                 // Schein
+  float dy = abs(P.y - S.y), dx = abs(P.x - S.x);
+  col += mix(tint, vec3(0.55, 0.75, 1.0), 0.6) * exp(-dy * dy / 0.00004 / uSize) * exp(-dx / (0.55 * uSize)) * 0.8; // Streifen
+  // Strahlen
+  float ang = atan(P.y - S.y, P.x - S.x);
+  float rays = pow(0.5 + 0.5 * cos(ang * 12.0 + uSeed), 18.0) * exp(-d / (0.25 * uSize));
+  col += tint * rays * 0.35 * pulse;
+  // Geister entlang der Linie Quelle → Bildmitte
+  vec2 axis = C - S;
+  for (int i = 0; i < 6; i++) {
+    float fi = float(i);
+    float k = 0.5 + fi * 0.32 + 0.15 * hash11(fi + uSeed);
+    vec2 g = S + axis * k * 2.0;
+    float r = (0.025 + 0.06 * hash11(fi * 3.1 + uSeed)) * uSize;
+    float dg = length(P - g);
+    float disc = (1.0 - smoothstep(r * 0.75, r, dg)) * 0.22 + exp(-pow((dg - r) / (r * 0.12), 2.0)) * 0.18;
+    vec3 gc = mix(vec3(0.4, 1.0, 0.6), vec3(0.6, 0.5, 1.0), hash11(fi * 7.7 + uSeed));
+    col += mix(gc, tint, 0.4) * disc;
+  }
+  // Ring (Halo) um die Bildmitte
+  float dc = length(P - C);
+  float ring = exp(-pow((dc - 0.42 * uSize) / 0.015, 2.0)) * 0.14;
+  col += vec3(ring * 1.0, ring * 0.8, ring * 1.2) * smoothstep(0.0, 0.6, 1.0 - abs(atan(P.y - C.y, P.x - C.x) - atan(S.y - C.y, S.x - C.x)) / PI);
+  col *= uIntensity;
+  return vec4(col, 0.0);
+}
+vec3 light() { return vec3(0.0); }
+`;
+
+// ---------------------------------------------------------------- Bokeh-Lichter (ganzes Bild)
+const BOKEH = `
+vec4 effect() {
+  float t = uTime, T = uDur;
+  float aspect = uRes.x / uRes.y;
+  vec2 uv = vec2(vUv.x * aspect, vUv.y);
+  vec3 col = vec3(0.0); float a = 0.0;
+  for (int l = 0; l < 3; l++) {
+    float fl = float(l);
+    float cells = mix(3.0, 7.0, fl / 2.0) / uSize;
+    float v = mix(0.05, 0.02, fl / 2.0) * uSpeed;
+    float k = max(1.0, floor(v * T * cells + 0.5));
+    vec2 g = uv * cells;
+    g.y += k * t / T;                                    // steigen langsam auf
+    vec2 id = floor(g); vec2 f = fract(g);
+    float r = hash12(id + fl * 9.7 + uSeed);
+    if (r > 0.25 + 0.45 * min(uIntensity, 1.5) / 1.5) continue;
+    vec2 c = 0.3 + 0.4 * hash22(id + fl * 2.1 + uSeed);
+    float m = max(1.0, floor(T / 3.0 + 0.5));
+    c.x += 0.12 * sin(2.0 * PI * m * t / T + r * 21.0);
+    float rad = mix(0.32, 0.18, fl / 2.0) * (0.6 + 0.5 * hash12(id + 4.4));
+    float d = length(f - c);
+    float disc = 1.0 - smoothstep(rad * 0.86, rad, d);
+    float rim = exp(-pow((d - rad * 0.9) / (rad * 0.08), 2.0)) * 0.6;
+    float tw = 0.6 + 0.4 * sin(2.0 * PI * m * t / T * 1.0 + r * 50.0);
+    vec3 hue = uHasColor > 0.5 ? uColor : mix(vec3(1.0, 0.72, 0.35), vec3(1.0, 0.45, 0.55), hash12(id + 8.8));
+    if (uHasColor < 0.5 && hash12(id + 2.2) > 0.75) hue = vec3(0.55, 0.75, 1.0);
+    float k2 = (disc * 0.28 + rim * 0.25) * tw * mix(1.0, 0.6, fl / 2.0);
+    col += hue * k2;
+    a = max(a, k2);
+  }
+  return vec4(col * uIntensity, 0.0);
+}
+vec3 light() { return vec3(0.0); }
+`;
+
+// ---------------------------------------------------------------- Speed-Linien (ganzes Bild, Comic-Tempo)
+const SPEEDLINES = `
+vec4 effect() {
+  float aspect = uRes.x / uRes.y;
+  vec2 P = vec2((vUv.x - 0.5) * aspect, vUv.y - 0.5);
+  float rr = length(P);
+  float ang = atan(P.y, P.x);
+  // Linien wechseln 12× pro Sekunde; Anzahl der Wechsel pro Schleife ganzzahlig → nahtlos
+  float N = max(1.0, floor(uDur * 12.0 * uSpeed + 0.5));
+  float stp = floor(fract(uTime / uDur) * N);
+  float bins = floor(140.0 / uSize);
+  float b = floor((ang / (2.0 * PI) + 0.5) * bins);
+  float fb = fract((ang / (2.0 * PI) + 0.5) * bins);
+  float h = hash12(vec2(b, stp + uSeed * 3.1));
+  float on = step(1.0 - 0.45 * min(uIntensity, 1.6), h);
+  float w = 0.15 + 0.3 * hash12(vec2(b * 1.3, stp));
+  float line = 1.0 - smoothstep(w * 0.3, w * 0.5, abs(fb - 0.5));
+  float inner = 0.22 + 0.15 * hash12(vec2(b * 2.7, stp + 1.0));
+  float radial = smoothstep(inner, inner + 0.18, rr);
+  float a = on * line * radial * 0.85;
+  vec3 c = uHasColor > 0.5 ? uColor : vec3(1.0);
+  return vec4(c * a, a);
+}
+vec3 light() { return vec3(0.0); }
+`;
+
+// ---------------------------------------------------------------- Lichtlecks (ganzes Bild, analoger Film-Look)
+const LEAKS = `
+vec4 effect() {
+  float aspect = uRes.x / uRes.y;
+  vec2 P = vec2(vUv.x * aspect, vUv.y);
+  float th = 2.0 * PI * uTime / uDur;
+  vec3 col = vec3(0.0);
+  for (int i = 0; i < 4; i++) {
+    float fi = float(i);
+    float h = hash11(fi * 5.3 + uSeed);
+    float side = mod(fi, 2.0);                          // links / rechts
+    vec2 c = vec2(side < 0.5 ? -0.1 : aspect + 0.1, 0.2 + 0.6 * h);
+    c += vec2(0.25 * cos(th * (1.0 + fi * 0.0) + h * 6.28), 0.3 * sin(th + h * 6.28)) * uSpeed * 0.6;
+    float rad = (0.45 + 0.35 * hash11(fi * 1.9 + uSeed)) * uSize;
+    vec2 q = (P - c) / vec2(rad * 0.7, rad);
+    float n = noise2(P * 2.0 + vec2(cos(th), sin(th)) * 0.6 + fi * 3.0);
+    float blob = exp(-dot(q, q) * 1.4) * (0.7 + 0.6 * n);
+    vec3 hue = uHasColor > 0.5 ? uColor : mix(vec3(1.0, 0.42, 0.12), vec3(1.0, 0.25, 0.4), hash11(fi * 8.1 + uSeed));
+    if (uHasColor < 0.5 && fi == 3.0) hue = vec3(1.0, 0.85, 0.45);
+    col += hue * blob * 0.55;
+  }
+  col *= uIntensity * (0.85 + 0.15 * sin(th * 2.0));
+  return vec4(col, 0.0);
+}
+vec3 light() { return vec3(0.0); }
+`;
+
+// ---------------------------------------------------------------- Herzen (ganzes Bild, steigen auf)
+const HEARTS = `
+float heart(vec2 p) {                     // < 0 innen; p etwa -1..1
+  p.y = -p.y * 1.1 + 0.25;
+  p.x = abs(p.x);
+  float a = atan(p.x, p.y) / PI;
+  float r = length(p);
+  float h = abs(a);
+  float d = (13.0 * h - 22.0 * h * h + 10.0 * h * h * h) / (6.0 - 5.0 * h);
+  return r - d * 0.55;
+}
+vec4 effect() {
+  float t = uTime, T = uDur;
+  float aspect = uRes.x / uRes.y;
+  vec2 uv = vec2(vUv.x * aspect, vUv.y);
+  vec4 acc = vec4(0.0);
+  for (int l = 0; l < 3; l++) {
+    float fl = float(l);
+    float depth = 1.0 - fl / 2.0;
+    float cells = mix(2.6, 5.5, fl / 2.0) / uSize;
+    float v = mix(0.22, 0.1, fl / 2.0) * uSpeed;
+    float k = max(1.0, floor(v * T * cells + 0.5));
+    vec2 g = uv * cells;
+    g.y += k * t / T;
+    vec2 id = floor(g); vec2 f = fract(g);
+    float r = hash12(id + fl * 13.1 + uSeed);
+    if (r > 0.18 + 0.4 * min(uIntensity, 1.5) / 1.5) continue;
+    vec2 c = 0.3 + 0.4 * hash22(id + fl * 6.3 + uSeed);
+    float m = max(1.0, floor(T / 2.0 + 0.5));
+    float sway = sin(2.0 * PI * m * t / T + r * 31.0);
+    c.x += 0.12 * sway;
+    float sz = mix(0.32, 0.2, fl / 2.0) * (0.7 + 0.5 * hash12(id + 1.7));
+    vec2 q = (f - c) / sz;
+    float rot = 0.35 * sway;
+    q = mat2(cos(rot), -sin(rot), sin(rot), cos(rot)) * q;
+    float dd = heart(q);
+    float aa = 0.04 / sz;
+    float fill = 1.0 - smoothstep(-aa, aa, dd);
+    float shine = smoothstep(0.35, 0.0, length(q - vec2(-0.25, -0.3))) * fill * 0.45;
+    vec3 hue = uHasColor > 0.5 ? uColor : mix(vec3(1.0, 0.18, 0.35), vec3(1.0, 0.45, 0.7), hash12(id + 3.9));
+    float alpha = fill * mix(0.95, 0.6, fl / 2.0);
+    vec3 cc = hue * mix(0.75, 1.0, depth) + vec3(shine);
+    acc.rgb += (1.0 - acc.a) * cc * alpha;
+    acc.a += (1.0 - acc.a) * alpha;
+  }
+  return acc;
+}
+vec3 light() { return vec3(0.0); }
+`;
+
+// ---------------------------------------------------------------- Glitzer (funkelnde Sterne, ganzes Bild)
+const GLITTER = `
+vec4 effect() {
+  float t = uTime, T = uDur;
+  float aspect = uRes.x / uRes.y;
+  vec2 uv = vec2(vUv.x * aspect, vUv.y);
+  vec3 col = vec3(0.0);
+  for (int l = 0; l < 3; l++) {
+    float fl = float(l);
+    float cells = mix(5.0, 11.0, fl / 2.0) / uSize;
+    vec2 g = uv * cells + fl * 7.31;
+    vec2 id = floor(g); vec2 f = fract(g);
+    float r = hash12(id + fl * 3.3 + uSeed);
+    if (r > 0.35 + 0.4 * min(uIntensity, 1.5) / 1.5) continue;
+    vec2 c = 0.2 + 0.6 * hash22(id + fl * 5.5 + uSeed);
+    float m = max(1.0, floor(T * (0.6 + 0.8 * hash12(id + 6.1)) * uSpeed + 0.5));
+    float tw = pow(max(0.0, sin(2.0 * PI * m * t / T + r * 40.0)), 6.0);
+    vec2 d = f - c;
+    float s = mix(0.5, 0.25, fl / 2.0);
+    float core = exp(-dot(d, d) / (0.005 * s));
+    float crs = exp(-abs(d.x) / (0.012 * s)) * exp(-abs(d.y) / (0.3 * s)) + exp(-abs(d.y) / (0.012 * s)) * exp(-abs(d.x) / (0.3 * s));
+    vec3 hue = uHasColor > 0.5 ? uColor : mix(vec3(1.0, 0.95, 0.8), vec3(1.0, 0.8, 0.45), hash12(id + 9.9));
+    col += hue * (core * 1.8 + crs * 1.1) * tw;
+  }
+  return vec4(col * uIntensity, 0.0);
+}
+vec3 light() { return vec3(0.0); }
+`;
+
 const KIND_SRC: Record<VfxKind, string> = {
   explosion: EXPLOSION, fire: FIRE, smoke: SMOKE, snow: SNOW, rain: RAIN, fog: FOG, sparks: SPARKS, lightning: LIGHTNING, dust: DUST, confetti: CONFETTI, impact: IMPACT,
+  flare: FLARE, bokeh: BOKEH, speedlines: SPEEDLINES, leaks: LEAKS, hearts: HEARTS, glitter: GLITTER,
 };
 
 /** Fragment-Shader für eine Effektart; `lightPass` = Lichtschein statt Effekt. */

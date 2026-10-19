@@ -17,6 +17,7 @@ import { aiAvailable, detectObjects, segmentObject } from './ai';
 import { analyzeBeats, audioEnvelope } from './audio';
 import { stopTranslators, translateLocal } from './mt';
 import { correlateEnvelopes } from '@shared/multicam';
+import { SUBTITLE_PRESETS } from '@shared/subtitles';
 
 export async function runSmokeTest(): Promise<number> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'panocut-smoke-'));
@@ -272,6 +273,38 @@ export async function runSmokeTest(): Promise<number> {
       if (process.env.PANOCUT_REQUIRE_MT) throw e;
     } finally {
       stopTranslators();
+    }
+
+    // v0.7: Social-Media-Untertitel – das gerade gesprochene Wort leuchtet gelb, Übersetzung darunter
+    if (filters.has('subtitles')) {
+      step('Social-Untertitel …');
+      const subProject = createProject('SmokeSubs', 640, 360, 30);
+      subProject.media[img.id] = img;
+      const sv = subProject.tracks.filter((t) => t.kind === 'video');
+      const s1 = createClip(img, sv[1].id, 0); s1.out = 2;
+      const preset = SUBTITLE_PRESETS[0];
+      s1.subtitles = {
+        enabled: true, style: { ...defaultSubtitleStyle(), ...preset.style }, highlight: preset.highlight, showTranslation: true, spoken: 'de',
+        segments: [{ id: 'w1', start: 0, end: 2, text: 'Hallo liebe Leute', translation: 'Hello dear people',
+          words: [{ start: 0, end: 0.6, text: 'Hallo' }, { start: 0.6, end: 1.2, text: 'liebe' }, { start: 1.2, end: 2, text: 'Leute' }] }],
+      };
+      subProject.clips[s1.id] = s1;
+      const outSub = path.join(dir, 'export_subs.mp4');
+      await new ExportJob(subProject, { ...options, outputPath: outSub }, (p) => { if (p.phase === 'error') log(' Fehler:', p.message); }).run();
+      // Gelbe Pixel zählen: Wort 1 aktiv (links) bei 0,3 s, Wort 3 aktiv (rechts) bei 1,5 s
+      const yellow = async (t: number): Promise<{ n: number; cx: number }> => {
+        const raw = path.join(dir, `sub_${t}.rgb`);
+        await runFfmpeg(['-ss', t.toFixed(2), '-i', outSub, '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgb24', raw]);
+        const b = fs.readFileSync(raw);
+        let n = 0, sx = 0;
+        for (let i = 0; i < b.length; i += 3) if (b[i] > 200 && b[i + 1] > 170 && b[i + 2] < 90) { n++; sx += (i / 3) % 640; }
+        return { n, cx: n ? sx / n : 0 };
+      };
+      const y1 = await yellow(0.3), y3 = await yellow(1.5);
+      log(`Untertitel: gelb bei 0,3 s ${y1.n} px (x≈${y1.cx.toFixed(0)}), bei 1,5 s ${y3.n} px (x≈${y3.cx.toFixed(0)})`);
+      if (y1.n < 30 || y3.n < 30) throw new Error('Hervorgehobenes Wort fehlt im Export');
+      if (!(y3.cx > y1.cx + 60)) throw new Error('Hervorhebung wandert nicht mit');
+      log('Social-Untertitel ok');
     }
 
     // KI: Erkennung und Maske. In der CI liegt ein Testbild (Hund, Fahrrad, Auto) unter PANOCUT_TEST_IMAGE.

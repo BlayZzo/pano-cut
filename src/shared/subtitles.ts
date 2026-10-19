@@ -121,3 +121,6 @@ export const SUBTITLE_PRESETS: SubtitlePreset[] = [
   { id: 'box', name: 'Kasten (gut lesbar auf hellem Bild)', style: { font: 'sans-bold', size: 5.5, color: '#ffffff', bold: true, align: 'center', x: 50, y: 80, background: '#000000', backgroundOpacity: 0.6, shadow: false, outline: false }, highlight: '#ffd400', chunk: 0, uppercase: false, maxChars: 36 },
   { id: 'classic', name: 'Klassisch (unten, ohne Hervorhebung)', style: { font: 'sans-bold', size: 5, color: '#ffffff', bold: true, align: 'center', x: 50, y: 88, background: '#000000', backgroundOpacity: 0.5, shadow: true, outline: false }, highlight: '', chunk: 0, uppercase: false, maxChars: 42 },
 ];
+
+/** Standardfarbe der zweiten Sprache (hellblau – unterscheidet sich vom hervorgehobenen Wort). */
+export const DEFAULT_TRANSLATION_COLOR = '#bfe3ff';

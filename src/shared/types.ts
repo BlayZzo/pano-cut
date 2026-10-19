@@ -325,7 +325,8 @@ export interface ClipLink {
 
 // ---------- Effekt-Simulationen (VFX) ----------
 
-export type VfxKind = 'explosion' | 'fire' | 'smoke' | 'snow' | 'rain' | 'fog' | 'sparks' | 'lightning' | 'dust' | 'confetti' | 'impact';
+export type VfxKind = 'explosion' | 'fire' | 'smoke' | 'snow' | 'rain' | 'fog' | 'sparks' | 'lightning' | 'dust' | 'confetti' | 'impact'
+  | 'flare' | 'bokeh' | 'speedlines' | 'leaks' | 'hearts' | 'glitter';
 
 export interface VfxSpec {
   kind: VfxKind;

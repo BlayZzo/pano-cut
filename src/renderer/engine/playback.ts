@@ -8,7 +8,7 @@ import { sharedChromaGL } from './chromagl';
 import { sharedColorGL } from './colorgl';
 import { motionAt } from '@shared/effects';
 import { drawStyledText, drawSubtitleView } from './text';
-import { charsPerLine, subtitleViewAt } from '@shared/subtitles';
+import { DEFAULT_TRANSLATION_COLOR, charsPerLine, subtitleViewAt } from '@shared/subtitles';
 import { blendDef, hasShadow, shadowPixels } from '@shared/layers';
 import { exposureGainAt, gradeForLut } from '@shared/color';
 import { dynTransitionAt, isDynamicTransition, type DynLayer } from '@shared/transitions';
@@ -500,7 +500,7 @@ export class PlaybackEngine {
     const local = t - clip.start;
     const pos = this.attachedPosition(subs.attach, t);
     const style = pos ? { ...subs.style, x: pos.x, y: pos.y } : subs.style;
-    const trColor = subs.translationColor ?? '#ffe066';
+    const trColor = subs.translationColor ?? DEFAULT_TRANSLATION_COLOR;
     const perLine = charsPerLine(style, W, H);
     for (const seg of subs.segments) {
       if (local >= seg.start && local < seg.end && seg.text.trim()) {
