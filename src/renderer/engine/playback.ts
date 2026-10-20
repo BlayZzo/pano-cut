@@ -22,6 +22,8 @@ interface Slot {
   isImage: boolean;
   lastSeek: number;
   work?: HTMLCanvasElement;   // Zwischen-Canvas für Freistellen
+  hold?: HTMLCanvasElement;   // letztes Bild – wird gezeigt, solange das Video nach einem Sprung noch lädt (kein Schwarz-Flackern)
+  holdAt?: number;
   fx?: { cur: HTMLCanvasElement; mb: HTMLCanvasElement; tr: HTMLCanvasElement; gl: HTMLCanvasElement; small: HTMLCanvasElement; t: number };
 }
 
@@ -140,6 +142,8 @@ interface DrawExtra {
 const RATE_MIN = 0.0625;
 const RATE_MAX = 16;
 const SYNC_TOLERANCE = 0.12;
+/** Ab dieser Abweichung wird ein Video beim Abspielen hart nachgestellt (darunter: Tempo angleichen). */
+const SEEK_TOLERANCE = 0.5;
 
 const DISPLAYABLE_IMAGES = new Set(['jpg', 'jpeg', 'png', 'webp', 'gif', 'bmp']);
 
@@ -229,6 +233,7 @@ export class PlaybackEngine {
   get isPlaying(): boolean { return this.playing; }
 
   seek(t: number): void {
+    this.master = null;
     const dur = projectDuration(this.project);
     this.current = clamp(t, 0, Math.max(0, dur));
     if (this.playing) {
@@ -245,6 +250,7 @@ export class PlaybackEngine {
     if (dur <= 0) return;
     if (this.current >= dur - 0.001) this.current = 0;
     this.playing = true;
+    this.master = null;
     this.startTime = this.current;
     this.startWall = performance.now();
     this.tick();
@@ -277,11 +283,34 @@ export class PlaybackEngine {
   // ---------- intern ----------
 
   private lastRenderAt = 0;
+  private trackHold = new Map<string, HTMLCanvasElement>();
+  /** Das Video, nach dessen Uhr die Wiedergabe läuft (verhindert Springen/Flackern durch ständiges Nachstellen). */
+  private master: { slot: Slot; clip: Clip } | null = null;
+  private masterNext: { slot: Slot; clip: Clip } | null = null;
 
   private tick = (): void => {
     if (!this.playing) return;
     const dur = projectDuration(this.project);
-    const t = this.startTime + (performance.now() - this.startWall) / 1000;
+    let t = this.startTime + (performance.now() - this.startWall) / 1000;
+    // Zeit vom führenden Video übernehmen, solange es normal läuft – dann muss es nie nachgestellt werden
+    const ms = this.master;
+    if (ms) {
+      const m = ms.slot.el as HTMLMediaElement;
+      const c = ms.clip;
+      if (!m.paused && !m.seeking && m.readyState >= 3) {
+        const tm = c.start + (m.currentTime - c.in) / c.speed;
+        if (tm >= c.start - 0.05 && tm < clipEnd(c) - 0.02 && Math.abs(tm - t) < 0.75) {
+          t = tm;
+          this.startTime = tm;
+          this.startWall = performance.now();
+        }
+      } else if (m.readyState < 3 || m.seeking) {
+        // Video lädt noch → Uhr anhalten statt weiterlaufen und dann zurückspringen
+        t = this.current;
+        this.startTime = t;
+        this.startWall = performance.now();
+      }
+    }
     if (t >= dur) {
       if (this.loop && dur > 0) {
         this.current = 0;
@@ -300,10 +329,11 @@ export class PlaybackEngine {
       this.current = t;
     }
     // Nur so oft zeichnen, wie das Projekt Bilder hat (z. B. 30×/s statt 60–120×/s) – spart Akku und Rechenzeit
+    // (gleichmäßig verteilt: bei 25 Bildern/s abwechselnd jedes 2./3. Bildschirmbild, im Mittel genau 25)
     const nowR = performance.now();
     const frameMs = 1000 / Math.max(10, Math.min(120, this.project.settings.fps || 30));
-    if (nowR - this.lastRenderAt < frameMs - 4) { this.raf = requestAnimationFrame(this.tick); return; }
-    this.lastRenderAt = nowR;
+    if (nowR < this.lastRenderAt + frameMs - 6) { this.raf = requestAnimationFrame(this.tick); return; }
+    this.lastRenderAt = nowR - this.lastRenderAt > frameMs * 2 ? nowR : this.lastRenderAt + frameMs;
     this.render(this.current);
     const now = performance.now();
     if (now - this.lastEmit > 33) {
@@ -431,9 +461,20 @@ export class PlaybackEngine {
 
     if (this.playing && !needsSeekMode) {
       const rate = clamp(clip.speed, RATE_MIN, RATE_MAX);
-      if (Math.abs(m.playbackRate - rate) > 1e-3) m.playbackRate = rate;
+      if (m.readyState < 2 && Math.abs(m.playbackRate - rate) > 1e-3) m.playbackRate = rate;
       if (m.readyState >= 2) {
-        if (Math.abs(m.currentTime - target) > SYNC_TOLERANCE) m.currentTime = target;
+        const drift = m.currentTime - target;
+        // Erstes normal laufendes Video (vorwärts, ohne Rückwärts-Datei) wird zur Uhr
+        const canLead = !reversedFile && !clip.reverse && slot.isVideo && !this.masterNext;
+        if (canLead) this.masterNext = { slot, clip };
+        const isMaster = this.master?.slot === slot;
+        if (Math.abs(drift) > (isMaster ? 0.75 : SEEK_TOLERANCE)) {
+          m.currentTime = target;
+          if (Math.abs(m.playbackRate - rate) > 1e-3) m.playbackRate = rate;
+        } else if (!isMaster && Math.abs(drift) > 0.04) {
+          // Kleine Abweichung: sanft über das Tempo angleichen statt springen
+          m.playbackRate = clamp(rate * (1 - clamp(drift, -0.3, 0.3) * 0.5), RATE_MIN, RATE_MAX);
+        } else if (Math.abs(m.playbackRate - rate) > 1e-3) m.playbackRate = rate;
         if (m.paused) void m.play().catch(() => {});
       }
     } else {
@@ -451,8 +492,25 @@ export class PlaybackEngine {
     if (slot.isImage) { vw = (slot.el as HTMLImageElement).naturalWidth; vh = (slot.el as HTMLImageElement).naturalHeight; }
     else if (slot.isVideo) {
       const v = slot.el as HTMLVideoElement;
-      if (v.readyState < 2) return;
-      vw = v.videoWidth; vh = v.videoHeight;
+      if (v.readyState < 2) {
+        // Video sucht gerade → letztes Bild weiterzeigen statt kurz schwarz
+        // (bei einem neuen Stück: letztes Bild der Spur, z. B. am Schnitt zwischen zwei Teilen desselben Videos)
+        const hold = slot.hold ?? this.trackHold.get(clip.trackId);
+        if (!hold) return;
+        source = hold; vw = hold.width; vh = hold.height;
+      } else {
+        vw = v.videoWidth; vh = v.videoHeight;
+        // Merkbild aktualisieren (im Stillstand immer, beim Abspielen gelegentlich)
+        const now = performance.now();
+        if (vw && vh && (!this.playing || !slot.holdAt || now - slot.holdAt > 400 || clipEnd(clip) - this.current < 0.6)) {
+          const hw = Math.min(vw, 960), hh = Math.max(2, Math.round((hw * vh) / vw));
+          if (!slot.hold) slot.hold = document.createElement('canvas');
+          if (slot.hold.width !== hw || slot.hold.height !== hh) { slot.hold.width = hw; slot.hold.height = hh; }
+          slot.hold.getContext('2d')!.drawImage(v, 0, 0, hw, hh);
+          slot.holdAt = now;
+          this.trackHold.set(clip.trackId, slot.hold);
+        }
+      }
     } else return;
     if (!vw || !vh) return;
 
@@ -825,6 +883,7 @@ export class PlaybackEngine {
       this.syncMedia(slot, clip, media, track, t);
     }
 
+    this.masterNext = null;
     const tracks = videoTracksBottomUp(project);
     if (ctx && this.canvas) {
       const W = this.canvas.width, H = this.canvas.height;
@@ -886,6 +945,7 @@ export class PlaybackEngine {
         }
       }
     }
+    this.master = this.masterNext;
     // Speicher sparen: bei vielen Clips weit entfernte Video-Player freigeben (werden bei Bedarf neu geladen)
     if (this.slots.size > MAX_SLOTS) {
       for (const [id, slot] of this.slots) {
