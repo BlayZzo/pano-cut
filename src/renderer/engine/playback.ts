@@ -948,8 +948,9 @@ export class PlaybackEngine {
         }
       }
     }
-    if (this.masterNext?.slot !== this.master?.slot) this.masterSince = performance.now();
-    this.master = this.masterNext;
+    const next = this.masterNext as { slot: Slot; clip: Clip } | null;
+    if (next?.slot !== this.master?.slot) this.masterSince = performance.now();
+    this.master = next;
     // Speicher sparen: bei vielen Clips weit entfernte Video-Player freigeben (werden bei Bedarf neu geladen)
     if (this.slots.size > MAX_SLOTS) {
       for (const [id, slot] of this.slots) {
