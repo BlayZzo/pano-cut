@@ -1,3 +1,24 @@
+## PanoCut 0.9.0 – Schneller Import, Export repariert, Mehrfachauswahl und Anziehen
+
+**Installieren**
+- Mac mit Apple-Chip (M1–M4): `PanoCut-0.9.0-mac-arm64.dmg`
+- Mac mit Intel: `PanoCut-0.9.0-mac-x64.dmg`
+- Windows 10/11: `PanoCut-0.9.0-win-x64.exe`
+
+**Import viel schneller**
+- **Insta360 mit LRV**: Es wird keine 360°-Vorschau-Datei mehr gerechnet (das dauerte bei 30-Minuten-Aufnahmen Stunden). Die Vorschau setzt die kleine LRV-Datei live zusammen – das Video ist nach wenigen Sekunden fertig.
+- **Mac, Sofort-Modus**: H.264- und HEVC-Videos bis 4K (auch 10 Bit, z. B. DJI) spielt der Grafikchip direkt ab – ohne Vorschau-Datei. Klappt das bei einer Datei nicht, erstellt PanoCut automatisch eine.
+- Vorschau-Dateien für lange Videos werden in Stücken von 1 Minute erstellt: Wird PanoCut geschlossen, geht es beim nächsten Start dort weiter, wo es aufgehört hat (vorher: wieder von vorn).
+
+**Export**
+- 360°-Kamerafahrten werden bis zu 4× schneller exportiert (Schwenks ohne aufwendige Neuberechnung je Bild), 360°-Videos werden nur so groß zusammengesetzt, wie die Ausgabe braucht, und auf dem Mac dekodiert der Grafikchip.
+- Fortschritt zeigt jetzt „Bild … von …“, damit man auch bei langen Exporten sieht, dass es vorangeht.
+
+**Timeline**
+- **Mehrfachauswahl**: Auf freier Fläche einen Rahmen ziehen, oder ⇧/⌘ + Klick. Ausgewählte Clips lassen sich gemeinsam verschieben – auch über mehrere Spuren hinweg.
+- **⇤ Anziehen**: Knopf in der Timeline-Leiste. Clips rücken automatisch lückenlos nach links an den Clip davor – beim Ziehen (zum Umsortieren einfach dazwischen ziehen), Kürzen, Einfügen, Löschen und bei Tempo-Änderungen.
+- **Tempo eintippen**: Zahl direkt eingeben (z. B. 1,5 oder 12), Knöpfe −1/+1 für große und −,1/+,1 für feine Schritte, dazu ein Feinregler.
+
 ## PanoCut 0.8.5 – Besseres 360°-Zusammensetzen (Stitching)
 
 **Installieren**

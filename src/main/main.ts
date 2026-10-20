@@ -263,7 +263,7 @@ ipcMain.handle(IPC.importMedia, async (_e, paths: string[]) => {
 interface PrepJob {
   id: string;                      // Medien-ID
   item: MediaItem;
-  options?: { reversed?: boolean; stabilized?: number };
+  options?: { reversed?: boolean; stabilized?: number; forceProxy?: boolean };
   stage: 'quick' | 'heavy';
   running: boolean;
   skip?: boolean;                  // Vorschau-Datei überspringen
@@ -288,7 +288,7 @@ function pumpPrep(): void {
       quickRunning = true;
       job.running = true;
       broadcastPrepQueue();
-      void prepareMedia(job.item, (u) => { job.item = u; sendToWindow(IPC.mediaUpdate, u); }, settings.proxyHeight, { ...job.options, stage: 'quick', proxyMode })
+      void prepareMedia(job.item, (u) => { job.item = u; sendToWindow(IPC.mediaUpdate, u); }, settings.proxyHeight, { ...job.options, stage: 'quick', proxyMode: job.options?.forceProxy ? 'always' : proxyMode })
         .finally(() => {
           quickRunning = false;
           job.running = false;
@@ -310,7 +310,7 @@ function pumpPrep(): void {
     heavyRunning++;
     job.running = true;
     broadcastPrepQueue();
-    const mode = job.skip ? 'auto' : proxyMode;
+    const mode = job.skip ? 'auto' : job.options?.forceProxy ? 'always' : proxyMode;
     const item = job.skip ? { ...job.item, info: { ...job.item.info } } : job.item;
     void prepareMedia(item, (u) => { job.item = u; sendToWindow(IPC.mediaUpdate, u); }, settings.proxyHeight, { ...job.options, stage: 'heavy', proxyMode: mode, skipProxy: job.skip })
       .finally(() => {
@@ -328,7 +328,7 @@ function finishPrep(job: PrepJob): void {
   job.done();
 }
 
-ipcMain.handle(IPC.prepareMedia, (_e, item: MediaItem, options?: { reversed?: boolean; stabilized?: number }) => new Promise<void>((resolve) => {
+ipcMain.handle(IPC.prepareMedia, (_e, item: MediaItem, options?: { reversed?: boolean; stabilized?: number; forceProxy?: boolean }) => new Promise<void>((resolve) => {
   // Schon in der Warteschlange? Dann nur Optionen ergänzen
   const existing = prepJobs.find((j) => j.id === item.id);
   if (existing) { existing.options = { ...existing.options, ...options }; resolve(); return; }

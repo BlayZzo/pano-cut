@@ -117,4 +117,8 @@ Export `stitch.ts lensStitchChain`: pro Linse v360 input=fisheye (ohne Grund-Dre
 und an die Ränder gelegt), Maske EIN Bild per geq (maskedmerge wiederholt es; kein `shortest`!), alles in yuv420p (Helligkeit per lutyuv).
 Vorschau `panogl` gleiche Formeln (uL0/uL1/uG/uRect/uK/uGain/uBlend/uCover). Veraltete Proxy (`proxyStitchKey` ≠ `stitchKey`) → live aus
 LRV/Rohvideo. IPC `stitchAutoAlign` (`main/stitchAuto.ts`). Linse 0 = links/erster Strom = hinten; LRV der X5 hat die Linsen vertauscht.
+0.9.0: 360° mit LRV ohne Proxy (live, Thumb/Sprite per stitchChain aus LRV, `swapLensSettings`), Mac-Sofortmodus in `needsProxy` (H.264/HEVC ≤4K),
+`engine.onNeedProxy` bei unspielbarem Original, Proxy in 60-s-Stücken (fortsetzbar, Ton am Stück). Export: Gier-Keyframes per crop auf hstack
+(kein v360-Neuaufbau; jeder v360-Befehl kostet einen kompletten Neuaufbau!), nur geänderte Werte per sendcmd, Stitch-Größe nach Bedarf,
+`-hwaccel videotoolbox`. Timeline: Rahmen-Auswahl, `planMoves` (Spur-Delta), `placeClips`/`packTracks` (`shared/edit.ts`), `ui.magnet`, `NumInput`.
 Ansicht/Layout: `ViewSettings` (`settings.view`, `useView`/`updateView`), `Splitter.tsx`, `Popover.tsx`.

@@ -66,6 +66,38 @@ function snapTargets(project: Project, exclude: Set<string>, playhead: number): 
   return pts;
 }
 
+/**
+ * Neue Plätze für alle gezogenen Clips: gleicher Zeitversatz, und alle wandern um gleich viele Spuren derselben Art.
+ * Nur ein Clip / eine Spur: wie bisher auch auf eine andere Spurart (Video ↔ Ton), wenn der Inhalt passt. null = geht nicht.
+ */
+function planMoves(project: Project, moving: Clip[], grabbed: Clip, target: Track | null, dt: number): Array<{ id: string; start: number; trackId: string }> | null {
+  const minStart = Math.min(...moving.map((c) => c.start));
+  const d = Math.max(dt, -minStart);
+  const src = project.tracks.find((tr) => tr.id === grabbed.trackId);
+  const sameTrack = moving.every((c) => c.trackId === grabbed.trackId);
+  if (!target || target.locked || !src) return moving.map((c) => ({ id: c.id, start: c.start + d, trackId: c.trackId }));
+  if (target.kind !== src.kind) {
+    if (!sameTrack) return null;
+    return moving.map((c) => {
+      const media = project.media[c.mediaId];
+      const ok = (target.kind === 'audio' && media?.type !== 'image') || (target.kind === 'video' && media?.type !== 'audio');
+      return { id: c.id, start: c.start + d, trackId: ok ? target.id : c.trackId };
+    });
+  }
+  const list = (kind: Track['kind']) => project.tracks.filter((tr) => tr.kind === kind);
+  const delta = list(src.kind).findIndex((tr) => tr.id === target.id) - list(src.kind).findIndex((tr) => tr.id === src.id);
+  const out: Array<{ id: string; start: number; trackId: string }> = [];
+  for (const c of moving) {
+    const tr = project.tracks.find((x) => x.id === c.trackId);
+    if (!tr) return null;
+    const l = list(tr.kind);
+    const dest = l[l.findIndex((x) => x.id === tr.id) + delta];
+    if (!dest || dest.locked) return null;
+    out.push({ id: c.id, start: c.start + d, trackId: dest.id });
+  }
+  return out;
+}
+
 function snapValue(value: number, targets: number[], threshold: number): { value: number; snapped: number | null } {
   let best: number | null = null;
   let bestD = threshold;
@@ -80,7 +112,8 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
   const project = useProject((s) => s.project);
   const addTrack = useProject((s) => s.addTrack);
   const addClip = useProject((s) => s.addClip);
-  const moveClips = useProject((s) => s.moveClips);
+  const placeClips = useProject((s) => s.placeClips);
+  const packTracks = useProject((s) => s.packTracks);
   const trimClip = useProject((s) => s.trimClip);
   const removeTrack = useProject((s) => s.removeTrack);
   const updateTrack = useProject((s) => s.updateTrack);
@@ -89,6 +122,8 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
   const zoom = useUi((s) => s.zoom);
   const setZoom = useUi((s) => s.setZoom);
   const snapping = useUi((s) => s.snapping);
+  const magnet = useUi((s) => s.magnet);
+  const setMagnet = useUi((s) => s.setMagnet);
   const setSnapping = useUi((s) => s.setSnapping);
   const selection = useUi((s) => s.selection);
   const select = useUi((s) => s.select);
@@ -186,7 +221,7 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
     const ui = useUi.getState();
     let ids: string[];
     if (kind === 'move') {
-      if (e.shiftKey) { toggleSelect(clip.id); ids = useUi.getState().selection; }
+      if (e.shiftKey || e.metaKey || e.ctrlKey) { toggleSelect(clip.id); ids = useUi.getState().selection; if (!ids.includes(clip.id)) return; }
       else if (ui.selection.includes(clip.id)) ids = ui.selection;
       else { select([clip.id]); ids = [clip.id]; }
     } else {
@@ -202,6 +237,7 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
     const threshold = SNAP_PX / zoom;
     let moved = false;
     let last: DragState | null = null;
+    let movesRef: Array<{ id: string; start: number; trackId: string }> | null = null;
 
     const move = (ev: PointerEvent) => {
       const dx = ev.clientX - startX;
@@ -221,20 +257,18 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
         const target = trackAtClientY(ev.clientY);
         const copy = ev.altKey;
         const trackId = target?.id;
-        // Gültigkeit prüfen
-        const sameTrack = moving.every((c) => c.trackId === moving[0].trackId);
-        let valid = true;
-        for (const c of moving) {
-          let tid = c.trackId;
-          if (target && sameTrack && !target.locked) {
-            const media = project.media[c.mediaId];
-            const src = project.tracks.find((tr) => tr.id === c.trackId);
-            const kindOk = target.kind === src?.kind || (target.kind === 'audio' && media?.type !== 'image') || (target.kind === 'video' && media?.type !== 'audio');
-            if (kindOk) tid = target.id;
+        const magnet = useUi.getState().magnet;
+        // Zielspur je Clip: alle Clips wandern um gleich viele Spuren (Mehrfachauswahl über mehrere Spuren)
+        const placed = planMoves(project, moving, clip, target, dt);
+        let valid = !!placed;
+        if (placed && !magnet) {
+          for (const mv of placed) {
+            const c = project.clips[mv.id]!;
+            if (overlaps(project, c, mv.start, mv.trackId, copy ? new Set() : exclude)) { valid = false; break; }
           }
-          if (overlaps(project, c, c.start + dt, tid, copy ? new Set() : exclude)) { valid = false; break; }
         }
-        last = { kind, clipIds: ids, dt, trackId, copy, valid };
+        movesRef = placed;
+        last = { kind, clipIds: ids, dt, trackId, copy, valid, trackMap: placed ? Object.fromEntries(placed.map((m) => [m.id, m.trackId])) : undefined };
       } else {
         const side = kind === 'trimStart' ? 'start' : 'end';
         let time = (side === 'start' ? clip.start : clipEnd(clip)) + dt;
@@ -271,12 +305,51 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
       setDrag(null);
       if (!moved || !last || !last.valid) return;
       if (last.kind === 'move') {
-        const result = moveClips(last.clipIds, last.dt, last.trackId, last.copy);
+        if (!movesRef) return;
+        const result = placeClips(movesRef, { copy: last.copy, magnet: useUi.getState().magnet });
         if (last.copy && result.length) select(result);
       } else {
         const side = last.kind === 'trimStart' ? 'start' : 'end';
         trimClip(clip.id, side, (side === 'start' ? clip.start : clipEnd(clip)) + last.dt);
+        if (useUi.getState().magnet) packTracks([clip.trackId]);
       }
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+
+  // ---------- Rahmen aufziehen = mehrere Clips auswählen ----------
+  const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
+  const onEmptyPointerDown = (e: React.PointerEvent) => {
+    const el = e.target as HTMLElement;
+    if (e.button !== 0 || !(e.target === e.currentTarget || el.classList.contains('lane') || el.classList.contains('lanes-content'))) return;
+    const sc = scrollRef.current;
+    if (!sc) return;
+    const r = sc.getBoundingClientRect();
+    const pos = (ev: { clientX: number; clientY: number }) => ({ x: ev.clientX - r.left + sc.scrollLeft, y: ev.clientY - r.top + sc.scrollTop });
+    const p0 = pos(e);
+    if (p0.y < RULER_H) return;
+    const additive = e.shiftKey || e.metaKey || e.ctrlKey;
+    const base = additive ? useUi.getState().selection : [];
+    let rect = { x0: p0.x, y0: p0.y, x1: p0.x, y1: p0.y };
+    const hits = () => {
+      const t0 = Math.min(rect.x0, rect.x1) / zoom, t1 = Math.max(rect.x0, rect.x1) / zoom;
+      const y0 = Math.min(rect.y0, rect.y1), y1 = Math.max(rect.y0, rect.y1);
+      const lanes = offsets.filter((o) => o.top + o.height > y0 && o.top < y1).map((o) => o.track.id);
+      return Object.values(project.clips).filter((c) => lanes.includes(c.trackId) && c.start < t1 && clipEnd(c) > t0).map((c) => c.id);
+    };
+    const move = (ev: PointerEvent) => {
+      const p = pos(ev);
+      rect = { ...rect, x1: p.x, y1: p.y };
+      if (Math.abs(rect.x1 - rect.x0) + Math.abs(rect.y1 - rect.y0) < 4) return;
+      setMarquee(rect);
+      select([...new Set([...base, ...hits()])]);
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      setMarquee(null);
+      if (Math.abs(rect.x1 - rect.x0) + Math.abs(rect.y1 - rect.y0) < 4 && !additive) select([]);
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
@@ -339,7 +412,7 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
     }
     if (!mediaId) return;
     const clip = addClip(mediaId, track.id, time);
-    if (clip) select([clip.id]);
+    if (clip) { select([clip.id]); if (useUi.getState().magnet) packTracks([track.id]); }
   };
 
   // ---------- Kontextmenüs ----------
@@ -373,6 +446,7 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
         <button className="btn sm" title={t.timeline.delete} onClick={deleteSelection} disabled={selection.length === 0}><IconTrash /></button>
         <div className="sep" />
         <button className={`btn sm icon${snapping ? ' active' : ''}`} title={t.timeline.snap} onClick={() => setSnapping(!snapping)}><IconMagnet /></button>
+        <button className={`btn sm${magnet ? ' active' : ''}`} title={t.timeline.magnetHint} onClick={() => { const on = !magnet; setMagnet(on); if (on) packTracks(project.tracks.map((tr) => tr.id)); }}>⇤ {t.timeline.magnet}</button>
         <div className="sep" />
         <button className="btn sm icon ghost" title={t.timeline.zoomOut} onClick={() => zoomBy(1 / 1.3)}><IconZoomOut /></button>
         <input type="range" min={0} max={100} value={zoomToSlider(zoom)} onChange={(e) => setZoom(sliderToZoom(Number(e.target.value)))} style={{ width: 110, accentColor: 'var(--accent)' }} title="Zoom" />
@@ -421,7 +495,7 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
           </div>
         </div>
         <div className="lanes-scroll" ref={scrollRef} onWheel={onWheel} onScroll={onScroll} onDragOver={onDragOver} onDragLeave={() => setDropPreview(null)} onDrop={onDrop}
-          onPointerDown={(e) => { if (e.target === e.currentTarget || (e.target as HTMLElement).classList.contains('lane')) { select([]); } }}>
+          onPointerDown={onEmptyPointerDown}>
           <div className="lanes-content" style={{ width: contentWidth, height: contentHeight }}>
             <Ruler zoom={zoom} width={contentWidth} fps={fps} onPointerDown={onRulerPointerDown} rangeIn={rangeIn} rangeOut={rangeOut}>
               {beatMarks && beatMarks.beats.length > 0 && <BeatMarks marks={beatMarks} zoom={zoom} part="ruler" />}
@@ -447,6 +521,7 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
             ))}
             {Object.keys(project.clips).length === 0 && !dropPreview && <div className="lanes-empty">{t.timeline.empty}</div>}
             {snapLine !== null && <div className="snap-line" style={{ left: snapLine * zoom }} />}
+            {marquee && <div className="marquee" style={{ left: Math.min(marquee.x0, marquee.x1), top: Math.min(marquee.y0, marquee.y1), width: Math.abs(marquee.x1 - marquee.x0), height: Math.abs(marquee.y1 - marquee.y0) }} />}
             <Playhead zoom={zoom} scrollRef={scrollRef} />
           </div>
         </div>
@@ -538,9 +613,9 @@ interface LaneProps {
 
 const Lane = React.memo(function Lane({ track, top, height, project, zoom, strips, selection, drag, dropPreview, onClipPointerDown, onClipContextMenu }: LaneProps): React.ReactElement {
   const clips = useMemo(() => Object.values(project.clips).filter((c) => c.trackId === track.id), [project.clips, track.id]);
-  const dragTarget = drag?.kind === 'move' && drag.trackId === track.id;
+  const dragTarget = drag?.kind === 'move' && (drag.trackMap ? Object.values(drag.trackMap).includes(track.id) : drag.trackId === track.id);
   // Clips, die per Spurwechsel hierher gezogen werden (Geister)
-  const incoming = dragTarget && drag ? drag.clipIds.map((id) => project.clips[id]).filter((c) => c && c.trackId !== track.id) as Clip[] : [];
+  const incoming = dragTarget && drag ? drag.clipIds.map((id) => project.clips[id]).filter((c) => c && c.trackId !== track.id && (drag.trackMap ? drag.trackMap[c.id] === track.id : true)) as Clip[] : [];
   return (
     <div className={`lane${track.locked ? ' locked' : ''}${dropPreview || dragTarget ? ' drop-target' : ''}`} style={{ position: 'absolute', top, left: 0, right: 0, height, '--track-h': `${height}px` } as React.CSSProperties}>
       {clips.map((clip) => {
@@ -554,7 +629,7 @@ const Lane = React.memo(function Lane({ track, top, height, project, zoom, strip
             strips={strips}
             selected={selection.includes(clip.id) || dropPreview?.transitionClip === clip.id}
             drag={inDrag}
-            movedAway={!!inDrag && inDrag.kind === 'move' && !!inDrag.trackId && inDrag.trackId !== track.id && !inDrag.copy}
+            movedAway={!!inDrag && inDrag.kind === 'move' && !inDrag.copy && (inDrag.trackMap ? inDrag.trackMap[clip.id] !== track.id : !!inDrag.trackId && inDrag.trackId !== track.id)}
             onPointerDown={onClipPointerDown}
             onContextMenu={onClipContextMenu}
           />

@@ -178,6 +178,41 @@ export async function prepareMedia(item: MediaItem, update: MediaUpdateFn, proxy
     // 360°-Rohvideos: zuerst den gestitchten Proxy erzeugen; Vorschaubilder kommen dann daraus.
     const stitched = needsStitching(work.stitch);
     let visualSource = companion ?? work.path;
+    if (stitched && work.stitch && companion) {
+      // 360° mit Kamera-Vorschaudatei: KEINE Vorschau-Datei nötig – die Vorschau setzt die LRV live zusammen.
+      // Vorschaubild und Bildstreifen werden aus der kleinen LRV (zusammengesetzt) erzeugt – dauert Sekunden.
+      const st = work.companionSwap ? swapLensSettings(work.stitch) : { ...work.stitch, mode: 'dualfisheye-sbs' as const };
+      const thumb = path.join(dir, `thumb_${stitchKey(work.stitch)}.jpg`);
+      if (!fileExists(thumb)) {
+        const at = Math.min(Math.max(0, dur * 0.1), 3);
+        await runFfmpeg(['-ss', at.toFixed(3), '-i', companion, '-filter_complex', stitchChain(st, ['[0:v:0]'], 640, 320) + ',scale=320:-2[o]', '-map', '[o]', '-frames:v', '1', '-q:v', '4', thumb], { lowPriority: true });
+      }
+      work.thumb = thumb;
+      emit();
+      const sprite = path.join(dir, `sprite_${stitchKey(work.stitch)}.jpg`);
+      const frames = dur > 0 ? SPRITE_FRAMES : 1;
+      if (!fileExists(sprite)) {
+        const rate = dur > 0 ? frames / dur : 1;
+        const keyOnly = dur > SPRITE_FRAMES * 1.5 ? ['-skip_frame', 'nokey'] : [];
+        await runFfmpeg([...keyOnly, '-i', companion, '-filter_complex', stitchChain(st, [`[0:v:0]fps=${rate.toFixed(6)},`], 320, 160) + `,scale=${SPRITE_WIDTH}:-2,tile=${frames}x1[o]`, '-map', '[o]', '-frames:v', '1', '-q:v', '5', sprite], { lowPriority: true });
+      }
+      work.sprite = { path: sprite, frames, frameWidth: SPRITE_WIDTH, frameHeight: SPRITE_WIDTH / 2 };
+      emit();
+      const wave = path.join(dir, 'wave.png');
+      if (work.info.hasAudio && !fileExists(wave)) {
+        try {
+          await runFfmpeg(['-vn', '-i', companion, '-filter_complex', 'aformat=channel_layouts=mono,compand=gain=-2,showwavespic=s=2000x80:colors=#5eead4:scale=sqrt', '-frames:v', '1', wave], { lowPriority: true });
+        } catch (e) { log.warn('Wellenform fehlgeschlagen', e); }
+      }
+      if (fileExists(wave)) work.waveform = wave;
+      work.proxy = companion;
+      work.prep = undefined;
+      work.status = 'ready';
+      emit();
+      if (options.reversed) await ensureReversedProxy(work, update);
+      if (options.stabilized) await ensureStabilizedProxy(work, update, options.stabilized);
+      return;
+    }
     if (stitched && work.stitch) {
       if (!heavy) {
         // Schnell: erst ein Rohbild als Vorschaubild – das Zusammensetzen (dauert) folgt im Hintergrund
@@ -315,8 +350,12 @@ async function spriteBySeeking(file: string, dur: number, frames: number, out: s
     };
     await Promise.all(Array.from({ length: 4 }, worker));
     if (failed) return false;
-    await runFfmpeg(['-framerate', '1', '-start_number', '0', '-i', path.join(tmp, 'f_%03d.jpg'), '-vf', `tile=${frames}x1`, '-frames:v', '1', '-q:v', '5', out], { lowPriority: true });
-    return fileExists(out);
+    // erst daneben schreiben, dann umbenennen (zwei gleichzeitige Läufe für dieselbe Datei stören sich sonst)
+    const tmpOut = path.join(tmp, 'sprite.jpg');
+    await runFfmpeg(['-framerate', '1', '-start_number', '0', '-i', path.join(tmp, 'f_%03d.jpg'), '-vf', `tile=${frames}x1`, '-frames:v', '1', '-q:v', '5', tmpOut], { lowPriority: true });
+    if (!fileExists(tmpOut)) return false;
+    fs.copyFileSync(tmpOut, out);
+    return true;
   } catch (e) {
     log.warn('Bildstreifen per Sprung fehlgeschlagen', (e as Error).message);
     return false;
@@ -452,25 +491,75 @@ async function buildProxy(work: MediaItem, dir: string, height: number, onPercen
   } else {
     args.push('-map', '0:v:0', '-vf', `scale=-2:${h}`);
   }
-  if (work.info.hasAudio) args.push('-map', '0:a:0?');
-  const tail = ['-c:a', 'aac', '-b:a', '128k', '-ac', '2', '-movflags', '+faststart', part];
-  const software = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-g', '15', '-pix_fmt', 'yuv420p', '-threads', '0'];
   const dur = Math.max(0.1, work.info.duration);
-  const onProgress = (p: { outTime: number }) => onPercent((p.outTime / dur) * 100);
-  const finish = () => { fs.renameSync(part, proxy); return proxy; };
-  // Mac: Grafikchip dekodiert und kodiert (spart Akku und ist mehrfach schneller); bei Problemen normal weiter
-  if (process.platform === 'darwin') {
-    const bitrate = `${Math.max(1, Math.round((h / 540) * (stitched ? 5 : 3.5)))}M`;
-    try {
-      await runFfmpeg(['-hwaccel', 'videotoolbox', ...args, '-c:v', 'h264_videotoolbox', '-b:v', bitrate, '-g', '15', '-pix_fmt', 'yuv420p', '-allow_sw', '1', ...tail], { lowPriority: true, onProgress });
-      return finish();
-    } catch (e) {
-      log.warn('Proxy per Grafikchip fehlgeschlagen, nehme Software', (e as Error).message);
-      try { fs.rmSync(part, { force: true }); } catch { /* egal */ }
+  const software = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-g', '15', '-pix_fmt', 'yuv420p', '-threads', '0'];
+  const bitrate = `${Math.max(1, Math.round((h / 540) * (stitched ? 5 : 3.5)))}M`;
+  const hardware = ['-c:v', 'h264_videotoolbox', '-b:v', bitrate, '-g', '15', '-pix_fmt', 'yuv420p', '-allow_sw', '1'];
+  const src = args[1];
+  const graph = args.slice(2);
+  // Kodieren mit Grafikchip (Mac), bei Problemen normal
+  let useHw = process.platform === 'darwin';
+  const encode = async (pre: string[], post: string[], out: string, onProgress?: (p: { outTime: number }) => void) => {
+    if (useHw) {
+      try {
+        await runFfmpeg([...pre, '-hwaccel', 'videotoolbox', '-i', src, ...graph, ...hardware, ...post, out], { lowPriority: true, onProgress });
+        return;
+      } catch (e) {
+        if ((e as { code?: number | null }).code === null) throw e;   // abgebrochen (z. B. Programm beendet)
+        log.warn('Proxy per Grafikchip fehlgeschlagen, nehme Software', (e as Error).message);
+        useHw = false;
+        try { fs.rmSync(out, { force: true }); } catch { /* egal */ }
+      }
     }
+    await runFfmpeg([...pre, '-i', src, ...graph, ...software, ...post, out], { lowPriority: true, onProgress });
+  };
+
+  // Lange Videos: in Stücken von 60 s (ohne Ton) – nach einem Abbruch geht es mit dem nächsten Stück weiter
+  if (dur > CHUNK_MIN) {
+    const n = Math.ceil(dur / CHUNK_SEC);
+    const chunks: string[] = [];
+    for (let i = 0; i < n; i++) {
+      const base = path.join(dir, `proxy_${key}.c${String(i).padStart(4, '0')}`);
+      const c = `${base}.mp4`, cp = `${base}.part.mp4`;
+      chunks.push(c);
+      if (fileExists(c)) { onPercent(((i + 1) / (n + 1)) * 100); continue; }
+      await encode(['-ss', (i * CHUNK_SEC).toFixed(3), '-t', String(CHUNK_SEC)], ['-an'], cp,
+        (p) => onPercent(((i + Math.min(1, p.outTime / CHUNK_SEC)) / (n + 1)) * 100));
+      fs.renameSync(cp, c);
+    }
+    // Ton einmal am Stück (genau, ohne Lücken an den Stücken), dann alles zusammenfügen
+    const list = path.join(dir, `proxy_${key}.list.txt`);
+    fs.writeFileSync(list, chunks.map((c) => `file '${c.replace(/'/g, "'\\''")}'`).join('\n'));
+    const audio = path.join(dir, `proxy_${key}.audio.m4a`);
+    const ap = path.join(dir, `proxy_${key}.audio.part.m4a`);
+    if (work.info.hasAudio && !fileExists(audio)) {
+      await runFfmpeg(['-i', comp ?? work.path, '-vn', '-map', '0:a:0?', '-c:a', 'aac', '-b:a', '128k', '-ac', '2', ap], { lowPriority: true });
+      fs.renameSync(ap, audio);
+    }
+    const join = ['-f', 'concat', '-safe', '0', '-i', list];
+    if (work.info.hasAudio && fileExists(audio)) join.push('-i', audio, '-map', '0:v', '-map', '1:a');
+    await runFfmpeg([...join, '-c', 'copy', '-movflags', '+faststart', part], { lowPriority: true });
+    fs.renameSync(part, proxy);
+    for (const c of [...chunks, list, audio]) fs.rm(c, { force: true }, () => undefined);
+    onPercent(100);
+    return proxy;
   }
-  await runFfmpeg([...args, ...software, ...tail], { lowPriority: true, onProgress });
-  return finish();
+
+  const post = [...(work.info.hasAudio ? ['-map', '0:a:0?', '-c:a', 'aac', '-b:a', '128k', '-ac', '2'] : []), '-movflags', '+faststart'];
+  await encode([], post, part, (p) => onPercent((p.outTime / dur) * 100));
+  fs.renameSync(part, proxy);
+  return proxy;
+}
+
+const CHUNK_SEC = 60;
+const CHUNK_MIN = 150;
+
+/** Einstellungen für eine Kamera-Vorschaudatei, deren Linsen andersherum liegen (Hälften getauscht, Linsen-Daten mit). */
+export function swapLensSettings(st: StitchSettings): StitchSettings {
+  // Die Hälften der LRV sind vertauscht: Linse 0 liegt rechts. Gleichwertig: Hälften tauschen → das macht buildProxy per crop.
+  // Für einfache Ketten (Vorschaubild) reicht es, die Linsen-Daten mitzutauschen und das Panorama um 180° zu drehen.
+  const lens = st.lens ? [st.lens[1], st.lens[0]] as typeof st.lens : undefined;
+  return { ...st, mode: 'dualfisheye-sbs', lens, yaw: st.yaw + 180 };
 }
 
 /** Braucht diese Datei eine eigene Vorschau-Datei? (Full-HD-H.264 in 8 Bit spielt direkt flüssig.) */
@@ -479,6 +568,11 @@ export function needsProxy(item: MediaItem, mode: 'auto' | 'always'): boolean {
   if (mode === 'always' || needsStitching(item.stitch)) return true;
   const i = item.info;
   const ext = path.extname(item.path).toLowerCase();
+  // Mac: der Grafikchip spielt H.264 und HEVC (auch 10 Bit) bis 4K direkt – keine Vorschau-Datei nötig („Sofort-Modus“)
+  if (process.platform === 'darwin' && (i.videoCodec === 'h264' || i.videoCodec === 'hevc')
+    && (!i.pixFmt || /^yuvj?420p(10le)?$/.test(i.pixFmt))
+    && Math.min(i.width, i.height) <= 2160 && Math.max(i.width, i.height) <= 4096 && (i.fps || 30) <= 61
+    && ['.mp4', '.mov', '.m4v'].includes(ext) && !i.is360) return false;
   const easy = i.videoCodec === 'h264' && (!i.pixFmt || /^yuvj?420p$/.test(i.pixFmt))
     && Math.min(i.width, i.height) <= 1088 && Math.max(i.width, i.height) <= 1928 && (i.fps || 30) <= 61
     && ['.mp4', '.mov', '.m4v'].includes(ext) && !i.is360;

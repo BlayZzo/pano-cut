@@ -61,6 +61,23 @@ export function rippleCut(project: Project, rangesIn: TimeRange[], cutTracks: Se
   return out;
 }
 
+/**
+ * „Anziehen nach links“: Auf den Spuren `trackIds` alle Clips lückenlos von 0 an aneinanderreihen (Reihenfolge = Anfang).
+ * Liefert nur die geänderten Clips.
+ */
+export function packTracks(clips: Record<string, Clip>, trackIds: Iterable<string>): Clip[] {
+  const out: Clip[] = [];
+  for (const tid of new Set(trackIds)) {
+    const list = Object.values(clips).filter((c) => c.trackId === tid && !c.link).sort((a, b) => a.start - b.start || a.id.localeCompare(b.id));
+    let t = 0;
+    for (const c of list) {
+      if (Math.abs(c.start - t) > 1e-6) out.push({ ...c, start: t });
+      t += clipEnd(c) - c.start;
+    }
+  }
+  return out;
+}
+
 /** Den Bereich [from, to] einer Spur (alle Clips darin) als neuen Anfang einfügen; alles andere rückt nach hinten. */
 export function insertAtStart(project: Project, trackId: string, from: number, to: number): Clip[] {
   const len = Math.max(0.1, to - from);

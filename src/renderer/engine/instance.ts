@@ -1,6 +1,7 @@
 import { PlaybackEngine } from './playback';
 import { useProject } from '../store/project';
 import { useUi } from '../store/ui';
+import { t } from '../i18n/de';
 
 /** Eine Engine für die ganze App; sie folgt dem Projekt-Store automatisch. */
 export const engine = new PlaybackEngine(useProject.getState().project);
@@ -13,6 +14,10 @@ engine.onTime = (t) => {
 engine.onEnded = () => useUi.getState().setPlaying(false);
 engine.onNeedReversed = (media) => {
   void window.panocut.prepareMedia(media, { reversed: true });
+};
+engine.onNeedProxy = (media) => {
+  useUi.getState().toast(t.toast.needProxy, 'info');
+  void window.panocut.prepareMedia({ ...media, status: 'processing' }, { forceProxy: true });
 };
 engine.onNeedStabilized = (media, strength) => {
   void window.panocut.prepareMedia(media, { stabilized: strength });

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { packTracks } from '@shared/edit';
 import { temporal } from 'zundo';
 import type { Clip, MediaItem, MulticamGroup, Project, ProjectSettings, Track, TrackKind } from '@shared/types';
 import type { Attachment, ChromaKey, Cutout, ObjectTrack, PanoSettings, Stabilization, StitchSettings, SubtitleSegment, TitleStyle, Transition } from '@shared/types';
@@ -28,6 +29,10 @@ export interface ProjectState {
   updateClips(ids: string[], patch: Partial<Clip>): void;
   setSpeed(ids: string[], speed: number): void;
   moveClips(ids: string[], dt: number, trackId?: string, copy?: boolean): string[];
+  /** Clips an neue Stellen/Spuren setzen (Mehrfachauswahl über mehrere Spuren). `magnet` = danach lückenlos nach links. */
+  placeClips(moves: Array<{ id: string; start: number; trackId: string }>, opts?: { copy?: boolean; magnet?: boolean }): string[];
+  /** Spuren lückenlos nach links zusammenschieben. */
+  packTracks(trackIds: string[]): void;
   trimClip(id: string, side: 'start' | 'end', time: number): void;
   splitClipAt(id: string, time: number): string | null;
   removeClips(ids: string[]): void;
@@ -161,6 +166,34 @@ export const useProject = create<ProjectState>()(
         set({ project: { ...project, clips } });
         return resultIds;
       },
+
+      placeClips: (moves, opts = {}) => {
+        const s = get();
+        const project = s.project;
+        const clips = { ...project.clips };
+        const ignore = new Set(opts.copy ? [] : moves.map((m) => m.id));
+        const result: string[] = [];
+        const touched = new Set<string>();
+        for (const mv of moves) {
+          const c = project.clips[mv.id];
+          if (!c) continue;
+          const start = Math.max(0, mv.start);
+          // Beim Anziehen dürfen sich Clips kurz überlappen – danach wird die Spur neu aufgereiht
+          if (!opts.magnet && overlaps(project, c, start, mv.trackId, ignore)) return [];
+          const id = opts.copy ? makeId('clip') : c.id;
+          clips[id] = { ...c, id, start, trackId: mv.trackId };
+          result.push(id);
+          touched.add(mv.trackId); touched.add(c.trackId);
+        }
+        if (opts.magnet) for (const c of packTracks(clips, touched)) clips[c.id] = c;
+        set({ project: { ...project, clips } });
+        return result;
+      },
+      packTracks: (trackIds) => set((s) => {
+        const clips = { ...s.project.clips };
+        for (const c of packTracks(clips, trackIds)) clips[c.id] = c;
+        return { project: { ...s.project, clips } };
+      }),
 
       setSpeed: (ids, speed) => set((s) => {
         const clips = { ...s.project.clips };

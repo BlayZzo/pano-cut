@@ -172,7 +172,10 @@ export class ExportJob {
         const frac = Math.min(1, p.outTime / total);
         const elapsed = (Date.now() - startedAt) / 1000;
         const eta = frac > 0.02 ? (elapsed * (1 - frac)) / frac : undefined;
-        this.onProgress({ phase: 'rendering', percent: Math.round((from + frac * (to - from)) * 100), fps: p.fps, speed: p.speed, eta, message });
+        // Auch bei sehr langsamen Exporten sichtbar, dass es vorangeht: „Bild 120 von 5400“
+        const fps = this.options.fps || 30;
+        const frames = `Bild ${Math.round(p.outTime * fps)} von ${Math.round(total * fps)}`;
+        this.onProgress({ phase: 'rendering', percent: Math.round((from + frac * (to - from)) * 100), fps: p.fps, speed: p.speed, eta, message: message ? `${message} · ${frames}` : frames });
       },
     });
   }
@@ -392,7 +395,14 @@ export class ExportJob {
     const chain: string[] = [];
     // 360°-Rohvideo zuerst zusammensetzen (bei zwei Streams muss hstack ganz vorn stehen)
     const stitched = needsStitching(media.stitch) && !seg.reversedFile;
-    if (stitched && media.stitch) chain.push(stitchChain(media.stitch, ['', ''], media.info.width, media.info.height, /1[02]/.test(media.info.pixFmt ?? '')));
+    if (stitched && media.stitch) {
+      // Nur so groß zusammensetzen, wie die Ausgabe braucht (z. B. Full-HD-Ausschnitt mit 100° → ~6900 statt 7680 Pixel breit)
+      let eqW = media.info.width;
+      if (c.pano?.mode === 'flat') eqW = Math.min(eqW, Math.ceil((W * 360) / Math.max(20, Math.min(...c.pano.keyframes.map((k) => k.fov))) * 1.1));
+      else if (c.pano?.mode === 'equirect') eqW = Math.min(eqW, W);
+      eqW = Math.max(256, Math.round(eqW / 8) * 8);
+      chain.push(stitchChain(media.stitch, ['', ''], eqW, eqW / 2, /1[02]/.test(media.info.pixFmt ?? '')));
+    }
     chain.push('setpts=PTS-STARTPTS');
     if (!seg.isImage && Math.abs(c.speed - 1) > 1e-6) chain.push(`setpts=PTS/${fnum(c.speed)}`);
     chain.push(`fps=${fps}`);
@@ -648,37 +658,65 @@ export class ExportJob {
       v360 = `v360@${id}=input=equirect:output=equirect${rot(view0)}`;
     }
     if (pano.keyframes.length > 1) {
-      // Befehlsdatei: pro Keyframe-Abschnitt lineare/weiche Interpolation
-      const lines: string[] = [];
+      // Schnell: Jeder v360-Befehl baut die ganze Umrechnung neu auf (sehr teuer). Darum
+      //  · Schwenken (yaw) als reines Verschieben des Panoramas (crop auf doppelt nebeneinandergelegtem Bild, kein Neuaufbau),
+      //  · nur die Werte per Befehl ändern, die sich wirklich ändern (Neigung, Rollen, Sichtfeld).
       const kfs = pano.keyframes;
-      const ease = pano.smooth ? 'TI*TI*(3-2*TI)' : 'TI';
-      const vf = (fov: number) => pano.mode === 'littleplanet' ? stereographicVfov(fov, W, H) : verticalFov(fov, W, H);
-      const cmd = (t0: number, t1: number, a: typeof kfs[0], b: typeof kfs[0]) => {
-        const yawB = a.yaw + (((b.yaw - a.yaw) % 360 + 540) % 360 - 180);
-        const rollB = a.roll + (((b.roll - a.roll) % 360 + 540) % 360 - 180);
-        const parts = [
-          `[expr] v360@${id} yaw 'lerp(${fnum(a.yaw)},${fnum(yawB)},${ease})'`,
-          `[expr] v360@${id} pitch 'lerp(${fnum(a.pitch)},${fnum(b.pitch)},${ease})'`,
-          `[expr] v360@${id} roll 'lerp(${fnum(a.roll)},${fnum(rollB)},${ease})'`,
-        ];
-        if (pano.mode !== 'equirect') {
-          parts.push(`[expr] v360@${id} h_fov 'lerp(${fnum(a.fov)},${fnum(b.fov)},${ease})'`);
-          parts.push(`[expr] v360@${id} v_fov 'lerp(${fnum(vf(a.fov))},${fnum(vf(b.fov))},${ease})'`);
+      const easeT = (x: string) => (pano.smooth ? `(${x})*(${x})*(3-2*(${x}))` : `(${x})`);
+      const shortest = (a: number, b: number) => a + (((b - a) % 360 + 540) % 360 - 180);
+      // Keyframe-Zeiten relativ zum Stück; Gier-Werte entlang des kürzesten Wegs fortlaufend machen
+      const pts = kfs.map((k) => ({ ...k, t: k.t - localOffset }));
+      for (let i = 1; i < pts.length; i++) { pts[i].yaw = shortest(pts[i - 1].yaw, pts[i].yaw); pts[i].roll = shortest(pts[i - 1].roll, pts[i].roll); }
+      const varies = (key: 'yaw' | 'pitch' | 'roll' | 'fov') => pts.some((k) => Math.abs(k[key] - pts[0][key]) > 1e-6);
+      const yawVar = varies('yaw');
+      // Ausdruck einer Größe über die Zeit t (stückweise, außerhalb konstant)
+      const piecewise = (key: 'yaw' | 'pitch' | 'roll' | 'fov'): string => {
+        let e = fnum(pts[pts.length - 1][key]);
+        for (let i = pts.length - 2; i >= 0; i--) {
+          const a = pts[i], b = pts[i + 1];
+          const span = Math.max(1e-6, b.t - a.t);
+          const seg = `(${fnum(a[key])}+(${fnum(b[key] - a[key])})*${easeT(`clip((t-${fnum(a.t)})/${fnum(span)},0,1)`)})`;
+          e = `if(lt(t,${fnum(b.t)}),${seg},${e})`;
         }
-        lines.push(`${fnum(Math.max(0, t0))}-${fnum(t1)} ${parts.join(', ')};`);
+        return `if(lt(t,${fnum(pts[0].t)}),${fnum(pts[0][key])},${e})`;
       };
-      for (let i = 0; i < kfs.length - 1; i++) {
-        const t0 = kfs[i].t - localOffset;
-        const t1 = kfs[i + 1].t - localOffset;
-        if (t1 <= 0) continue;
-        cmd(Math.max(0, t0), t1, kfs[i], kfs[i + 1]);
+      if (yawVar) {
+        // Panorama nebeneinander legen und das passende Stück herausschneiden = Drehung um die Hochachse
+        chain.push(`split=2[${id}ya][${id}yb];[${id}ya][${id}yb]hstack,crop=w=iw/2:h=ih:y=0:x='mod((${piecewise('yaw')})/360*iw/2+iw*50,iw/2)'`);
+        v360 = v360.replace(/:yaw=[^:]*/, ':yaw=0');
       }
-      const last = kfs[kfs.length - 1];
-      const tail = last.t - localOffset;
-      lines.push(`${fnum(Math.max(0, tail))}-${fnum(Math.max(0, tail) + 100000)} [expr] v360@${id} yaw '${fnum(last.yaw)}', [expr] v360@${id} pitch '${fnum(last.pitch)}', [expr] v360@${id} roll '${fnum(last.roll)}'${pano.mode !== 'equirect' ? `, [expr] v360@${id} h_fov '${fnum(last.fov)}', [expr] v360@${id} v_fov '${fnum(vf(last.fov))}'` : ''};`);
-      const file = this.tmpFile(`pano_${id}.txt`);
-      fs.writeFileSync(file, lines.join('\n') + '\n');
-      chain.push(`sendcmd=f='${escapeFilterPath(file)}'`);
+      const lines: string[] = [];
+      const vf = (fov: number) => pano.mode === 'littleplanet' ? stereographicVfov(fov, W, H) : verticalFov(fov, W, H);
+      const keys: Array<'pitch' | 'roll' | 'fov'> = ['pitch', 'roll', ...(pano.mode !== 'equirect' ? ['fov' as const] : [])];
+      for (let i = 0; i < pts.length - 1; i++) {
+        const a = pts[i], b = pts[i + 1];
+        if (b.t <= 0) continue;
+        const parts: string[] = [];
+        if (!yawVar && Math.abs(b.yaw - a.yaw) > 1e-6) parts.push(`[expr] v360@${id} yaw 'lerp(${fnum(a.yaw)},${fnum(b.yaw)},${pano.smooth ? 'TI*TI*(3-2*TI)' : 'TI'})'`);
+        for (const k of keys) {
+          if (Math.abs(b[k] - a[k]) < 1e-6) continue;
+          const e = pano.smooth ? 'TI*TI*(3-2*TI)' : 'TI';
+          if (k === 'fov') {
+            parts.push(`[expr] v360@${id} h_fov 'lerp(${fnum(a.fov)},${fnum(b.fov)},${e})'`);
+            parts.push(`[expr] v360@${id} v_fov 'lerp(${fnum(vf(a.fov))},${fnum(vf(b.fov))},${e})'`);
+          } else parts.push(`[expr] v360@${id} ${k} 'lerp(${fnum(a[k])},${fnum(b[k])},${e})'`);
+        }
+        if (parts.length) lines.push(`${fnum(Math.max(0, a.t))}-${fnum(b.t)} ${parts.join(', ')};`);
+      }
+      // Am Ende genau auf den letzten Werten stehen (einmalig)
+      const last = pts[pts.length - 1];
+      const fin: string[] = [];
+      if (!yawVar && varies('yaw')) fin.push(`v360@${id} yaw ${fnum(last.yaw)}`);
+      for (const k of keys) if (varies(k)) {
+        if (k === 'fov') fin.push(`v360@${id} h_fov ${fnum(last.fov)}`, `v360@${id} v_fov ${fnum(vf(last.fov))}`);
+        else fin.push(`v360@${id} ${k} ${fnum(last[k])}`);
+      }
+      if (fin.length) lines.push(`${fnum(Math.max(0, last.t))} [enter] ${fin.join(', [enter] ')};`);
+      if (lines.length) {
+        const file = this.tmpFile(`pano_${id}.txt`);
+        fs.writeFileSync(file, lines.join('\n') + '\n');
+        chain.push(`sendcmd=f='${escapeFilterPath(file)}'`);
+      }
     }
     chain.push(v360);
     return chain;
@@ -851,12 +889,17 @@ export class ExportJob {
 
     // ---- Eingaben ----
     let inputCount = 0;
+    const hwDecode = hardware && process.platform === 'darwin';
     this.currentSegments = segs;
     for (const s of segs) {
       if (s.isTitle) continue;
       if (s.media?.hasAlpha) args.push('-c:v', 'libvpx-vp9');
       if (s.isImage) args.push('-loop', '1', '-framerate', String(fps), '-t', fnum(s.tlDur), '-i', s.file);
-      else args.push('-ss', fnum(s.srcIn), '-t', fnum(s.srcDur), '-i', s.file);
+      else {
+        // Mac: Grafikchip dekodiert (8K-HEVC von 360°-Kameras mehrfach schneller); klappt es nicht, folgt der normale Durchlauf
+        if (hwDecode && s.hasVideo && !s.media?.hasAlpha) args.push('-hwaccel', 'videotoolbox');
+        args.push('-ss', fnum(s.srcIn), '-t', fnum(s.srcDur), '-i', s.file);
+      }
       inputCount++;
     }
     // Maskensequenzen für freigestellte Clips

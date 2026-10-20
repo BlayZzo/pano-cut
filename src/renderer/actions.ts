@@ -241,7 +241,11 @@ export function splitAtPlayhead(): void {
 export function deleteSelection(): void {
   const ui = useUi.getState();
   if (ui.selection.length === 0) return;
-  useProject.getState().removeClips(ui.selection);
+  const p = useProject.getState();
+  const tracks = ui.selection.map((id) => p.project.clips[id]?.trackId).filter(Boolean) as string[];
+  if (ui.magnet) beginTransaction();
+  p.removeClips(ui.selection);
+  if (ui.magnet) { useProject.getState().packTracks(tracks); endTransaction(); }
   ui.clearSelection();
 }
 

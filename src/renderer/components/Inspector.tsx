@@ -4,7 +4,7 @@ import { clipDuration, defaultTransform, formatDuration, formatTime } from '@sha
 import { beginTransaction, endTransaction, useProject } from '../store/project';
 import { useUi } from '../store/ui';
 import { fmt, t } from '../i18n/de';
-import { Section, Slider } from './InspectorBits';
+import { Section, Slider , NumInput } from './InspectorBits';
 import { InspectorPano } from './InspectorPano';
 import { InspectorTitle } from './InspectorTitle';
 import { InspectorStabilize, InspectorSubtitles, InspectorTransition } from './InspectorExtras';
@@ -67,7 +67,24 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
   const setInspectorTab = useUi((s) => s.setInspectorTab);
   const patch = (p: Partial<Clip>) => updateClips(ids, p);
   const patchTransform = (p: Partial<Transform>) => patch({ transform: { ...clip.transform, ...p } });
-  const setSpeed = (speed: number) => setClipSpeed(ids, speed);
+  // Mit „Anziehen“: langsamer = länger – die folgenden Clips rücken mit, statt den Clip zu kürzen
+  const setSpeed = (speed: number) => {
+    if (!useUi.getState().magnet) { setClipSpeed(ids, speed); return; }
+    const st = useProject.getState();
+    beginTransaction();
+    const moved: Clip[] = [];
+    for (const id of ids) {
+      const c = st.project.clips[id];
+      if (!c) continue;
+      const grow = (c.out - c.in) / Math.max(0.05, speed) - (c.out - c.in) / c.speed;
+      if (grow > 0) for (const o of Object.values(st.project.clips)) if (o.trackId === c.trackId && o.id !== c.id && o.start >= c.start + 1e-6) moved.push({ ...o, start: o.start + grow });
+    }
+    if (moved.length) st.insertClips(moved);
+    setClipSpeed(ids, speed);
+    const tracks = ids.map((id) => useProject.getState().project.clips[id]?.trackId).filter(Boolean) as string[];
+    useProject.getState().packTracks(tracks);
+    endTransaction();
+  };
 
   // Kategorien (Reiter), damit nicht alles untereinander steht
   type Cat = 'clip' | 'look' | 'motion' | 'audio' | 'text' | 'ai';
@@ -152,7 +169,15 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
             <button className={`chip${clip.speed === 2 ? ' active' : ''}`} onClick={() => setSpeed(2)}>2×</button>
             <button className={`chip${clip.speed === 4 ? ' active' : ''}`} onClick={() => setSpeed(4)}>4× {t.inspector.timelapse}</button>
           </div>
-          <Slider label={t.inspector.speed} value={clip.speed} min={0.1} max={16} step={0.05} unit="×" onChange={setSpeed} />
+          <div className="speed-field">
+            <button className="btn sm" title="−1" onClick={() => setSpeed(Math.max(0.05, clip.speed >= 2 ? clip.speed - 1 : clip.speed / 2))}>−1</button>
+            <button className="btn sm ghost" title="−0,1" onClick={() => setSpeed(Math.max(0.05, Math.round((clip.speed - 0.1) * 100) / 100))}>−,1</button>
+            <NumInput className="speed-num" value={clip.speed} min={0.05} max={100} step={0.01} onChange={setSpeed} title={t.inspector.speedType} />
+            <span className="speed-x">×</span>
+            <button className="btn sm ghost" title="+0,1" onClick={() => setSpeed(Math.round((clip.speed + 0.1) * 100) / 100)}>+,1</button>
+            <button className="btn sm" title="+1" onClick={() => setSpeed(clip.speed < 1 ? Math.min(1, clip.speed * 2) : Math.floor(clip.speed) + 1)}>+1</button>
+          </div>
+          <Slider label={t.inspector.speedFine} value={Math.log2(clip.speed)} min={-4} max={6.64} step={0.01} display={(v) => `${(2 ** v).toFixed(2)}×`} onChange={(v) => setSpeed(Math.round(2 ** v * 100) / 100)} />
           <div className="hint">{t.inspector.speedHint}</div>
           <label className="toggle">
             <input type="checkbox" checked={clip.reverse} onChange={(e) => patch({ reverse: e.target.checked })} />

@@ -9,6 +9,7 @@ export interface DragState {
   trackId?: string;      // Zielspur beim Verschieben
   copy?: boolean;
   valid: boolean;
+  trackMap?: Record<string, string>; // Zielspur je Clip (Mehrfachauswahl über mehrere Spuren)
 }
 
 export interface Toast {
@@ -41,6 +42,9 @@ export interface UiState {
   zoom: number;           // Pixel pro Sekunde
   scrollX: number;
   snapping: boolean;
+  /** Anziehen: Clips rücken nach dem Ziehen/Löschen lückenlos nach links */
+  magnet: boolean;
+  setMagnet(on: boolean): void;
   drag: DragState | null;
   dialog: Dialog;
   rangeIn: number | null;
@@ -128,6 +132,7 @@ export const useUi = create<UiState>()((set, get) => ({
   zoom: 60,
   scrollX: 0,
   snapping: true,
+  magnet: false,
   drag: null,
   dialog: 'none',
   rangeIn: null,
@@ -165,6 +170,7 @@ export const useUi = create<UiState>()((set, get) => ({
   setZoom: (zoom) => set({ zoom: Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, zoom)) }),
   setScrollX: (scrollX) => set({ scrollX: Math.max(0, scrollX) }),
   setSnapping: (snapping) => set({ snapping }),
+  setMagnet: (magnet) => set({ magnet }),
   setDrag: (drag) => set({ drag }),
   openDialog: (dialog) => set({ dialog }),
   setRange: (rangeIn, rangeOut) => set({ rangeIn, rangeOut }),

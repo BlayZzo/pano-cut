@@ -29,7 +29,7 @@ export interface PanoCutApi {
   expandMediaPaths(paths: string[]): Promise<string[]>;
   /** 360°: Naht automatisch ausrichten (Kameradaten + Bildvergleich). */
   stitchAutoAlign(item: MediaItem): Promise<{ stitch: StitchSettings; before: number; after: number; camera: boolean }>;
-  prepareMedia(item: MediaItem, options?: { reversed?: boolean; stabilized?: number }): Promise<void>;
+  prepareMedia(item: MediaItem, options?: { reversed?: boolean; stabilized?: number; forceProxy?: boolean }): Promise<void>;
   onMediaUpdate(cb: (item: MediaItem) => void): () => void;
   /** Vorbereitungs-Warteschlange: Reihenfolge ändern, überspringen, beobachten */
   prepReorder(ids: string[]): Promise<void>;

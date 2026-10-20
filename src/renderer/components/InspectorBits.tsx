@@ -48,12 +48,39 @@ export function Slider({ label, value, min, max, step, unit = '', display, onCha
         onChange={(e) => onChange(parseFloat(e.target.value))}
         onDoubleClick={() => onChange(min < 0 && max > 0 ? 0 : (min === 0 && max >= 1 && step < 1 ? 1 : min))}
       />
-      <input
-        type="number" className="num" value={Number.isInteger(step) ? Math.round(value) : Math.round(value * 100) / 100} min={min} max={max} step={step} disabled={disabled}
-        onChange={(e) => { const v = parseFloat(e.target.value); if (!isNaN(v)) onChange(Math.min(max, Math.max(min, v))); }}
-        title={shown}
-      />
+      <NumInput value={value} min={min} max={max} step={step} disabled={disabled} title={shown} onChange={onChange} />
     </div>
+  );
+}
+
+/** Zahl eintippen (auch mit Komma, z. B. „1,5“); übernommen bei Enter oder beim Verlassen. Pfeiltasten = Schritt, ⇧ = ×10. */
+export function NumInput({ value, min, max, step, onChange, disabled, title, className = 'num' }: { value: number; min: number; max: number; step: number; onChange: (v: number) => void; disabled?: boolean; title?: string; className?: string }): React.ReactElement {
+  const digits = step >= 1 ? 0 : step >= 0.1 ? 1 : 2;
+  const fmt = (v: number) => (Math.round(v * 10 ** digits) / 10 ** digits).toString().replace('.', ',');
+  const [draft, setDraft] = React.useState<string | null>(null);
+  const commit = (text: string) => {
+    const v = parseFloat(text.replace(',', '.').replace(/[^0-9.+-]/g, ''));
+    if (!isNaN(v)) onChange(Math.min(max, Math.max(min, v)));
+    setDraft(null);
+  };
+  return (
+    <input
+      type="text" inputMode="decimal" className={className} disabled={disabled} title={title}
+      value={draft ?? fmt(value)}
+      onFocus={(e) => e.currentTarget.select()}
+      onChange={(e) => setDraft(e.target.value)}
+      onBlur={(e) => commit(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') { commit((e.target as HTMLInputElement).value); (e.target as HTMLInputElement).blur(); }
+        else if (e.key === 'Escape') { setDraft(null); (e.target as HTMLInputElement).blur(); }
+        else if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+          e.preventDefault();
+          const d = (e.key === 'ArrowUp' ? 1 : -1) * step * (e.shiftKey ? 10 : 1);
+          onChange(Math.min(max, Math.max(min, Math.round((value + d) / step) * step)));
+          setDraft(null);
+        }
+      }}
+    />
   );
 }
 

@@ -211,6 +211,9 @@ export class PlaybackEngine {
   /** Wird gerufen, wenn für einen stabilisierten Clip noch keine stabilisierte Vorschau existiert. */
   onNeedStabilized: (media: MediaItem, strength: number) => void = () => {};
   private requestedReversed = new Set<string>();
+  private requestedProxy = new Set<string>();
+  /** Das Original kann hier nicht abgespielt werden → Vorschau-Datei erstellen lassen. */
+  onNeedProxy: (media: MediaItem) => void = () => {};
   private requestedStabilized = new Set<string>();
 
   constructor(project: Project) {
@@ -378,7 +381,10 @@ export class PlaybackEngine {
     const st = media.stitch;
     if (!st || st.mode === 'equirect') return null;
     const url = (p: string) => window.panocut.toMediaUrl(p);
-    const fromCompanion = !!media.companion && slot.src === url(media.companion);
+    // Rückwärts-/stabilisierte Varianten einer Kamera-Vorschaudatei sind ebenfalls Rohbilder
+    const rawDerived = !!media.companion && media.proxy === media.companion
+      && ((!!media.proxyReversed && slot.src === url(media.proxyReversed)) || (!!media.proxyStabilized && slot.src === url(media.proxyStabilized)));
+    const fromCompanion = !!media.companion && (slot.src === url(media.companion) || rawDerived);
     const fromRaw = slot.src === url(media.path);
     if (!fromCompanion && !fromRaw) return null;               // fertig zusammengesetzte Vorschau-Datei
     if (fromRaw && st.mode === 'dualfisheye-2streams') return 'skip'; // zwei getrennte Bildspuren kann der Browser nicht zeigen
@@ -410,6 +416,12 @@ export class PlaybackEngine {
       (m as HTMLVideoElement).playsInline = true;
       m.addEventListener('seeked', () => { if (!this.playing) this.render(this.current); });
       m.addEventListener('loadeddata', () => { if (!this.playing) this.render(this.current); });
+      // Original ohne Vorschau-Datei lässt sich hier nicht abspielen (z. B. HEVC unter Windows): Vorschau-Datei anfordern
+      if (isVideo && !media.proxy && src === window.panocut.toMediaUrl(media.path) && !this.requestedProxy.has(media.id)) {
+        const need = () => { if (this.requestedProxy.has(media.id)) return; this.requestedProxy.add(media.id); this.onNeedProxy(media); };
+        m.addEventListener('error', need);
+        m.addEventListener('loadeddata', () => { if ((m as HTMLVideoElement).videoWidth === 0) need(); });
+      }
       if (isVideo && this.showOriginal && media.proxy && src === window.panocut.toMediaUrl(media.path)) {
         // Nicht abspielbar (Fehler, nur Ton ohne Bild – z. B. HEVC unter Windows/Linux – oder lädt nicht): zurück zur Vorschau-Datei
         let settled = false;
