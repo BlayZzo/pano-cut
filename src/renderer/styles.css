@@ -429,7 +429,7 @@ textarea:focus { border-color: var(--accent); }
 
 /* Vorbereitungs-Warteschlange */
 .prep-indicator-btn { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; }
-.prep-indicator-btn .progress { display: inline-block; width: 90px; height: 4px; }
+.prep-indicator-btn .progress { display: inline-block; width: 90px; min-width: 90px; height: 4px; }
 .prep-indicator-btn .progress > span, .prep-row .progress > span { display: block; height: 100%; background: var(--accent); transition: width 0.3s; }
 .queue-list { display: flex; flex-direction: column; gap: 4px; min-width: 460px; max-height: 60vh; overflow-y: auto; }
 .prep-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }

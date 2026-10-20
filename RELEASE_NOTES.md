@@ -1,3 +1,19 @@
+## PanoCut 0.8.1 – Ruhige Vorschau und Warteschlange zum Sortieren
+
+**Installieren**
+- Mac mit Apple-Chip (M1–M4): `PanoCut-0.8.1-mac-arm64.dmg`
+- Mac mit Intel: `PanoCut-0.8.1-mac-x64.dmg`
+- Windows 10/11: `PanoCut-0.8.1-win-x64.exe`
+
+Wenn PanoCut schon installiert ist, wird das Update beim Start angeboten.
+
+**Behoben**
+- **Vorschau flackert / springt nicht mehr**: Bei geteilten Clips (nach Schneiden, Tempo-Rampe oder Grobschnitt) war das Bild an jedem Schnitt kurz schwarz – im Test bis zu 70 % der Zeit. Jetzt bleibt das letzte Bild stehen, bis das nächste Stück bereit ist. Die Wiedergabe richtet sich nach dem Video selbst (statt es ständig nachzustellen) und läuft nie mehr zurück. Bei 24/25 Bildern pro Sekunde ist die Bildfolge gleichmäßig.
+
+**Neu**
+- **Warteschlange zum Anklicken**: Oben auf „… Datei(en) werden vorbereitet“ klicken → Liste aller Dateien mit Vorschaubild, Größe, Länge, Auflösung, Fortschrittsbalken, Prozent und Restzeit. Während des Einlesens siehst du ebenfalls, welche Dateien gerade gelesen werden.
+- **Reihenfolge selbst bestimmen**: Zeilen mit der Maus nach oben oder unten ziehen – die oberste wartende Datei ist als Nächstes dran. ⤒ = sofort als Nächstes. „Überspringen“ = keine Vorschau-Datei erstellen (sofort fertig).
+
 ## PanoCut 0.8.0 – Werkzeuge für Auto-Videos und Social Media, alles schön sortiert
 
 **Installieren**
