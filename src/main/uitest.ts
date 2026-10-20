@@ -116,6 +116,14 @@ export async function runUiTest(win: BrowserWindow): Promise<number> {
       const T = window.__pcTest;
       const e = T.engine;
       let seeks = 0;
+      // Clip in Stücke teilen (wie nach Tempo-Rampe/Grobschnitt) – die Übergänge dürfen nicht flackern
+      const P = T.useProject.getState();
+      const first = Object.values(P.project.clips).sort((a, b) => a.start - b.start)[0];
+      let id = first.id;
+      for (const at of [0.9, 1.6, 2.3]) { const nid = T.useProject.getState().splitClipAt(id, at); if (nid) id = nid; }
+      await new Promise((r) => setTimeout(r, 300));
+      e.seek(0.2);
+      await new Promise((r) => setTimeout(r, 400));
       const els = [...e.slots.values()].map((s) => s.el).filter((el) => el instanceof HTMLVideoElement);
       const onSeek = () => seeks++;
       e.seek(0.2);
