@@ -108,7 +108,8 @@ In den Einstellungen lässt sich eine WebDAV-Adresse eintragen (z. B. Nextcloud:
 | **0.5** ✅ | Effekt-Studio: Effekte beschreiben und simulieren (Explosion, Feuer, Rauch, Schnee, Regen, Nebel, Funken, Blitz, Staub, Konfetti), an die Szene anpassen (Licht, Schatten, Farbe, Erschütterung) · Ebenen mit Mischmodi und Schatten · Objekt vor andere Ebenen holen · Masken-Pinsel · Platzieren direkt in der Vorschau |
 | **0.6** ✅ | Bild-Assistent für zu dunkle/helle Clips · Kamera-Profile (Blackmagic Film, DJI D-Log) · Auto-Musik-Schnitt mit Takterkennung · dynamische Übergänge mit Stärke · 360°-Kamerafahrten · Tempo-Rampen · Objekte ins Video fallen lassen (Aufprall, Staub, Trümmer) · Mehrkamera mit Ton-Synchronisierung · 3D-Objekte (glTF, OBJ, FBX, STL) · Stream Deck „Kamera 1–4“ |
 | **0.7** ✅ | Social-Media-Untertitel (Wort leuchtet, Vorlagen) · Übersetzung Deutsch ↔ Englisch lokal · neue Effekte (Linsenreflex, Bokeh, Speed-Linien, Lichtlecks, Herzen, Glitzer) · schnellere Vorschau, Proxys per Grafikchip auf dem Mac |
-| **0.8** | Mehrkamera-Winkel in der Timeline bearbeiten · weitere Effekte (Wasser, Glas) · bei Bedarf zweites Programm für Bild-/Objektbearbeitung |
+| **0.8** ✅ | Sound-Effekte · Per Klick freistellen · Vorbeifahrt-Rampen · Glühen/Leuchtspuren/Bewegungsunschärfe · Hochformat folgt Objekt · Hook-Finder · Cover · Grobschnitt · Projekt-Vorlagen · TikTok/Reels/Shorts mit Lautheit · Export im Hintergrund · Ordner beobachten · Speicher aufräumen · alles in Kategorien |
+| **0.9** | Mehrkamera-Winkel in der Timeline bearbeiten · weitere Effekte (Wasser, Glas) · bei Bedarf zweites Programm für Bild-/Objektbearbeitung |
 
 Alles läuft lokal auf deinem Rechner – ohne Abo, ohne Cloud-Zwang.
 

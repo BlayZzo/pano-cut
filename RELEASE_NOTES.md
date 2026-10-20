@@ -1,3 +1,33 @@
+## PanoCut 0.8.0 – Werkzeuge für Auto-Videos und Social Media, alles schön sortiert
+
+**Installieren**
+- Mac mit Apple-Chip (M1–M4): `PanoCut-0.8.0-mac-arm64.dmg`
+- Mac mit Intel: `PanoCut-0.8.0-mac-x64.dmg`
+- Windows 10/11: `PanoCut-0.8.0-win-x64.exe`
+
+Wenn PanoCut schon installiert ist, wird das Update beim Start angeboten. Nichts läuft von selbst – jede Funktion startet erst mit ihrem Knopf.
+
+**Ordnung**
+- **Inspektor mit Reitern**: Clip · Bild · Bewegung · Ton · Text · KI – nur das, was zum Clip passt.
+- **Mediathek mit Unterkategorien**: Effekte (Feuer, Wetter, Licht, Party, Animationen, Looks, Bild, Eigene), Übergänge nach Art, neuer Reiter **Sounds**.
+- **🧰 Werkzeuge** (neben „3D“): Social Media · Schnitt · Projekt · Dateien.
+- **Einstellungen mit Seitenleiste**: Projekt, Import, Ansicht, KI, Ordner, Speicher, Cloud, Stream Deck, Über PanoCut.
+
+**Neu**
+- **🔊 Sound-Effekte** (auf deinem Rechner erzeugt, frei verwendbar): Whoosh, Riser, Boom, Schlag, Knall, Metall, Motor aufheulen, Vorbeifahrt, Leerlauf, Reifen quietschen, Turbo-Abblasen, Klick, Pop, Ding, Auslöser, Tippen, Drone, Herzschlag, Wind – mit Länge, Tonhöhe, Stärke und Varianten. ▶ anhören, ＋ am Abspielkopf einfügen. Auch beim „Auftritt“ (Aufprall-Sound) und bei Tempo-Rampen wählbar.
+- **🖱 Per Klick freistellen** (Inspektor → KI): Knopf drücken, aufs Auto klicken – es wird über den ganzen Clip verfolgt und freigestellt; auf Wunsch gleich „nach vorne“, damit Text hinter dem Auto stehen kann.
+- **Vorbeifahrt- und Drift-Rampen** (Inspektor → Bewegung): Zeitlupen-Moment am Abspielkopf, Whoosh dazu, Bewegungsunschärfe in den schnellen Stücken.
+- **Licht & Bewegung** (Inspektor → Bild): Glühen, Leuchtspuren (Rücklichter ziehen Streifen), Bewegungsunschärfe; Knopf „Nachtlook mit Leuchtspuren“. Neue Looks: Nacht, Auto-Showroom, Neon.
+- **📱 Hochformat & Ausschnitt**: 9:16, 4:5, 1:1 oder zurück zu 16:9 – der Ausschnitt bleibt mittig oder folgt dem Auto/der Person.
+- **🎣 Spannendste Stelle**: findet die Stellen mit der meisten Bewegung und dem lautesten Ton und setzt sie auf Wunsch an den Anfang.
+- **🖼️ Vorschaubild (Cover)**: Bild am Abspielkopf als JPG, mit großem Text.
+- **✂️ Grobschnitt**: Pausen, unscharfe/verwackelte Stellen und „Äh“s finden – Liste mit Häkchen, dann herausschneiden (Musik läuft durch).
+- **📋 Projekt-Vorlagen**: Format, Look, Untertitel-Einstellungen, Export-Vorlage und Intro speichern; neues Projekt aus Vorlage.
+- **Export-Vorlagen** TikTok, Reels, Shorts, Instagram-Feed (4:5) mit **Lautheit wie die Plattformen** (−14 LUFS) und Längen-Hinweis.
+- **Exportieren im Hintergrund**: „Im Hintergrund weiter“ – oben zeigt eine Liste alle Exporte mit Fortschritt; mehrere Exporte laufen nacheinander, du schneidest weiter.
+- **👀 Ordner beobachten**: neue Videos (z. B. vom Handy kopiert) werden gemeldet – importiert wird erst mit „Importieren“.
+- **🧹 Speicher aufräumen**: zeigt, wie viel Platz Vorschau-Dateien, Sounds, Effekte und Modelle brauchen, und räumt auf (deine Videos bleiben immer).
+
 ## PanoCut 0.7.2 – Schneller importieren, mit Fortschrittsanzeige
 
 **Installieren**

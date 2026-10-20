@@ -78,7 +78,14 @@ ASS-Ereignis je Wortwechsel mit `{\c}`; `SUBTITLE_PRESETS`). Übersetzung DE↔E
 lehnt net.fetch mit 406 ab → Node-fetch). Neue VFX-Arten flare/bokeh/speedlines/leaks/hearts/glitter (Licht-Arten mit Mischmodus
 screen). Leistung: Vorschau-Canvas in Anzeigegröße (Preview `fit`), `usePlayheadCoarse` für Bedienfelder, Track-Cache in der Engine,
 `MAX_SLOTS`, Vorbereitung in zwei Warteschlangen (quick/heavy), Sprite mit `-skip_frame nokey`, Mac-Proxy per videotoolbox (Fallback x264).
-0.8: Mehrkamera-Winkel in der Timeline, weitere Effekte; bei Bedarf zweites Programm für Bild/Objekte (gleiche Codebasis `src/shared`).
+0.8 ✅: Grundsatz: nichts startet automatisch, alles per Knopf, mit Einstellungen, in Kategorien. Sounds `shared/sfx.ts` (eigene Synthese →
+WAV, `main/sfx.ts` Cache `userData/sounds`, `insertSfx`), Werkzeuge `components/ToolsDialog.tsx` + `renderer/tools/` (reframe, analysis =
+Hook/Grobschnitt, templates), reine Schnittfunktionen `shared/edit.ts` (rippleCut, insertAtStart), Analysen `main/analysis.ts` (motion,
+silencedetect, blurdetect), `main/storage.ts` (Ordner beobachten, Speicher). Licht-Effekte `ImageFx.glow/trails/motionBlur` ↔ Export
+split/lutrgb/gblur/blend screen, lagfun (gbrp), tmix; Vorschau `temporalFx` in playback.ts. Export: Warteschlange in main.ts, `loudness`
+(loudnorm), JPEG-Einzelbild (`codec: 'jpeg'`). Inspektor-Reiter (`ui.inspectorTab`), Einstellungen mit Seitenleiste (`ui.settingsPage`).
+Achtung zustand v5: Selektoren dürfen keine neuen Arrays/Objekte liefern (`?? []` → Endlosschleife).
+0.9: Mehrkamera-Winkel in der Timeline, weitere Effekte; bei Bedarf zweites Programm für Bild/Objekte (gleiche Codebasis `src/shared`).
 Leistung: muss auf einem MacBook Air (M-Serie, 2024) flüssig laufen – Proxys, WebGL, Hintergrund-Jobs mit niedriger Priorität.
 
 ## Lokale Prüfung ohne npm
