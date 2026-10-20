@@ -18,6 +18,7 @@ export interface MediaInfo {
   pixFmt?: string;       // z. B. yuv420p (8 Bit) oder yuv420p10le (10 Bit)
   recordedAt?: number;   // Beginn der Aufnahme (ms, aus Metadaten bzw. Dateiname)
   recordedEnd?: number;  // Ende der Aufnahme (ms, Änderungszeit der Datei)
+  timelapseFactor?: number; // aus der Kamera bekannt (Insta360-Zeitstempel je Bild)
 }
 
 export interface SpriteInfo {
@@ -63,7 +64,8 @@ export interface MediaItem {
   proxy?: string;          // kleine Vorschau-Datei (Video)
   companion?: string;      // Kamera-Vorschaudatei (DJI .LRF, GoPro/Insta360 .LRV), dient als Vorschau-Datei
   companionSwap?: boolean;
-  proxyStitchKey?: string; // 360°: mit welchen Zusammensetz-Einstellungen die Vorschau-Datei erstellt wurde // 360°: Linsen in der Kamera-Vorschaudatei andersherum als im Original
+  proxyStitchKey?: string;
+  imu?: { file: string; rate: number; start: number; score: number; model: string };  // eingemessene Bewegungsdaten (Lage-Spur) // 360°: mit welchen Zusammensetz-Einstellungen die Vorschau-Datei erstellt wurde // 360°: Linsen in der Kamera-Vorschaudatei andersherum als im Original
   proxyReversed?: string;  // rückwärts laufende Vorschau-Datei
   waveform?: string;       // Wellenform-Bild (Audio)
   stitch?: StitchSettings; // nur 360°-Videos
@@ -433,6 +435,8 @@ export interface Clip {
   title?: TitleStyle;           // nur Titel-Clips
   pano?: PanoSettings;          // nur 360°-Clips
   reframe?: ReframeSettings;    // Ausschnitt-Fahrt (normale Videos/Bilder)
+  stab360?: { mode: 'off' | 'follow' | 'lock'; smooth: number; horizon: boolean };  // 360°-Stabilisierung mit Bewegungsdaten
+  nadir?: { enabled: boolean; size: number; feather: number };  // 360°: unten ausblenden (Selfie-Stick/Hand), Grad ab unten
   transition?: Transition;      // Übergang VOM vorherigen Clip der Spur in diesen Clip
   stabilize?: Stabilization;
   subtitles?: {

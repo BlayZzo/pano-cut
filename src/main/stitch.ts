@@ -94,6 +94,23 @@ function lensStitchChain(stitch: StitchSettings, inputs: string[], W: number, H:
     + `[${id}e0][${id}e1][${id}m]maskedmerge`;
 }
 
+/**
+ * Unsichtbarer Selfie-Stick: im Equirect-Bild (Kamera-Ausrichtung) den Bereich ab Breite 90−size nach unten mit der
+ * Bildzeile des Rings darüber auffüllen, weicher Übergang über `feather` Grad (gleiche Formel wie panogl uNadir).
+ */
+export function nadirChain(W: number, H: number, size: number, feather: number, deep: boolean): string {
+  const id = `nd${++labelSeq}`;
+  const fmt = deep ? 'yuv420p10le' : 'yuv420p';
+  const max = deep ? 1023 : 255;
+  const fe = Math.max(0.01, feather);
+  const r0 = 90 - size - fe;
+  const ring = Math.max(0, Math.min(H - 2, Math.floor((H * (0.5 + r0 / 180)) / 2) * 2));
+  const expr = `st(0,clip(((((2*Y+1)/H-1)*90)-${f(r0, 4)})/${f(fe, 4)},0,1));ld(0)*ld(0)*(3-2*ld(0))*${max}`;
+  return `format=${fmt},split=2[${id}a][${id}b];[${id}b]crop=${W}:2:0:${ring},scale=${W}:${H}:flags=neighbor[${id}r];`
+    + `color=c=black:s=${W}x${H}:r=1:d=1,format=${fmt},geq=lum='${expr}':cb='${expr}':cr='${expr}'[${id}m];`
+    + `[${id}a][${id}r][${id}m]maskedmerge`;
+}
+
 export function needsStitching(stitch?: StitchSettings): boolean {
   if (!stitch) return false;
   if (stitch.mode !== 'equirect') return true;

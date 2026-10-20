@@ -6,6 +6,7 @@ import type { Attachment } from '@shared/types';
 import { sharedPanoGL, type FisheyeInput } from './panogl';
 import { stitchKey } from '@shared/stitchModel';
 import { hasReframe, reframeAt, reframeRect } from '@shared/reframe';
+import { stabActive, stabMatrixAt, targetTrack, type ImuTrack } from '@shared/stabilize';
 import { sharedChromaGL } from './chromagl';
 import { sharedColorGL } from './colorgl';
 import { motionAt } from '@shared/effects';
@@ -405,6 +406,33 @@ export class PlaybackEngine {
     return { src: url(media.path), fisheye: fish ? { stitch: st!, swap: false } : null };
   }
 
+  // ---- Stabilisierung (Bewegungsdaten) ----
+  private imuTracks = new Map<string, ImuTrack | 'loading'>();
+  private imuTargets = new Map<string, ImuTrack>();
+  /** Gegendrehung für einen 360°-Clip zur Dateizeit `fileT` (oder null, wenn aus/noch nicht geladen). */
+  private stabFor(clip: Clip, media: MediaItem, fileT: number): number[] | null {
+    if (!stabActive(clip.stab360) || !media.imu) return null;
+    const file = media.imu.file;
+    const cacheKey = `${file}|${media.imu.score}|${media.imu.start}`;
+    const tr = this.imuTracks.get(cacheKey);
+    if (!tr) {
+      this.imuTracks.set(cacheKey, 'loading');
+      void window.panocut.imuRead(file).then((bytes) => {
+        const copy = new Uint8Array(bytes);
+        this.imuTracks.set(cacheKey, { rate: media.imu!.rate, start: media.imu!.start, q: new Float32Array(copy.buffer, 0, Math.floor(copy.byteLength / 4)) });
+        this.redraw();
+      }).catch(() => this.imuTracks.delete(cacheKey));
+      return null;
+    }
+    if (tr === 'loading') return null;
+    const s = clip.stab360;
+    const from = sourceTimeAt(clip, clip.start);
+    const key = `${cacheKey}|${s.mode}|${s.smooth}|${s.horizon}|${s.mode === 'lock' ? from.toFixed(2) : ''}`;
+    let target = this.imuTargets.get(key);
+    if (!target) { target = targetTrack(tr, s, from); this.imuTargets.set(key, target); }
+    return stabMatrixAt(tr, target, fileT, media.stitch);
+  }
+
   setShowOriginal(on: boolean): void {
     this.showOriginal = on;
     this.originalFailed.clear();
@@ -604,7 +632,9 @@ export class PlaybackEngine {
         const outW = mode === 'equirect' ? Math.min(vw, 2048) : W;
         const outH = mode === 'equirect' ? Math.round(outW / 2) : H;
         const srcTime = slot.isVideo ? (slot.el as HTMLVideoElement).currentTime : 0;
-        const out = pgl.render(source as TexImageSource, outW, outH, mode, view, srcTime, fish ?? undefined);
+        const stab = this.stabFor(clip, media, slot.isVideo ? (slot.el as HTMLVideoElement).currentTime : 0);
+        const nadir = clip.nadir?.enabled ? { size: clip.nadir.size, feather: clip.nadir.feather } : undefined;
+        const out = pgl.render(source as TexImageSource, outW, outH, mode, view, srcTime, fish ?? undefined, stab ?? undefined, nadir);
         if (out) { source = out; vw = outW; vh = outH; }
       }
     }

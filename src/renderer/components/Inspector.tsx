@@ -6,6 +6,7 @@ import { useUi } from '../store/ui';
 import { fmt, t } from '../i18n/de';
 import { Section, Slider , NumInput } from './InspectorBits';
 import { InspectorPano } from './InspectorPano';
+import { InspectorStab } from './InspectorStab';
 import { InspectorReframe } from './InspectorReframe';
 import { InspectorTitle } from './InspectorTitle';
 import { InspectorStabilize, InspectorSubtitles, InspectorTransition } from './InspectorExtras';
@@ -150,6 +151,7 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
       {!isTitle && !isAudioOnly && <InspectorTransition clip={clip} />}
       {!isTitle && !isAudioOnly && <InspectorLayer clip={clip} ids={ids} />}
       {!isTitle && media?.info.is360 && media.type === 'video' && <InspectorPano clip={clip} media={media} />}
+      {!isTitle && media?.info.is360 && media.type === 'video' && <InspectorStab clip={clip} media={media} />}
       {!isAudioOnly && !isTitle && count === 1 && <SaveEffectButton clip={clip} />}
       </>}
 

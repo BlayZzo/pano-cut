@@ -1,13 +1,38 @@
 // WebGL-Renderer für 360°-Videos: Equirectangular → flache Ansicht / gedrehtes Panorama / Little Planet.
 // Die Mathematik entspricht FFmpegs v360-Filter, damit Vorschau und Export übereinstimmen.
 import type { PanoMode, StitchSettings } from '@shared/types';
-import { blendWidth, coverHalf, lensModel } from '@shared/stitchModel';
+import { blendWidth, coverHalf, lensModel, mul3 } from '@shared/stitchModel';
 import { panoMatrix, verticalFov } from '@shared/pano';
 import type { PanoView } from '@shared/pano';
 
 const VERT = `
 attribute vec2 aPos;
 varying vec2 vUv;
+// Zwei Fischaugen → Farbe für Richtung v (Panorama-Koordinaten)
+vec3 stitchAt(vec3 v) {
+  vec4 c0 = fish(uL0 * v, uRect0, uK0);
+  vec4 c1 = fish(uL1 * v, uRect1, uK1);
+  vec3 gu = uG * v;
+  float uz = gu.z;
+  float lonu = abs(degrees(atan(gu.x, gu.z)));
+  float w;
+  if (lonu > uCover) w = 0.0;
+  else if (lonu < 180.0 - uCover) w = 1.0;
+  else if (uBlend <= 0.0) w = uz >= 0.0 ? 1.0 : 0.0;
+  else {
+    float x = clamp((degrees(asin(clamp(uz, -1.0, 1.0))) + uBlend * 0.5) / uBlend, 0.0, 1.0);
+    w = x * x * (3.0 - 2.0 * x);
+  }
+  if (c1.a < 0.5) w = 0.0;
+  if (c0.a < 0.5) w = 1.0;
+  return mix(c0.rgb * uGain0, c1.rgb * uGain1, w);
+}
+// Equirectangular → Farbe für Richtung v
+vec3 equiAt(vec3 v) {
+  float lon = atan(v.x, v.z) / PI;
+  float lat = asin(clamp(v.y, -1.0, 1.0)) / (PI * 0.5);
+  return texture2D(uTex, vec2((lon + 1.0) * 0.5, (lat + 1.0) * 0.5)).rgb;
+}
 void main() {
   vUv = vec2((aPos.x + 1.0) * 0.5, (1.0 - aPos.y) * 0.5);
   gl_Position = vec4(aPos, 0.0, 1.0);
@@ -31,6 +56,7 @@ uniform vec3 uGain0;
 uniform vec3 uGain1;
 uniform float uBlend;   // Breite der weichen Naht (Grad)
 uniform float uCover;   // Linse wird bis zu diesem Längengrad benutzt (Grad)
+uniform vec2 uNadir;    // unten ausblenden: ab Breite x (Grad), weicher Rand y (Grad); x ≥ 90 = aus
 varying vec2 vUv;
 const float PI = 3.141592653589793;
 // Fischauge (wie v360 input=fisheye): a = 0, wenn die Richtung außerhalb des Bildkreises liegt
@@ -61,29 +87,27 @@ void main() {
   }
   v = normalize(v);
   v = uRot * v;
+  // Unten ausblenden (Selfie-Stick/Hand): Farbe vom Ring darüber nach innen ziehen (wie der Export)
+  float nw = 0.0;
+  vec3 vr = v;
+  if (uNadir.x < 90.0) {
+    float latd = degrees(asin(clamp(v.y, -1.0, 1.0)));
+    float r0 = uNadir.x - uNadir.y;
+    nw = clamp((latd - r0) / uNadir.y, 0.0, 1.0);
+    nw = nw * nw * (3.0 - 2.0 * nw);
+    float rr = radians(r0);
+    float lonv = atan(v.x, v.z);
+    vr = vec3(cos(rr) * sin(lonv), sin(rr), cos(rr) * cos(lonv));
+  }
   if (uInput == 1) {
-    vec4 c0 = fish(uL0 * v, uRect0, uK0);
-    vec4 c1 = fish(uL1 * v, uRect1, uK1);
-    vec3 gu = uG * v;
-    float uz = gu.z;
-    float lonu = abs(degrees(atan(gu.x, gu.z)));
-    float w;
-    if (lonu > uCover) w = 0.0;
-    else if (lonu < 180.0 - uCover) w = 1.0;
-    else if (uBlend <= 0.0) w = uz >= 0.0 ? 1.0 : 0.0;
-    else {
-      float x = clamp((degrees(asin(clamp(uz, -1.0, 1.0))) + uBlend * 0.5) / uBlend, 0.0, 1.0);
-      w = x * x * (3.0 - 2.0 * x);
-    }
-    if (c1.a < 0.5) w = 0.0;
-    if (c0.a < 0.5) w = 1.0;
-    gl_FragColor = vec4(mix(c0.rgb * uGain0, c1.rgb * uGain1, w), 1.0);
+    vec3 col = stitchAt(v);
+    if (nw > 0.0) col = mix(col, stitchAt(vr), nw);
+    gl_FragColor = vec4(col, 1.0);
     return;
   }
-  float lon = atan(v.x, v.z) / PI;
-  float lat = asin(clamp(v.y, -1.0, 1.0)) / (PI * 0.5);
-  vec2 uv = vec2((lon + 1.0) * 0.5, (lat + 1.0) * 0.5);
-  gl_FragColor = texture2D(uTex, uv);
+  vec3 ce = equiAt(v);
+  if (nw > 0.0) ce = mix(ce, equiAt(vr), nw);
+  gl_FragColor = vec4(ce, 1.0);
 }`;
 
 /** Rohvideo mit zwei Fischaugen nebeneinander: Zusammensetz-Einstellungen; `swap` = Bildhälften andersherum. */
@@ -148,7 +172,7 @@ export class PanoGL {
     this.uRot = gl.getUniformLocation(prog, 'uRot');
     this.uRange = gl.getUniformLocation(prog, 'uRange');
     this.uMode = gl.getUniformLocation(prog, 'uMode');
-    for (const n of ['uInput', 'uL0', 'uL1', 'uG', 'uRect0', 'uRect1', 'uK0', 'uK1', 'uGain0', 'uGain1', 'uBlend', 'uCover']) this.u[n] = gl.getUniformLocation(prog, n);
+    for (const n of ['uInput', 'uL0', 'uL1', 'uG', 'uRect0', 'uRect1', 'uK0', 'uK1', 'uGain0', 'uGain1', 'uBlend', 'uCover', 'uNadir']) this.u[n] = gl.getUniformLocation(prog, n);
     gl.uniform1i(gl.getUniformLocation(prog, 'uTex'), 0);
     this.program = prog;
   }
@@ -157,7 +181,7 @@ export class PanoGL {
    * Rendert eine Ansicht. `source` ist das Equirectangular-Bild (Video/Bild), Ausgabe hat `outW`×`outH` Pixel.
    * Mit `fisheye` ist `source` ein Rohvideo mit zwei Fischaugen nebeneinander (wird direkt hier zusammengesetzt).
    */
-  render(source: TexImageSource, outW: number, outH: number, mode: PanoMode, view: PanoView, sourceTime: number, fisheye?: FisheyeInput): HTMLCanvasElement | null {
+  render(source: TexImageSource, outW: number, outH: number, mode: PanoMode, view: PanoView, sourceTime: number, fisheye?: FisheyeInput, preRot?: number[], nadir?: { size: number; feather: number }): HTMLCanvasElement | null {
     const gl = this.gl;
     if (!gl || !this.program) return null;
     if (this.canvas.width !== outW || this.canvas.height !== outH) {
@@ -175,7 +199,9 @@ export class PanoGL {
       this.lastSource = source;
       this.lastSourceTime = sourceTime;
     }
-    const m = panoMatrix(view.yaw, view.pitch, view.roll);
+    // Stabilisierung: Gegendrehung vor die Ansicht (Blick → stabilisierte Welt → Panorama)
+    const m = preRot ? mul3(preRot, panoMatrix(view.yaw, view.pitch, view.roll)) : panoMatrix(view.yaw, view.pitch, view.roll);
+    gl.uniform2f(this.u.uNadir, nadir ? 90 - nadir.size : 999, nadir ? Math.max(0.01, nadir.feather) : 1);
     // GLSL erwartet spaltenweise; unsere Matrix ist zeilenweise → transponiert übergeben
     gl.uniformMatrix3fv(this.uRot, false, new Float32Array([m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]]));
     const hfov = Math.max(1, Math.min(359, view.fov));

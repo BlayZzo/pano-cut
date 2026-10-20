@@ -27,6 +27,7 @@ export function snapFactor(f: number): number {
  * Ende = Änderungszeit der Datei (Kamera schreibt sie beim Stoppen). 1 = normales Tempo.
  */
 export function estimateTimelapse(info: MediaInfo): { factor: number; realSeconds?: number; reliable: boolean } {
+  if (info.timelapseFactor && info.timelapseFactor > 1.05) return { factor: snapFactor(info.timelapseFactor), realSeconds: info.duration * info.timelapseFactor, reliable: true };
   if (!info.recordedAt || !info.recordedEnd || !(info.duration > 0)) return { factor: 1, reliable: false };
   const real = (info.recordedEnd - info.recordedAt) / 1000;
   if (!(real > 0)) return { factor: 1, reliable: false };

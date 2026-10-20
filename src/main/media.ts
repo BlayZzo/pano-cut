@@ -14,6 +14,7 @@ import type { StitchSettings } from '@shared/types';
 import { dropCompanions, isCompanionFor, isCompanionName } from '@shared/companion';
 import { stitchKey } from '@shared/stitchModel';
 import { timeFromName } from '@shared/timesync';
+import { readInstaImu } from './insta360';
 import os from 'node:os';
 
 const VIDEO_EXT = new Set(['.mp4', '.mov', '.m4v', '.mkv', '.avi', '.webm', '.mts', '.m2ts', '.ts', '.mxf', '.insv', '.360', '.wmv', '.flv', '.3gp', '.lrv']);
@@ -85,7 +86,14 @@ export async function probeMedia(file: string): Promise<MediaItem> {
       const wholeHours = Math.abs(diff) > 1500 && (rem < 2000 || rem > 3600_000 - 2000);
       if (recordedAt === undefined || wholeHours) recordedAt = fromName;
     }
+    // Insta360: Zeitraffer-Zeitstempel je Bild im Datei-Anhang → genauer Faktor
+    let timelapseFactor: number | undefined;
+    if (/\.(insv|lrv|mp4)$/i.test(file) && type === 'video') {
+      const tl = readInstaImu(file, { gyro: false })?.timelapse;
+      if (tl && tl.length > 2 && fps > 0) timelapseFactor = ((tl[tl.length - 1] - tl[0]) / 1000 / (tl.length - 1)) * fps;
+    }
     const info: MediaInfo = {
+      timelapseFactor,
       recordedAt,
       recordedEnd: stat.mtimeMs,
       duration: type === 'image' ? 0 : duration,

@@ -1,3 +1,18 @@
+## PanoCut 0.9.3 – Insta360-Stabilisierung, Horizont, unsichtbarer Selfie-Stick
+
+**Installieren**
+- Mac mit Apple-Chip (M1–M4): `PanoCut-0.9.3-mac-arm64.dmg`
+- Mac mit Intel: `PanoCut-0.9.3-mac-x64.dmg`
+- Windows 10/11: `PanoCut-0.9.3-win-x64.exe`
+
+**🫳 Stabilisieren & Horizont** (Inspektor, bei 360°-Clips): „🧭 Bewegungsdaten einmessen“ liest den Gyro-Sensor aus der Insta360-Datei (wie FlowState in Insta360 Studio). Danach: **🎥 Folgen** (ruhige Schwenks, Regler „Ruhe beim Folgen“), **🔒 Richtung fest** und **Horizont gerade halten**. Wirkt in Vorschau und Export.
+
+**🪄 Unsichtbarer Selfie-Stick**: Blendet Stick und Hand unten aus – Größe und weicher Rand einstellbar.
+
+**Export-Fehler behoben**: 360°-Kamerafahrten mit mehreren Markierungen wurden im Export falsch gedreht (die Drehungen addierten sich). Jetzt sieht der Export genauso aus wie die Vorschau.
+
+**Zeitraffer**: Bei Insta360-Zeitraffern wird das Tempo direkt aus den Zeitstempeln der Kamera gelesen (genauer).
+
 ## PanoCut 0.9.2 – 70 Übergänge, aufgeräumte Menüs, Zeitraffer & Kamerawinkel abgleichen
 
 **Installieren**

@@ -1,4 +1,6 @@
 import { easeExpr, hasReframe, panoEase, REFRAME_ZOOM_MAX } from '@shared/reframe';
+import { stabActive, stabMatrixAt, targetTrack, type ImuTrack } from '@shared/stabilize';
+import { eulerFromMatrix, mul3 } from '@shared/stitchModel';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -7,10 +9,10 @@ import type { Attachment, Clip, ExportOptions, ExportProgress, MediaItem, Projec
 import { DEFAULT_TRANSLATION_COLOR, charsPerLine, subtitleChangeTimes, subtitleViewAt } from '@shared/subtitles';
 import { dynTransitionAt, isDynamicTransition, type DynamicTransition, type DynLayer } from '@shared/transitions';
 import { clipDuration, clipEnd, projectDuration, sourceTimeAt, videoTracksBottomUp } from '@shared/timeline';
-import { fontDef, panoViewAt, stereographicVfov, titleAnimationAt, verticalFov } from '@shared/pano';
+import { fontDef, panoMatrix, panoViewAt, stereographicVfov, titleAnimationAt, verticalFov } from '@shared/pano';
 import { availableEncoders, availableFilters, FfmpegError, probeFile, runFfmpeg } from './ffmpeg';
 import { reverseVideo } from './reverse';
-import { needsStitching, stitchChain } from './stitch';
+import { nadirChain, needsStitching, stitchChain } from './stitch';
 import { escapeFilterPath, fontFamilyName, resolveFontFile } from './fonts';
 import { injectSphericalMetadata } from './spherical';
 import { maskChain, writeMaskList } from './objects';
@@ -403,6 +405,9 @@ export class ExportJob {
       else if (c.pano?.mode === 'equirect') eqW = Math.min(eqW, W);
       eqW = Math.max(256, Math.round(eqW / 8) * 8);
       chain.push(stitchChain(media.stitch, ['', ''], eqW, eqW / 2, /1[02]/.test(media.info.pixFmt ?? '')));
+      if (c.nadir?.enabled) chain.push(nadirChain(eqW, eqW / 2, c.nadir.size, c.nadir.feather, /1[02]/.test(media.info.pixFmt ?? '')));
+    } else if (c.nadir?.enabled && media.info.is360 && !needsStitching(media.stitch) && media.info.width % 2 === 0 && media.info.height % 2 === 0) {
+      chain.push(nadirChain(media.info.width, media.info.height, c.nadir.size, c.nadir.feather, /1[02]/.test(media.info.pixFmt ?? '')));
     }
     chain.push('setpts=PTS-STARTPTS');
     if (!seg.isImage && Math.abs(c.speed - 1) > 1e-6) chain.push(`setpts=PTS/${fnum(c.speed)}`);
@@ -413,7 +418,9 @@ export class ExportJob {
     }
     // 360°-Ansicht (Reframing)
     if (media.info.is360 && c.pano) {
-      chain.push(...this.panoChain(seg, opts.localOffset ?? seg.localOffset));
+      if (stabActive(c.stab360) && media.imu && !seg.reversedFile && fs.existsSync(media.imu.file)) {
+        chain.push(...this.stabPanoChain(seg, opts.localOffset ?? seg.localOffset, opts.pad?.start ?? 0, opts.pad?.end ?? 0));
+      } else chain.push(...this.panoChain(seg, opts.localOffset ?? seg.localOffset));
     }
     // Ausschnitt-Fahrt (normale Videos/Bilder): Bereich aus dem vollen Quellbild per perspective auf das ganze Bild ziehen
     const reframed = hasReframe(c) && !media.info.is360;
@@ -645,6 +652,68 @@ export class ExportJob {
   }
 
   /** 360°-Ansicht (v360) inkl. Keyframe-Animation über sendcmd. */
+  /**
+   * 360° mit Stabilisierung (Bewegungsdaten): je Bild eine eigene Drehung. Schnell zerlegt: Gier = Verschieben des
+   * Panoramas (crop), Neigen = v360 (ein Neuaufbau je Bild), Kippen = 2D-Drehung (rotate) eines etwas größeren Bilds.
+   */
+  private stabPanoChain(seg: Segment, localOffset: number, padStart: number, padEnd: number): string[] {
+    const { width: W, height: H, fps } = this.options;
+    const c = seg.clip, media = seg.media!, pano = c.pano!, st = c.stab360!;
+    const id = `s${c.id.replace(/[^a-zA-Z0-9]/g, '')}${Math.round(localOffset * 1000)}`;
+    const imu = media.imu!;
+    const buf = fs.readFileSync(imu.file);
+    const raw: ImuTrack = { rate: imu.rate, start: imu.start, q: new Float32Array(buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength)) };
+    const fileAt = (tl: number) => sourceTimeAt(c, c.start + Math.max(0, Math.min(clipDuration(c), tl)));
+    const target = targetTrack(raw, st, fileAt(0));
+    const frames = Math.ceil((padStart + seg.tlDur + padEnd) * fps) + 2;
+    const per: Array<{ yaw: number; pitch: number; roll: number; fov: number }> = [];
+    for (let k = 0; k < frames; k++) {
+      const tl = localOffset + k / fps - padStart;
+      const v = panoViewAt(pano, Math.max(0, tl));
+      const S = stabMatrixAt(raw, target, fileAt(tl), media.stitch);
+      const e = eulerFromMatrix(mul3(S, panoMatrix(v.yaw, v.pitch, v.roll)));
+      per.push({ ...e, fov: v.fov });
+    }
+    const lines: string[] = [];
+    const chain: string[] = [];
+    if (pano.mode === 'flat') {
+      const maxRoll = Math.min(30, Math.max(1, ...per.map((p) => Math.abs(p.roll))));
+      const r = (maxRoll * Math.PI) / 180;
+      const W2 = Math.ceil((W * Math.cos(r) + H * Math.sin(r)) / 2) * 2, H2 = Math.ceil((W * Math.sin(r) + H * Math.cos(r)) / 2) * 2;
+      const fovs = (f: number) => {
+        const hv = verticalFov(f, W, H);
+        return { h: (2 * Math.atan(Math.tan((f * Math.PI) / 360) * (W2 / W)) * 180) / Math.PI, v: (2 * Math.atan(Math.tan((hv * Math.PI) / 360) * (H2 / H)) * 180) / Math.PI };
+      };
+      const p0 = per[0], f0 = fovs(p0.fov);
+      const fovVar = per.some((p) => Math.abs(p.fov - p0.fov) > 1e-4);
+      const yawX = (y: number) => `'mod(${fnum(y)}/360*iw/2+iw*50,iw/2)'`;
+      chain.push(`split=2[${id}a][${id}b];[${id}a][${id}b]hstack,crop@${id}c=w=iw/2:h=ih:y=0:x=${yawX(p0.yaw)}`);
+      chain.push(`v360@${id}=input=equirect:output=flat:h_fov=${fnum(f0.h)}:v_fov=${fnum(f0.v)}:w=${W2}:h=${H2}:yaw=0:pitch=${fnum(p0.pitch)}:roll=0:reset_rot=1`);
+      chain.push(`rotate@${id}r=a=${fnum((-p0.roll * Math.PI) / 180)}:ow=${W2}:oh=${H2}:c=black`, `crop=${W}:${H}:${(W2 - W) / 2}:${(H2 - H) / 2}`);
+      for (let k = 1; k < per.length; k++) {
+        const p = per[k], q = per[k - 1];
+        const parts = [`[enter] crop@${id}c x ${yawX(p.yaw)}`, `[enter] rotate@${id}r a ${fnum((-p.roll * Math.PI) / 180)}`];
+        if (Math.abs(p.pitch - q.pitch) > 1e-3) parts.push(`[enter] v360@${id} pitch ${fnum(p.pitch)}`);
+        if (fovVar && Math.abs(p.fov - q.fov) > 1e-4) { const f = fovs(p.fov); parts.push(`[enter] v360@${id} h_fov ${fnum(f.h)}`, `[enter] v360@${id} v_fov ${fnum(f.v)}`); }
+        lines.push(`${fnum(k / fps - 0.5 / fps)} ${parts.join(', ')};`);
+      }
+    } else {
+      const sg = pano.mode === 'littleplanet';
+      const p0 = per[0];
+      const out = sg ? `output=sg:h_fov=${fnum(p0.fov)}:v_fov=${fnum(stereographicVfov(p0.fov, W, H))}:w=${W}:h=${H}` : 'output=equirect';
+      chain.push(`v360@${id}=input=equirect:${out}:yaw=${fnum(p0.yaw)}:pitch=${fnum(p0.pitch)}:roll=${fnum(p0.roll)}:reset_rot=1`);
+      for (let k = 1; k < per.length; k++) {
+        const p = per[k];
+        const parts = [`[enter] v360@${id} yaw ${fnum(p.yaw)}`, `[enter] v360@${id} pitch ${fnum(p.pitch)}`, `[enter] v360@${id} roll ${fnum(p.roll)}`];
+        if (sg) parts.push(`[enter] v360@${id} h_fov ${fnum(p.fov)}`, `[enter] v360@${id} v_fov ${fnum(stereographicVfov(p.fov, W, H))}`);
+        lines.push(`${fnum(k / fps - 0.5 / fps)} ${parts.join(', ')};`);
+      }
+    }
+    const file = this.tmpFile(`stab_${id}.txt`);
+    fs.writeFileSync(file, lines.join('\n') + '\n');
+    return [`sendcmd=f='${escapeFilterPath(file)}'`, ...chain];
+  }
+
   private panoChain(seg: Segment, localOffset: number): string[] {
     const { width: W, height: H } = this.options;
     const pano = seg.clip.pano!;
@@ -652,7 +721,8 @@ export class ExportJob {
     const view0 = panoViewAt(pano, localOffset);
     const chain: string[] = [];
     let v360: string;
-    const rot = (v: { yaw: number; pitch: number; roll: number }) => `:yaw=${fnum(v.yaw)}:pitch=${fnum(v.pitch)}:roll=${fnum(v.roll)}`;
+    // reset_rot=1: Befehle setzen die Drehung absolut (Standard wäre: jeder Befehl dreht ZUSÄTZLICH – Fahrten würden sich aufaddieren)
+    const rot = (v: { yaw: number; pitch: number; roll: number }) => `:yaw=${fnum(v.yaw)}:pitch=${fnum(v.pitch)}:roll=${fnum(v.roll)}:reset_rot=1`;
     if (pano.mode === 'flat') {
       v360 = `v360@${id}=input=equirect:output=flat:h_fov=${fnum(view0.fov)}:v_fov=${fnum(verticalFov(view0.fov, W, H))}:w=${W}:h=${H}${rot(view0)}`;
     } else if (pano.mode === 'littleplanet') {

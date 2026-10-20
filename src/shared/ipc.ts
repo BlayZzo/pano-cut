@@ -32,6 +32,9 @@ export interface PanoCutApi {
   activityCurve(path: string, start?: number, duration?: number, dense?: number): Promise<{ times: number[]; values: number[] }>;
   /** Aufnahmezeiten neu lesen (für ältere Projekte). */
   mediaTimes(path: string): Promise<{ recordedAt?: number; recordedEnd?: number; duration: number }>;
+  imuBuild(item: MediaItem): Promise<{ file: string; rate: number; start: number; samples: number; score: number; model: string; offset: number }>;
+  imuRead(file: string): Promise<Uint8Array>;
+  onImuProgress(cb: (p: { id: string; percent: number }) => void): () => void;
   stitchAutoAlign(item: MediaItem): Promise<{ stitch: StitchSettings; before: number; after: number; camera: boolean }>;
   prepareMedia(item: MediaItem, options?: { reversed?: boolean; stabilized?: number; forceProxy?: boolean }): Promise<void>;
   onMediaUpdate(cb: (item: MediaItem) => void): () => void;
@@ -132,6 +135,9 @@ export const IPC = {
   importMedia: 'media:import',
   expandMediaPaths: 'media:expand',
   stitchAutoAlign: 'media:stitchAuto',
+  imuBuild: 'imu:build',
+  imuRead: 'imu:read',
+  imuProgress: 'imu:progress',
   activityCurve: 'analysis:activity',
   mediaTimes: 'media:times',
   prepareMedia: 'media:prepare',

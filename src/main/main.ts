@@ -10,6 +10,7 @@ import { getCacheDir, getProjectsDir } from './paths';
 import { attachCompanion, listMediaInFolder, mediaTypeFor, prepareMedia, probeMedia, SUPPORTED_EXTENSIONS } from './media';
 import { dropCompanions } from '@shared/companion';
 import { autoAlignStitch } from './stitchAuto';
+import { buildImuTrack, readImuFile } from './imu';
 import { defaultProjectPath, loadSettings, PROJECT_EXT, readProject, rememberProject, saveSettings, writeProject } from './project';
 import { ExportJob } from './exporter';
 import { killAll } from './ffmpeg';
@@ -351,6 +352,10 @@ ipcMain.handle(IPC.prepSkip, (_e, id: string) => {
   pumpPrep();
 });
 ipcMain.handle(IPC.prepQueueGet, () => prepJobs.map((j) => ({ id: j.id, stage: j.stage, running: j.running })));
+
+// ---- 360°: Bewegungsdaten einmessen (Stabilisierung) ----
+ipcMain.handle(IPC.imuBuild, (_e, item: MediaItem) => buildImuTrack(item, (p) => sendToWindow(IPC.imuProgress, { id: item.id, percent: p })));
+ipcMain.handle(IPC.imuRead, (_e, file: string) => readImuFile(file));
 
 // ---- 360°: Naht automatisch ausrichten ----
 ipcMain.handle(IPC.stitchAutoAlign, (_e, item: MediaItem) => autoAlignStitch(item));

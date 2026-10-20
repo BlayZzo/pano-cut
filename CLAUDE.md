@@ -128,4 +128,9 @@ eval=frame mit `in`, danach scale W:H; Vorschau = crop an colorgl). `markCameraH
 0.9.2: 70 Übergänge (alle xfade-Arten von 6.1 + dyn. blurdissolve/punchin/rollleft/rollright), Gruppen mit Emoji. Zeit & Tempo:
 `shared/timesync.ts` (recordedAt aus creation_time/Dateiname, recordedEnd = mtime, `estimateTimelapse`, `alignClip`, `correlate`),
 `main/analysis.ts activityCurve` (Schlüsselbilder oder dicht, showinfo-Zeiten), `renderer/tools/timesync.ts syncAngles` (Faktor-Suche).
+0.9.3: Insta360-Bewegungsdaten `main/insta360.ts` (Anhang: Magic 8db42d69…, Record 1 Protobuf, 3 = Gyro roh 20 B, 6 = Zeitraffer-Zeiten),
+`main/imu.ts` (Achsen-Zuordnung per Bildvergleich, `KNOWN` X5: P=[[0,0,-1],[1,0,0],[0,-1,0]], Versatz −0,03 s; Lage-Spur imu.bin = Float32-Quats
+100 Hz), `shared/stabilize.ts` (`targetTrack` follow/lock/horizon, `stabMatrixAt`; Vorschau = `preRot` in panogl, Export `stabPanoChain`:
+Gier per crop auf hstack, Nick per v360-Befehl, Rollen per rotate auf vergrößerter Ansicht). Nadir `clip.nadir` ↔ panogl `uNadir` / `stitch.ts nadirChain`
+(Ringzeile hochskaliert + maskedmerge). WICHTIG: v360 immer mit `reset_rot=1`, sonst addieren sich sendcmd-Drehungen.
 Ansicht/Layout: `ViewSettings` (`settings.view`, `useView`/`updateView`), `Splitter.tsx`, `Popover.tsx`.
