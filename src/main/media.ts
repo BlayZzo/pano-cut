@@ -13,6 +13,7 @@ import { defaultStitch } from '@shared/pano';
 import type { StitchSettings } from '@shared/types';
 import { dropCompanions, isCompanionFor, isCompanionName } from '@shared/companion';
 import { stitchKey } from '@shared/stitchModel';
+import { timeFromName } from '@shared/timesync';
 import os from 'node:os';
 
 const VIDEO_EXT = new Set(['.mp4', '.mov', '.m4v', '.mkv', '.avi', '.webm', '.mts', '.m2ts', '.ts', '.mxf', '.insv', '.360', '.wmv', '.flv', '.3gp', '.lrv']);
@@ -74,7 +75,19 @@ export async function probeMedia(file: string): Promise<MediaItem> {
       }
     }
 
+    // Aufnahmezeit: Metadaten oder Dateiname (bei ganzen Stunden Unterschied ist der Dateiname = Ortszeit der Kamera richtig)
+    const fromMeta = probe.format.creation_time ? Date.parse(probe.format.creation_time) : NaN;
+    const fromName = timeFromName(path.basename(file));
+    let recordedAt: number | undefined = Number.isFinite(fromMeta) && fromMeta > Date.UTC(2005, 0, 1) ? fromMeta : undefined;
+    if (fromName) {
+      const diff = recordedAt === undefined ? 0 : fromName - recordedAt;
+      const rem = ((diff % 3600_000) + 3600_000) % 3600_000;
+      const wholeHours = Math.abs(diff) > 1500 && (rem < 2000 || rem > 3600_000 - 2000);
+      if (recordedAt === undefined || wholeHours) recordedAt = fromName;
+    }
     const info: MediaInfo = {
+      recordedAt,
+      recordedEnd: stat.mtimeMs,
       duration: type === 'image' ? 0 : duration,
       width,
       height,

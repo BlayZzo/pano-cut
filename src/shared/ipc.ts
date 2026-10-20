@@ -28,6 +28,10 @@ export interface PanoCutApi {
   /** Ordner durch die darin enthaltenen Medien-Dateien ersetzen (Kamera-Vorschaudateien mit Hauptvideo fallen weg). */
   expandMediaPaths(paths: string[]): Promise<string[]>;
   /** 360°: Naht automatisch ausrichten (Kameradaten + Bildvergleich). */
+  /** Bewegungsverlauf aus Schlüsselbildern (Zeiten in Dateisekunden). */
+  activityCurve(path: string, start?: number, duration?: number, dense?: number): Promise<{ times: number[]; values: number[] }>;
+  /** Aufnahmezeiten neu lesen (für ältere Projekte). */
+  mediaTimes(path: string): Promise<{ recordedAt?: number; recordedEnd?: number; duration: number }>;
   stitchAutoAlign(item: MediaItem): Promise<{ stitch: StitchSettings; before: number; after: number; camera: boolean }>;
   prepareMedia(item: MediaItem, options?: { reversed?: boolean; stabilized?: number; forceProxy?: boolean }): Promise<void>;
   onMediaUpdate(cb: (item: MediaItem) => void): () => void;
@@ -128,6 +132,8 @@ export const IPC = {
   importMedia: 'media:import',
   expandMediaPaths: 'media:expand',
   stitchAutoAlign: 'media:stitchAuto',
+  activityCurve: 'analysis:activity',
+  mediaTimes: 'media:times',
   prepareMedia: 'media:prepare',
   mediaUpdate: 'media:update',
   prepQueue: 'media:prepQueue',

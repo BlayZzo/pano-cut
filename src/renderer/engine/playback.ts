@@ -904,6 +904,73 @@ export class PlaybackEngine {
       case 'circleopen': draw(a, mediaA, {}); draw(b, mediaB, { clipPath: circle(R * p, true) }); break;
       case 'circleclose': draw(b, mediaB, {}); draw(a, mediaA, { clipPath: circle(R * (1 - p), true) }); break;
       case 'zoomin': draw(a, mediaA, {}); draw(b, mediaB, { alpha: p }); break;
+      // ---- weitere xfade-Arten (Näherung für die Vorschau; der Export nutzt FFmpeg xfade) ----
+      case 'smoothup': case 'vuwind': draw(a, mediaA, {}); draw(b, mediaB, { clipPath: rect(0, H * (1 - p), W, H * p) }); break;
+      case 'smoothdown': case 'vdwind': draw(a, mediaA, {}); draw(b, mediaB, { clipPath: rect(0, 0, W, H * p) }); break;
+      case 'hlwind': draw(a, mediaA, {}); draw(b, mediaB, { clipPath: rect(W * (1 - p), 0, W * p, H) }); break;
+      case 'hrwind': draw(a, mediaA, {}); draw(b, mediaB, { clipPath: rect(0, 0, W * p, H) }); break;
+      case 'vertopen': draw(a, mediaA, {}); draw(b, mediaB, { clipPath: rect((W / 2) * (1 - p), 0, W * p, H) }); break;
+      case 'vertclose': draw(b, mediaB, {}); draw(a, mediaA, { clipPath: rect((W / 2) * p, 0, W * (1 - p), H) }); break;
+      case 'horzopen': draw(a, mediaA, {}); draw(b, mediaB, { clipPath: rect(0, (H / 2) * (1 - p), W, H * p) }); break;
+      case 'horzclose': draw(b, mediaB, {}); draw(a, mediaA, { clipPath: rect(0, (H / 2) * p, W, H * (1 - p)) }); break;
+      case 'squeezeh': draw(b, mediaB, {}); draw(a, mediaA, { clipPath: rect((W / 2) * p, 0, W * (1 - p), H) }); break;
+      case 'squeezev': draw(b, mediaB, {}); draw(a, mediaA, { clipPath: rect(0, (H / 2) * p, W, H * (1 - p)) }); break;
+      case 'wipetl': draw(a, mediaA, {}); draw(b, mediaB, { clipPath: rect(0, 0, W * p, H * p) }); break;
+      case 'wipetr': draw(a, mediaA, {}); draw(b, mediaB, { clipPath: rect(W * (1 - p), 0, W * p, H * p) }); break;
+      case 'wipebl': draw(a, mediaA, {}); draw(b, mediaB, { clipPath: rect(0, H * (1 - p), W * p, H * p) }); break;
+      case 'wipebr': draw(a, mediaA, {}); draw(b, mediaB, { clipPath: rect(W * (1 - p), H * (1 - p), W * p, H * p) }); break;
+      case 'diagtl': case 'diagtr': case 'diagbl': case 'diagbr': {
+        // Diagonale Kante wandert aus einer Ecke
+        const s0 = 2 * p;
+        const corner = { diagtl: [0, 0], diagtr: [1, 0], diagbl: [0, 1], diagbr: [1, 1] }[type];
+        const poly = (c: CanvasRenderingContext2D) => {
+          const [cx, cy] = corner, sx = cx ? -1 : 1, sy = cy ? -1 : 1;
+          c.beginPath();
+          c.moveTo(cx * W, cy * H);
+          c.lineTo(cx * W + sx * W * s0, cy * H);
+          c.lineTo(cx * W, cy * H + sy * H * s0);
+          c.closePath();
+          c.clip();
+        };
+        draw(a, mediaA, {}); draw(b, mediaB, { clipPath: poly });
+        break;
+      }
+      case 'hlslice': case 'hrslice': case 'vuslice': case 'vdslice': {
+        // Streifen, die nacheinander aufgehen
+        const n = 8;
+        const vert = type === 'hlslice' || type === 'hrslice';
+        const rev = type === 'hlslice' || type === 'vuslice';
+        const slices = (c: CanvasRenderingContext2D) => {
+          c.beginPath();
+          for (let i = 0; i < n; i++) {
+            const k = rev ? n - 1 - i : i;
+            const q = Math.max(0, Math.min(1, p * 2 - (k / n)));
+            if (vert) c.rect((i * W) / n, 0, (W / n) * q, H); else c.rect(0, (i * H) / n, W, (H / n) * q);
+          }
+          c.clip();
+        };
+        draw(a, mediaA, {}); draw(b, mediaB, { clipPath: slices });
+        break;
+      }
+      case 'coverleft': draw(a, mediaA, {}); draw(b, mediaB, { dx: W * (1 - p) }); break;
+      case 'coverright': draw(a, mediaA, {}); draw(b, mediaB, { dx: -W * (1 - p) }); break;
+      case 'coverup': draw(a, mediaA, {}); draw(b, mediaB, { dy: H * (1 - p) }); break;
+      case 'coverdown': draw(a, mediaA, {}); draw(b, mediaB, { dy: -H * (1 - p) }); break;
+      case 'revealleft': draw(b, mediaB, {}); draw(a, mediaA, { dx: -W * p }); break;
+      case 'revealright': draw(b, mediaB, {}); draw(a, mediaA, { dx: W * p }); break;
+      case 'revealup': draw(b, mediaB, {}); draw(a, mediaA, { dy: -H * p }); break;
+      case 'revealdown': draw(b, mediaB, {}); draw(a, mediaA, { dy: H * p }); break;
+      case 'circlecrop': case 'rectcrop': {
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, W, H);
+        const q = p < 0.5 ? 1 - p * 2 : (p - 0.5) * 2;
+        const shape = type === 'circlecrop' ? circle(R * q, true) : rect((W / 2) * (1 - q), (H / 2) * (1 - q), W * q, H * q);
+        if (p < 0.5) draw(a, mediaA, { clipPath: shape }); else draw(b, mediaB, { clipPath: shape });
+        break;
+      }
+      case 'fadefast': draw(a, mediaA, {}); draw(b, mediaB, { alpha: Math.min(1, p * 1.6) }); break;
+      case 'fadeslow': draw(a, mediaA, {}); draw(b, mediaB, { alpha: p * p }); break;
+      case 'fadegrays': draw(a, mediaA, { alpha: 1 }); draw(b, mediaB, { alpha: p }); break;
       default: draw(a, mediaA, {}); draw(b, mediaB, { alpha: p }); break;
     }
   }

@@ -125,4 +125,7 @@ LRV/Rohvideo. IPC `stitchAutoAlign` (`main/stitchAuto.ts`). Linse 0 = links/erst
 eval=frame mit `in`, danach scale W:H; Vorschau = crop an colorgl). `markCameraHere` (Taste K). Verfolgen `renderer/ai/follow.ts` (NCC-Vorlage,
 360 in flacher WebGL-Ansicht, requestVideoFrameCallback) + `FollowTool.tsx`, `engine.analysisSource`. Masken zeichnen `InspectorMaskDraw.tsx`
 (ObjectTrack label 'manual', Box = ganzes Bild, `maskBrush.tool` brush/erase/lasso).
+0.9.2: 70 Übergänge (alle xfade-Arten von 6.1 + dyn. blurdissolve/punchin/rollleft/rollright), Gruppen mit Emoji. Zeit & Tempo:
+`shared/timesync.ts` (recordedAt aus creation_time/Dateiname, recordedEnd = mtime, `estimateTimelapse`, `alignClip`, `correlate`),
+`main/analysis.ts activityCurve` (Schlüsselbilder oder dicht, showinfo-Zeiten), `renderer/tools/timesync.ts syncAngles` (Faktor-Suche).
 Ansicht/Layout: `ViewSettings` (`settings.view`, `useView`/`updateView`), `Splitter.tsx`, `Popover.tsx`.

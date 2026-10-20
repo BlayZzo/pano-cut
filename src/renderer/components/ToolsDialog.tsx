@@ -3,7 +3,7 @@ import type { AiDetectModel, ExportOptions, StorageInfo } from '@shared/types';
 import { EXPORT_PRESETS } from '@shared/presets';
 import { TITLE_TEMPLATES, defaultTitle } from '@shared/pano';
 import { createTitleClip, formatBytes, formatTime, projectDuration } from '@shared/timeline';
-import { useProject } from '../store/project';
+import { beginTransaction, endTransaction, useProject } from '../store/project';
 import { useUi } from '../store/ui';
 import { fmt, t } from '../i18n/de';
 import { IconClose } from './Icons';
@@ -12,8 +12,11 @@ import { applyHookAsIntro, applyRoughCuts, findHooks, findRoughCuts, type HookCa
 import { deleteTemplate, projectFromTemplate, saveTemplate } from '../tools/templates';
 import { seekTo, stopPlayback } from '../engine/instance';
 import { importFiles } from '../actions';
+import { describeFactor, ensureTimes, syncAngles } from '../tools/timesync';
+import { estimateTimelapse } from '@shared/timesync';
+import { NumInput } from './InspectorBits';
 
-export type ToolPage = 'reframe' | 'hook' | 'cover' | 'rough' | 'templates' | 'watch' | 'storage';
+export type ToolPage = 'reframe' | 'hook' | 'cover' | 'rough' | 'time' | 'templates' | 'watch' | 'storage';
 
 const GROUPS: Array<{ name: string; pages: Array<{ id: ToolPage; icon: string; label: string }> }> = [
   { name: t.tools.groupSocial, pages: [
@@ -21,7 +24,7 @@ const GROUPS: Array<{ name: string; pages: Array<{ id: ToolPage; icon: string; l
     { id: 'hook', icon: '🎣', label: t.tools.hook },
     { id: 'cover', icon: '🖼️', label: t.tools.cover },
   ] },
-  { name: t.tools.groupEdit, pages: [{ id: 'rough', icon: '✂️', label: t.tools.rough }] },
+  { name: t.tools.groupEdit, pages: [{ id: 'rough', icon: '✂️', label: t.tools.rough }, { id: 'time', icon: '⏱', label: t.time.title }] },
   { name: t.tools.groupProject, pages: [{ id: 'templates', icon: '📋', label: t.tools.templates }] },
   { name: t.tools.groupFiles, pages: [
     { id: 'watch', icon: '👀', label: t.tools.watch },
@@ -55,6 +58,7 @@ export function ToolsDialog(): React.ReactElement {
             {page === 'hook' && <HookTool />}
             {page === 'cover' && <CoverTool />}
             {page === 'rough' && <RoughCutTool />}
+          {page === 'time' && <TimeTool />}
             {page === 'templates' && <TemplatesTool />}
             {page === 'watch' && <WatchFolderSettings />}
             {page === 'storage' && <StorageSettings />}
@@ -447,6 +451,104 @@ export function WatchBanner(): React.ReactElement | null {
       <span className="hint" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{files.map((f) => f.split(/[\\/]/).pop()).join(', ')}</span>
       <button className="btn sm primary" onClick={() => { void importFiles(files); setFiles([]); }}>{t.tools.watchImport}</button>
       <button className="btn sm ghost" onClick={() => setFiles([])}>{t.tools.watchIgnore}</button>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------- Zeit & Tempo
+
+function TimeTool(): React.ReactElement {
+  const selection = useUi((s) => s.selection);
+  const project = useProject((s) => s.project);
+  const toast = useUi((s) => s.toast);
+  const clips = selection.map((id) => project.clips[id]).filter((c) => c && c.kind !== 'title' && project.media[c.mediaId]?.type === 'video');
+  const first = clips[0];
+  const media = first ? project.media[first.mediaId] : undefined;
+  const est = media ? estimateTimelapse(media.info) : null;
+  const [factor, setFactor] = useState<number | null>(null);
+  const f = factor ?? est?.factor ?? 1;
+  const [refIdx, setRefIdx] = useState(0);
+  const [auto, setAuto] = useState(true);
+  const [refine, setRefine] = useState(true);
+  const [busy, setBusy] = useState<number | null>(null);
+  useEffect(() => { setFactor(null); }, [first?.id]);
+  useEffect(() => { if (media && !media.info.recordedAt) void ensureTimes(media); }, [media?.id]);
+
+  const transfer = () => {
+    if (!first || clips.length < 2) { toast(t.time.needMore, 'info'); return; }
+    // gleiche reale Geschwindigkeit wie der erste Clip: Tempo = (Tempo₁ · Faktor₁) / Faktor des anderen
+    const rate = first.speed * f;
+    beginTransaction();
+    for (const c of clips.slice(1)) {
+      const fo = estimateTimelapse(project.media[c.mediaId].info).factor;
+      useProject.getState().setSpeed([c.id], Math.max(0.05, Math.min(100, rate / fo)));
+    }
+    endTransaction();
+    toast(fmt(t.time.transferred, { n: clips.length - 1, f: describeFactor(rate) }), 'success');
+  };
+
+  const sync = async () => {
+    if (clips.length !== 2) { toast(t.time.needTwo, 'info'); return; }
+    const ref = clips[refIdx], other = clips[1 - refIdx];
+    const mr = project.media[ref.mediaId], mo = project.media[other.mediaId];
+    setBusy(0);
+    try {
+      const fr = refIdx === 0 ? f : estimateTimelapse(mr.info).factor;
+      const r = await syncAngles(ref, mr, other, mo, { factorRef: fr, factorOther: auto ? 'auto' : estimateTimelapse(mo.info).factor, refine }, setBusy);
+      const cur = useProject.getState().project.clips[other.id];
+      const out = r.in + (cur.out - cur.in);
+      const srcLen = mo.info.duration;
+      const moved = { ...cur, start: r.start, in: Math.min(r.in, srcLen - 0.1), out: Math.min(srcLen, out), speed: r.speed };
+      beginTransaction();
+      // erst Tempo/Ausschnitt, dann an die richtige Stelle – auf eine eigene Spur, falls dort etwas im Weg liegt
+      useProject.getState().updateClip(cur.id, { in: moved.in, out: moved.out, speed: moved.speed, start: -1e6 });
+      const ok = useProject.getState().placeClips([{ id: cur.id, start: moved.start, trackId: cur.trackId }]).length > 0;
+      if (!ok) {
+        const tid = useProject.getState().addVideoTrackAbove(ref.trackId, t.time.trackName);
+        useProject.getState().placeClips([{ id: cur.id, start: moved.start, trackId: tid }]);
+      }
+      endTransaction();
+      toast(fmt(r.score > 0.45 ? t.time.synced : t.time.syncedWeak, { f: describeFactor(r.factorOther), o: r.offsetSec.toFixed(1).replace('.', ',') }), r.score > 0.45 ? 'success' : 'info');
+    } catch (e) { toast((e as Error).message, 'error'); }
+    setBusy(null);
+  };
+
+  const when = (ms?: number) => (ms ? new Date(ms).toLocaleString('de-DE') : '–');
+  return (
+    <div className="tool-page">
+      <h3>⏱ {t.time.title}</h3>
+      <div className="hint">{t.time.hint}</div>
+      {!first || !media ? <div className="hint warn">{t.time.select}</div> : (
+        <>
+          <div className="panel-header" style={{ border: 'none' }}>🐇 {t.time.tlTitle}</div>
+          <div className="form-grid compact">
+            <label>{t.time.clip}</label><span>{media.name}</span>
+            <label>{t.time.start}</label><span>{when(media.info.recordedAt)}</span>
+            <label>{t.time.real}</label><span>{est?.realSeconds ? formatTime(est.realSeconds, 1, false) : '–'}</span>
+            <label>{t.time.factor}</label>
+            <div className="inline"><NumInput value={f} min={1} max={1000} step={0.1} onChange={setFactor} className="speed-num" /><span>×</span>
+              <span className="hint">{est && est.factor > 1 ? fmt(t.time.detected, { f: describeFactor(est.factor) }) : t.time.normal}</span></div>
+          </div>
+          <button className="btn" disabled={clips.length < 2} onClick={transfer}>➡️ {t.time.transfer}</button>
+          <div className="hint">{t.time.transferHint}</div>
+
+          <div className="panel-header" style={{ border: 'none', marginTop: 12 }}>🎥 {t.time.syncTitle}</div>
+          <div className="hint">{t.time.syncHint}</div>
+          {clips.length === 2 && (
+            <div className="form-grid compact">
+              <label>{t.time.reference}</label>
+              <select value={refIdx} onChange={(e) => setRefIdx(Number(e.target.value))}>
+                {clips.map((c, i) => <option key={c.id} value={i}>{c.name}</option>)}
+              </select>
+              <label />
+              <label className="toggle"><input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} /> {t.time.autoFactor}</label>
+              <label />
+              <label className="toggle"><input type="checkbox" checked={refine} onChange={(e) => setRefine(e.target.checked)} /> {t.time.refine}</label>
+            </div>
+          )}
+          {busy !== null ? <Busy pct={busy} /> : <button className="btn primary" disabled={clips.length !== 2} onClick={() => void sync()}>🎯 {t.time.syncStart}</button>}
+        </>
+      )}
     </div>
   );
 }

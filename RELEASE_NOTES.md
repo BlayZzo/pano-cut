@@ -1,3 +1,18 @@
+## PanoCut 0.9.2 – 70 Übergänge, aufgeräumte Menüs, Zeitraffer & Kamerawinkel abgleichen
+
+**Installieren**
+- Mac mit Apple-Chip (M1–M4): `PanoCut-0.9.2-mac-arm64.dmg`
+- Mac mit Intel: `PanoCut-0.9.2-mac-x64.dmg`
+- Windows 10/11: `PanoCut-0.9.2-win-x64.exe`
+
+**🔀 Übergänge**: jetzt 70 statt 29, sortiert nach 🌫️ Blenden, 🧹 Wischen, ➡️ Schieben, 🔷 Formen, ✨ Effekt, ⚡ Dynamisch – u. a. Kino-Unschärfe, Über Grau, Ecken- und Diagonal-Wischen, Wind, Drüberschieben/Aufdecken, Vorhang, Streifen, Kreis-/Rechteck-Blende, Einschlag und Wegrollen (mit Stärke-Regler).
+
+**Menüs**: Inspektor-Reiter und alle Bereiche mit Symbolen (🎬 Clip, 🎨 Bild, 🏃 Bewegung, 🔊 Ton …), Mediathek-Reiter ebenso.
+
+**⏱ Zeit & Tempo** (🧰 Werkzeuge → Schnitt)
+- **Zeitraffer-Tempo erkennen**: PanoCut liest Beginn und Ende der Aufnahme aus der Datei und rechnet aus, wie stark gerafft wurde (z. B. 30×). Den Faktor kann man auf andere Clips übertragen – die laufen dann genauso schnell.
+- **Zwei Kamerawinkel abgleichen**: Zwei Clips auswählen (gleich schnell oder einer im Zeitraffer). PanoCut gleicht das Tempo an und legt den zweiten Clip zeitlich passend unter den ersten – über die Aufnahmezeit und einen Bildvergleich der Bewegung auf etwa eine halbe Sekunde genau, auch ohne Ton. Unterschiedlich gestellte Kamera-Uhren werden dabei korrigiert.
+
 ## PanoCut 0.9.1 – Kamerafahrten, Objekt verfolgen, Masken zeichnen
 
 **Installieren**

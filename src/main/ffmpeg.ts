@@ -101,7 +101,7 @@ export interface ProbeStream {
 }
 
 export interface ProbeResult {
-  format: { duration?: number; format_name?: string; bitrate?: number };
+  format: { duration?: number; format_name?: string; bitrate?: number; creation_time?: string };
   streams: ProbeStream[];
 }
 
@@ -135,6 +135,8 @@ export function probeFile(file: string): Promise<ProbeResult> {
           continue;
         }
         if (!sawInput) continue;
+        const ct = /^\s*creation_time\s*:\s*(\S+)/.exec(line);
+        if (ct && !result.format.creation_time) result.format.creation_time = ct[1];
         if (/^\s*Duration:/.test(line)) {
           const d = /Duration: ([^,]+)/.exec(line);
           if (d && !d[1].includes('N/A')) result.format.duration = parseDuration(d[1]);

@@ -3,7 +3,7 @@
 // perspective-Ecken und sendcmd-Befehle (gblur/dblur, rgbashift, Deckkraft, weiße Fläche).
 import type { TransitionType } from './types';
 
-export const DYNAMIC_TRANSITIONS = ['zoomthrough', 'whipleft', 'whipright', 'whipup', 'whipdown', 'spin', 'flash', 'shake', 'glitch'] as const;
+export const DYNAMIC_TRANSITIONS = ['zoomthrough', 'whipleft', 'whipright', 'whipup', 'whipdown', 'spin', 'flash', 'shake', 'glitch', 'blurdissolve', 'punchin', 'rollleft', 'rollright'] as const;
 export type DynamicTransition = typeof DYNAMIC_TRANSITIONS[number];
 
 export function isDynamicTransition(type: TransitionType): type is DynamicTransition {
@@ -116,6 +116,29 @@ export function dynTransitionAt(type: DynamicTransition, intensity: number, u: n
       const flick = u < 0.35 ? 0 : u > 0.65 ? 1 : hashNoise(q, 8) > 0 ? 1 : 0;
       a = layer(p);
       b = layer({ ...p, alpha: flick });
+      break;
+    }
+    case 'blurdissolve': {
+      // Beide werden zur Mitte hin unscharf, dazwischen weiche Überblendung (Kino-Look)
+      const bl = 1.4 * I * bell(u, 0.22);
+      a = layer({ blur: bl, scale: 1 + 0.03 * I * vA });
+      b = layer({ blur: bl, scale: 1 + 0.03 * I * inB, alpha: smooth(0.25, 0.75, u) });
+      break;
+    }
+    case 'punchin': {
+      // A drückt kurz rein, B „schlägt“ groß ein und setzt sich
+      a = layer({ scale: 1 + 0.25 * I * easeIn(vA), blur: 0.6 * I * vA * vA });
+      b = layer({ scale: 1 + 0.5 * I * inB * inB, blur: 1.2 * I * inB * inB * inB, alpha: smooth(0.46, 0.54, u) });
+      flash = 0.35 * Math.min(1, I) * bell(u, 0.06);
+      break;
+    }
+    case 'rollleft': case 'rollright': {
+      // Drehen und Wegschieben in einem (wie eine Kamera, die sich wegrollt)
+      const dir = type === 'rollleft' ? -1 : 1;
+      const ang = 35 * I, dist = 22 * I;
+      const bl = 1.6 * I * bell(u, 0.2);
+      a = layer({ rotation: dir * ang * easeIn(vA), x: dir * dist * easeIn(vA), blur: bl, blurDir: 0 });
+      b = layer({ rotation: -dir * ang * inB * inB * inB, x: -dir * dist * inB * inB * inB, blur: bl, blurDir: 0, alpha: smooth(0.45, 0.55, u) });
       break;
     }
   }

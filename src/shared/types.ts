@@ -16,6 +16,8 @@ export interface MediaInfo {
   is360: boolean;        // Equirectangular (2:1) erkannt
   fileSize: number;
   pixFmt?: string;       // z. B. yuv420p (8 Bit) oder yuv420p10le (10 Bit)
+  recordedAt?: number;   // Beginn der Aufnahme (ms, aus Metadaten bzw. Dateiname)
+  recordedEnd?: number;  // Ende der Aufnahme (ms, Änderungszeit der Datei)
 }
 
 export interface SpriteInfo {
@@ -125,7 +127,14 @@ export type TransitionType =
   | 'circleopen' | 'circleclose' | 'smoothleft' | 'smoothright'
   | 'zoomin' | 'pixelize' | 'radial' | 'hblur'
   // dynamisch (mit Stärke): shared/transitions.ts
-  | 'zoomthrough' | 'whipleft' | 'whipright' | 'whipup' | 'whipdown' | 'spin' | 'flash' | 'shake' | 'glitch';
+  | 'zoomthrough' | 'whipleft' | 'whipright' | 'whipup' | 'whipdown' | 'spin' | 'flash' | 'shake' | 'glitch'
+  | 'blurdissolve' | 'punchin' | 'rollleft' | 'rollright'
+  // weitere FFmpeg-xfade-Arten (ab FFmpeg 6.1)
+  | 'smoothup' | 'smoothdown' | 'vertopen' | 'vertclose' | 'horzopen' | 'horzclose'
+  | 'diagtl' | 'diagtr' | 'diagbl' | 'diagbr' | 'wipetl' | 'wipetr' | 'wipebl' | 'wipebr'
+  | 'hlslice' | 'hrslice' | 'vuslice' | 'vdslice' | 'squeezeh' | 'squeezev' | 'fadegrays' | 'fadefast' | 'fadeslow'
+  | 'coverleft' | 'coverright' | 'coverup' | 'coverdown' | 'revealleft' | 'revealright' | 'revealup' | 'revealdown'
+  | 'circlecrop' | 'rectcrop' | 'distance' | 'hlwind' | 'hrwind' | 'vuwind' | 'vdwind';
 
 export interface Transition {
   type: TransitionType;

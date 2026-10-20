@@ -22,7 +22,7 @@ import { startRemote, stopRemote } from './remote';
 import { vfxBegin, vfxCancel, vfxEnd, vfxFrame, type VfxBeginRequest } from './vfx';
 import { analyzeBeats, audioEnvelope } from './audio';
 import { renderSfxFile } from './sfx';
-import { blurCurve, motionCurve, silences } from './analysis';
+import { blurCurve, motionCurve, silences, activityCurve } from './analysis';
 import { cleanStorage, storageInfo, watchFolder } from './storage';
 import { MODEL_EXTENSIONS } from '@shared/model3d';
 import { aiAvailable, aiModelStatus, detectObjects, segmentObject } from './ai';
@@ -360,6 +360,8 @@ ipcMain.handle(IPC.renderSfx, (_e, id: string, params: Record<string, number>) =
 
 ipcMain.handle(IPC.motionCurve, (_e, p: string, s: number, d: number) => motionCurve(p, s, d));
 ipcMain.handle(IPC.silences, (_e, p: string, s: number, d: number, th?: number, md?: number) => silences(p, s, d, th, md));
+ipcMain.handle(IPC.activityCurve, (_e, p: string, s?: number, d?: number, dense?: number) => activityCurve(p, s, d, dense));
+ipcMain.handle(IPC.mediaTimes, async (_e, p: string) => { const m = await probeMedia(p); return { recordedAt: m.info.recordedAt, recordedEnd: m.info.recordedEnd, duration: m.info.duration }; });
 ipcMain.handle(IPC.blurCurve, (_e, p: string, s: number, d: number) => blurCurve(p, s, d));
 
 // ---- Ordner beobachten & Speicher ----
