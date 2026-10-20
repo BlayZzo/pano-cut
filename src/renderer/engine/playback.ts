@@ -5,6 +5,7 @@ import { maskAt, trackBoxAt } from '@shared/ai';
 import type { Attachment } from '@shared/types';
 import { sharedPanoGL, type FisheyeInput } from './panogl';
 import { stitchKey } from '@shared/stitchModel';
+import { hasReframe, reframeAt, reframeRect } from '@shared/reframe';
 import { sharedChromaGL } from './chromagl';
 import { sharedColorGL } from './colorgl';
 import { motionAt } from '@shared/effects';
@@ -391,6 +392,19 @@ export class PlaybackEngine {
     return { stitch: st, swap: fromCompanion && !!media.companionSwap };
   }
 
+  /** Quelle für Analysen (Verfolgen): Datei und – bei 360°-Rohbildern – wie sie zusammengesetzt wird. null = (noch) nicht möglich. */
+  analysisSource(media: MediaItem): { src: string; fisheye: FisheyeInput | null } | null {
+    const url = (p: string) => window.panocut.toMediaUrl(p);
+    const st = media.stitch;
+    const fish = !!st && st.mode !== 'equirect';
+    if (media.proxy) {
+      const raw = fish && media.proxy === media.companion;
+      return { src: url(media.proxy), fisheye: raw ? { stitch: st!, swap: !!media.companionSwap } : null };
+    }
+    if (fish && st!.mode === 'dualfisheye-2streams') return null;
+    return { src: url(media.path), fisheye: fish ? { stitch: st!, swap: false } : null };
+  }
+
   setShowOriginal(on: boolean): void {
     this.showOriginal = on;
     this.originalFailed.clear();
@@ -597,7 +611,9 @@ export class PlaybackEngine {
 
     // Zuschnitt, Spiegeln, Farbe (LUT) und Vignette – wie im Export
     const cr = clip.crop;
-    const crop = cr && cr.left + cr.right + cr.top + cr.bottom > 0.01
+    // Ausschnitt-Fahrt (normale Videos/Bilder): Bereich aus dem vollen Bild, gestreckt auf das ganze Bild (wie perspective im Export)
+    const reframed = hasReframe(clip) && !media.info.is360;
+    const crop = reframed ? reframeRect(reframeAt(clip.reframe!, localT), vw, vh, W / H) : cr && cr.left + cr.right + cr.top + cr.bottom > 0.01
       ? { x: cr.left / 100, y: cr.top / 100, w: Math.max(0.05, 1 - (cr.left + cr.right) / 100), h: Math.max(0.05, 1 - (cr.top + cr.bottom) / 100) }
       : null;
     const cgl = sharedColorGL();
@@ -674,7 +690,12 @@ export class PlaybackEngine {
     ctx.translate(W / 2 + ((tr.x + mo.x) / 100) * W + (extra.dx ?? 0), H / 2 + ((tr.y + mo.y) / 100) * H + (extra.dy ?? 0));
     ctx.rotate(((tr.rotation + mo.rotation) * Math.PI) / 180);
     const sc = Math.max(0.01, tr.scale * mo.scale);
-    if (clip.fit === 'cover') {
+    if (reframed && !cgl.available) {
+      // ohne WebGL: Ausschnitt direkt beim Zeichnen
+      ctx.drawImage(source, crop!.x * vw, crop!.y * vh, crop!.w * vw, crop!.h * vh, (-W * sc) / 2, (-H * sc) / 2, W * sc, H * sc);
+    } else if (reframed) {
+      ctx.drawImage(source, (-W * sc) / 2, (-H * sc) / 2, W * sc, H * sc);
+    } else if (clip.fit === 'cover') {
       const s = Math.max(W / vw, H / vh);
       const sw = W / s, sh = H / s;
       ctx.drawImage(source, (vw - sw) / 2, (vh - sh) / 2, sw, sh, (-W * sc) / 2, (-H * sc) / 2, W * sc, H * sc);

@@ -100,6 +100,22 @@ export interface PanoSettings {
   mode: PanoMode;
   keyframes: PanoKeyframe[];   // mindestens einer; nach t sortiert
   smooth: boolean;             // weiche Übergänge zwischen Keyframes
+  ease?: MoveEase;             // Art der Fahrt (fehlt = smooth ? 'smooth' : 'linear')
+}
+
+/** Wie eine Kamerafahrt zwischen zwei Markierungen beschleunigt. */
+export type MoveEase = 'smooth' | 'linear' | 'in' | 'out';
+
+/** Ausschnitt-Fahrt für normale Videos/Bilder (Zoomen und Schwenken aus dem vollen Bild – ohne Qualitätsverlust). */
+export interface ReframeKeyframe {
+  t: number;      // Zeit im Clip (Timeline-Sekunden ab Clip-Anfang)
+  zoom: number;   // 1 = ganzes Bild (füllend), 2 = halb so großer Ausschnitt
+  x: number;      // Lage des Ausschnitts 0 = ganz links … 1 = ganz rechts
+  y: number;      // 0 = ganz oben … 1 = ganz unten
+}
+export interface ReframeSettings {
+  keyframes: ReframeKeyframe[];  // nach t sortiert, mindestens einer
+  ease: MoveEase;
 }
 
 export type TransitionType =
@@ -407,6 +423,7 @@ export interface Clip {
   kind?: 'media' | 'title';     // undefined = Medien-Clip
   title?: TitleStyle;           // nur Titel-Clips
   pano?: PanoSettings;          // nur 360°-Clips
+  reframe?: ReframeSettings;    // Ausschnitt-Fahrt (normale Videos/Bilder)
   transition?: Transition;      // Übergang VOM vorherigen Clip der Spur in diesen Clip
   stabilize?: Stabilization;
   subtitles?: {

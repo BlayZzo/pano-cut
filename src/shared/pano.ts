@@ -1,4 +1,5 @@
 // 360°-Mathematik, Übergangs- und Titel-Definitionen – gemeinsam für Vorschau (WebGL/Canvas) und Export (FFmpeg).
+import { ease, panoEase } from './reframe';
 import type { PanoKeyframe, PanoMode, PanoSettings, StitchSettings, TitleStyle, Transition, TransitionType } from './types';
 
 export interface PanoView { yaw: number; pitch: number; roll: number; fov: number }
@@ -33,8 +34,7 @@ export function panoViewAt(pano: PanoSettings, t: number): PanoView {
     const a = kfs[i], b = kfs[i + 1];
     if (t >= a.t && t <= b.t) {
       const span = Math.max(1e-6, b.t - a.t);
-      let u = (t - a.t) / span;
-      if (pano.smooth) u = smoothstep(u);
+      const u = ease(panoEase(pano), (t - a.t) / span);
       return {
         yaw: lerpAngle(a.yaw, b.yaw, u),
         pitch: a.pitch + (b.pitch - a.pitch) * u,

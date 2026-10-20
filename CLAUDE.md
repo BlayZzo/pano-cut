@@ -121,4 +121,8 @@ LRV/Rohvideo. IPC `stitchAutoAlign` (`main/stitchAuto.ts`). Linse 0 = links/erst
 `engine.onNeedProxy` bei unspielbarem Original, Proxy in 60-s-Stücken (fortsetzbar, Ton am Stück). Export: Gier-Keyframes per crop auf hstack
 (kein v360-Neuaufbau; jeder v360-Befehl kostet einen kompletten Neuaufbau!), nur geänderte Werte per sendcmd, Stitch-Größe nach Bedarf,
 `-hwaccel videotoolbox`. Timeline: Rahmen-Auswahl, `planMoves` (Spur-Delta), `placeClips`/`packTracks` (`shared/edit.ts`), `ui.magnet`, `NumInput`.
+0.9.1: `shared/reframe.ts` (Ausschnitt-Fahrt `clip.reframe`, `ease`/`easeExpr` auch für 360 `pano.ease`; Export perspective sense=source
+eval=frame mit `in`, danach scale W:H; Vorschau = crop an colorgl). `markCameraHere` (Taste K). Verfolgen `renderer/ai/follow.ts` (NCC-Vorlage,
+360 in flacher WebGL-Ansicht, requestVideoFrameCallback) + `FollowTool.tsx`, `engine.analysisSource`. Masken zeichnen `InspectorMaskDraw.tsx`
+(ObjectTrack label 'manual', Box = ganzes Bild, `maskBrush.tool` brush/erase/lasso).
 Ansicht/Layout: `ViewSettings` (`settings.view`, `useView`/`updateView`), `Splitter.tsx`, `Popover.tsx`.

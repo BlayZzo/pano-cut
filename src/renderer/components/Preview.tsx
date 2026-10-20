@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { clipDuration, formatTime, projectDuration } from '@shared/timeline';
 import { keyframeAt, panoViewAt, upsertKeyframe } from '@shared/pano';
+import { REFRAME_ZOOM_MAX, reframeAt, upsertReframeKey } from '@shared/reframe';
 import { beginTransaction, endTransaction, useProject } from '../store/project';
 import { useUi, usePlayheadCoarse, useView, updateView, getView } from '../store/ui';
 import { Popover } from './Popover';
+import { FollowTool } from './FollowTool';
 import { engine, playPause } from '../engine/instance';
-import { goEnd, goStart, stepFrames } from '../actions';
+import { goEnd, goStart, markCameraHere, stepFrames } from '../actions';
 import { fmt, t } from '../i18n/de';
 import { IconLoop, IconPause, IconPlay, IconSkipBack, IconSkipFwd, IconStepBack, IconStepFwd } from './Icons';
 import { AiPanel } from './AiPanel';
@@ -56,6 +58,8 @@ export function Preview(): React.ReactElement {
   const updateObjectTrack = useProject((s) => s.updateObjectTrack);
   const toast = useUi((s) => s.toast);
   const [placing, setPlacing] = useState(false);
+  const [followOn, setFollowOn] = useState(false);
+  const [lassoPath, setLassoPath] = useState<Array<{ x: number; y: number }> | null>(null);
   // Pinsel: bearbeitete Maske (Canvas), eingefärbte Anzeige, Version für Neuzeichnen
   const brushRef = useRef<{ path: string; index: number; canvas: HTMLCanvasElement; tint: HTMLCanvasElement } | null>(null);
   const [brushVersion, setBrushVersion] = useState(0);
@@ -221,9 +225,52 @@ export function Preview(): React.ReactElement {
       const box = clipBox(selectedClip, selectedMedia, canvas.width, canvas.height);
       const br = brushRef.current;
       if (!box) return;
-      const add = !e.altKey;
+      const tool = maskBrush.tool ?? 'brush';
+      const add = tool === 'erase' ? e.altKey : !e.altKey;
       const local = playhead - selectedClip.start;
       const sampleT = brushTrack.masks![br.index]?.t ?? local;
+      if (tool === 'lasso') {
+        // Lasso: Form umfahren → beim Loslassen füllen (bzw. mit Alt wegnehmen)
+        const pts: Array<{ u: number; v: number }> = [];
+        const disp: Array<{ x: number; y: number }> = [];
+        canvas.setPointerCapture(e.pointerId);
+        const rect0 = canvas.getBoundingClientRect();
+        const addPt = (cx: number, cy: number) => {
+          disp.push({ x: cx - rect0.left, y: cy - rect0.top });
+          const p0 = toCanvas(cx, cy);
+          pts.push(canvasToSource(box, selectedClip, p0.x, p0.y));
+          setLassoPath([...disp]);
+        };
+        addPt(e.clientX, e.clientY);
+        const move = (ev: PointerEvent) => addPt(ev.clientX, ev.clientY);
+        const up = async () => {
+          window.removeEventListener('pointermove', move);
+          window.removeEventListener('pointerup', up);
+          setLassoPath(null);
+          if (pts.length < 3) return;
+          const ctx2 = br.canvas.getContext('2d')!;
+          ctx2.save();
+          ctx2.fillStyle = add ? '#fff' : '#000';
+          ctx2.beginPath();
+          pts.forEach((p, i) => (i ? ctx2.lineTo(p.u * br.canvas.width, p.v * br.canvas.height) : ctx2.moveTo(p.u * br.canvas.width, p.v * br.canvas.height)));
+          ctx2.closePath();
+          ctx2.fill();
+          ctx2.restore();
+          br.tint = tintMask(br.canvas);
+          setBrushVersion((x) => x + 1);
+          try {
+            const masks = [...brushTrack.masks!];
+            const path = await window.panocut.aiSaveMask(selectedMedia.path, brushTrack.id, `lasso_${br.index}_${Date.now().toString(36)}`, await canvasToPng(br.canvas));
+            forgetMask(masks[br.index].path);
+            masks[br.index] = { t: masks[br.index].t, path };
+            brushRef.current = { ...br, path };
+            updateObjectTrack(selectedClip.id, brushTrack.id, { masks });
+          } catch (err) { toast((err as Error).message, 'error'); }
+        };
+        window.addEventListener('pointermove', move);
+        window.addEventListener('pointerup', () => void up(), { once: true });
+        return;
+      }
       const dabs: Array<{ u: number; v: number; r: number }> = [];
       const radiusFrac = maskBrush.size / 100;   // relativ zur Bildhöhe des Quellbilds
       const paintAt = (cx: number, cy: number) => {
@@ -280,6 +327,29 @@ export function Preview(): React.ReactElement {
     // Ausgewählten Clip in der Vorschau verschieben (Umschalt = drehen)
     const target = selectedClip && !panoClip && playhead >= selectedClip.start && playhead < selectedClip.start + clipDuration(selectedClip)
       ? (selectedClip.link ? clips[selectedClip.link.clipId] ?? selectedClip : selectedClip) : null;
+    // Kamerafahrt (Ausschnitt): Ziehen = Ausschnitt verschieben
+    if (target && target.reframe && target.reframe.keyframes.length && media[target.mediaId] && !media[target.mediaId].info.is360) {
+      const rf = target.reframe;
+      const local = Math.max(0, Math.min(clipDuration(target), playhead - target.start));
+      const cur = reframeAt(rf, local);
+      const key = rf.keyframes.find((k) => Math.abs(k.t - local) < 0.5 / (settings.fps || 30)) ?? (rf.keyframes.length === 1 ? rf.keyframes[0] : { t: local, ...cur });
+      const startX = e.clientX, startY = e.clientY;
+      // Bewegung in Anteilen des verschiebbaren Bereichs
+      const range = Math.max(0.05, 1 - 1 / key.zoom);
+      beginTransaction();
+      setDragging(true);
+      canvas.setPointerCapture(e.pointerId);
+      const move = (ev: PointerEvent) => {
+        const dx = (ev.clientX - startX) / rect.width / key.zoom / range;
+        const dy = (ev.clientY - startY) / rect.height / key.zoom / range;
+        const x = Math.max(0, Math.min(1, key.x - dx)), y = Math.max(0, Math.min(1, key.y - dy));
+        updateClip(target.id, { reframe: upsertReframeKey(rf, { ...key, x, y }) });
+      };
+      const up = () => { window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up); endTransaction(); setDragging(false); };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
+      return;
+    }
     if (target && (target.kind === 'title' || (media[target.mediaId] && media[target.mediaId].type !== 'audio'))) {
       const start = toCanvas(e.clientX, e.clientY);
       const base = target.kind === 'title' ? { x: target.title!.x, y: target.title!.y, rot: 0 } : { x: target.transform.x, y: target.transform.y, rot: target.transform.rotation };
@@ -352,6 +422,15 @@ export function Preview(): React.ReactElement {
       updateClip(sel.id, { title: { ...sel.title!, size: Math.max(1, Math.min(40, sel.title!.size * Math.exp(-e.deltaY * 0.0015))) } });
       return;
     }
+    if (sel && sel.reframe && sel.reframe.keyframes.length) {
+      // Kamerafahrt: Mausrad = Ausschnitt zoomen
+      const rf = sel.reframe;
+      const local = Math.max(0, Math.min(clipDuration(sel), playhead - sel.start));
+      const cur = reframeAt(rf, local);
+      const key = rf.keyframes.find((k) => Math.abs(k.t - local) < 0.5 / (settings.fps || 30)) ?? (rf.keyframes.length === 1 ? rf.keyframes[0] : { t: local, ...cur });
+      updateClip(sel.id, { reframe: upsertReframeKey(rf, { ...key, zoom: Math.max(1, Math.min(REFRAME_ZOOM_MAX, key.zoom * Math.exp(-e.deltaY * 0.0015))) }) });
+      return;
+    }
     if (sel && media[sel.mediaId]?.type !== 'audio') {
       updateClip(sel.id, { transform: { ...sel.transform, scale: Math.round(Math.max(0.05, Math.min(6, sel.transform.scale * Math.exp(-e.deltaY * 0.0015))) * 1000) / 1000 } });
       return;
@@ -378,6 +457,12 @@ export function Preview(): React.ReactElement {
           {(view.previewGuides === 'safe' || view.previewGuides === 'both') && <div className="safe"><span>{t.view.guidesSafe}</span></div>}
         </div>
         {!hasClips && <div className="preview-empty">{t.preview.empty}</div>}
+        {lassoPath && lassoPath.length > 1 && (
+          <svg className="lasso-svg" style={{ left: canvasRef.current?.offsetLeft ?? 0, top: canvasRef.current?.offsetTop ?? 0, width: canvasRef.current?.clientWidth, height: canvasRef.current?.clientHeight }}>
+            <polygon points={lassoPath.map((p) => `${p.x},${p.y}`).join(' ')} />
+          </svg>
+        )}
+        {followOn && selectedClip && selectedMedia && canvasRef.current && <FollowTool clip={selectedClip} media={selectedMedia} canvas={canvasRef.current} onClose={() => setFollowOn(false)} />}
         {original && hasClips && <div className="preview-source-badge">{t.preview.originalBadge}</div>}
         {panoClip && !pickColor && <div className="preview-badge">360° · ziehen = umschauen · Mausrad = zoomen</div>}
         {pickColor && <div className="preview-badge">{t.ai.picking}</div>}
@@ -410,6 +495,11 @@ export function Preview(): React.ReactElement {
         <button className={`btn sm${aiPanel ? ' active' : ''}`} title={t.ai.title} onClick={() => setAiPanel(!aiPanel)} style={{ fontWeight: 700 }}>✦ {t.ai.button}</button>
         <button className={`btn sm${modelPanel ? ' active' : ''}`} title={t.model3d.title} onClick={() => setModelPanel(modelPanel ? null : {})} style={{ fontWeight: 700 }}>🧊 {t.model3d.button}</button>
         {hasMulticam && <button className={`btn sm${multicamPanel ? ' active' : ''}`} title={t.multicam.title} onClick={() => setMulticamPanel(multicamPanel ? null : (groupAt(useUi.getState().playhead)?.id ?? Object.keys(multicamGroups ?? {})[0] ?? null))}>🎥 {t.multicam.button}</button>}
+        <button className="btn sm" title={t.moves.markHint} onClick={markCameraHere}>◆ {t.moves.markShort}</button>
+        <button className={`btn sm${followOn ? ' active' : ''}`} title={t.follow.hint} onClick={() => {
+          if (!selectedClip || !selectedMedia || selectedMedia.type !== 'video') { useUi.getState().toast(t.follow.selectVideo, 'info'); return; }
+          engine.pause(); useUi.getState().setPlaying(false); setFollowOn(!followOn);
+        }}>🎯 {t.follow.button}</button>
         <button className="btn sm" title={t.tools.title} onClick={() => useUi.getState().openTools()} style={{ fontWeight: 700 }}>🧰 {t.tools.button}</button>
         <button className={`btn sm${original ? ' active' : ''}`} title={t.preview.originalHint} onClick={toggleOriginal}>🔍 {t.preview.original}</button>
         <Popover label={`⚙ ${t.view.button}`} title={t.view.previewTitle} align="right" up>

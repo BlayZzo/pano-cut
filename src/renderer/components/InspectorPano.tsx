@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import type { Clip, LensCalSettings, MediaItem, PanoMode, PanoSettings } from '@shared/types';
 import { lensCal } from '@shared/stitchModel';
+import type { MoveEase } from '@shared/types';
+import { EASE_OPTIONS } from './InspectorReframe';
 import { applyCameraMove, CAMERA_MOVES, type CameraMove } from '@shared/cameraMoves';
 import { clipDuration, formatTime } from '@shared/timeline';
 import { defaultPano, defaultStitch, keyframeAt, panoViewAt, removeKeyframe, upsertKeyframe } from '@shared/pano';
@@ -109,7 +111,7 @@ export function InspectorPano({ clip, media }: { clip: Clip; media: MediaItem })
         )}
         <div className="hint">{t.pano.keyframeHint}</div>
         <div className="field-row" style={{ flexWrap: 'wrap' }}>
-          <button className="btn sm" onClick={() => setPano(clip.id, upsertKeyframe(pano, { t: local, ...view }))}>◆ {t.pano.addKeyframe}</button>
+          <button className="btn sm primary" onClick={() => setPano(clip.id, upsertKeyframe(pano, { t: local, ...view }))}>◆ {t.pano.addKeyframe}</button>
           {atKey && pano.keyframes.length > 1 && <button className="btn sm ghost" onClick={() => setPano(clip.id, removeKeyframe(pano, atKey.t))}>{t.pano.removeKeyframe}</button>}
         </div>
         {pano.keyframes.length > 1 && (
@@ -122,7 +124,7 @@ export function InspectorPano({ clip, media }: { clip: Clip; media: MediaItem })
                 </button>
               ))}
             </div>
-            <Toggle label={t.pano.smooth} checked={pano.smooth} onChange={(v) => setPano(clip.id, { ...pano, smooth: v })} />
+            <SelectField label={t.moves.ease} value={pano.ease ?? (pano.smooth ? 'smooth' : 'linear')} options={EASE_OPTIONS()} onChange={(v) => setPano(clip.id, { ...pano, ease: v as MoveEase, smooth: v !== 'linear' })} />
           </>
         )}
         <CameraMoveFields clip={clip} pano={pano} local={local} />

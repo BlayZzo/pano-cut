@@ -1,9 +1,10 @@
 // Zentrale Aktionen – von Menü, Tastenkürzeln und Buttons gemeinsam genutzt.
 import type { Clip, MediaItem, Project, TransitionType, UserEffect } from '@shared/types';
-import { clipDuration, clipEnd, clipsOnTrack, makeId, projectDuration } from '@shared/timeline';
+import { clipDuration, clipEnd, clipsOnTrack, formatTime, makeId, projectDuration } from '@shared/timeline';
 import { autoEnhance, frameStats, type FrameStats } from '@shared/color';
 import { EFFECT_BLOCKS, applyUserEffect, userEffectFromClip } from '@shared/effects';
-import { TITLE_TEMPLATES, defaultTitle, defaultTransition } from '@shared/pano';
+import { TITLE_TEMPLATES, defaultPano, defaultTitle, defaultTransition, panoViewAt, upsertKeyframe } from '@shared/pano';
+import { reframeAt, upsertReframeKey } from '@shared/reframe';
 import { isDynamicTransition } from '@shared/transitions';
 import { modelFormat } from '@shared/model3d';
 import { beginTransaction, clearHistory, endTransaction, isDirty, redo, setDirty, undo, untracked, useProject } from './store/project';
@@ -410,4 +411,23 @@ export async function insertSfx(id: string, params: Partial<import('@shared/sfx'
   const trackId = freeAudioTrack(start, media.info.duration || 1);
   const clip = useProject.getState().addClip(media.id, trackId, start);
   return clip?.id ?? null;
+}
+
+
+/** 🎥 Kamerafahrt: aktuelle Blickrichtung (360°) bzw. aktuellen Ausschnitt am Abspielkopf markieren. */
+export function markCameraHere(): void {
+  const ui = useUi.getState();
+  const st = useProject.getState();
+  const clip = ui.selection.length === 1 ? st.project.clips[ui.selection[0]] : undefined;
+  const media = clip ? st.project.media[clip.mediaId] : undefined;
+  if (!clip || !media || (media.type !== 'video' && media.type !== 'image')) { ui.toast(t.moves.selectFirst, 'info'); return; }
+  const local = Math.max(0, Math.min(clipDuration(clip), ui.playhead - clip.start));
+  if (media.info.is360) {
+    const pano = clip.pano ?? defaultPano(st.project.settings.is360 ? 'equirect' : 'flat');
+    st.setPano(clip.id, upsertKeyframe(pano, { t: local, ...panoViewAt(pano, local) }));
+  } else {
+    const cur = clip.reframe ? reframeAt(clip.reframe, local) : { zoom: 1.3, x: 0.5, y: 0.5 };
+    st.updateClip(clip.id, { reframe: upsertReframeKey(clip.reframe, { t: local, ...cur }) });
+  }
+  ui.toast(fmt(t.moves.marked, { t: formatTime(local, st.project.settings.fps) }), 'success');
 }

@@ -63,7 +63,7 @@ export interface UiState {
   vfxPanel: boolean;    // Effekt-Studio offen
   imagePanel: boolean;  // Bild-Assistent offen
   vfxPreset: string | null;  // vorgewählte Effektart (aus der Bibliothek)
-  maskBrush: { clipId: string; trackId: string; size: number; all: boolean } | null;  // Masken-Pinsel aktiv
+  maskBrush: { clipId: string; trackId: string; size: number; all: boolean; tool?: 'brush' | 'erase' | 'lasso' } | null;  // Masken-Pinsel aktiv
   showBeats: boolean;   // Taktmarken in der Timeline
   multicamPanel: string | null;  // geöffnete Mehrkamera-Gruppe
   modelPanel: { file?: string; mediaId?: string } | null;  // 3D-Objekt-Fenster (neue Datei oder bestehendes Modell)

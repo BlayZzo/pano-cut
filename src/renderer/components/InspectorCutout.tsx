@@ -63,7 +63,7 @@ export function InspectorClickCutout({ clip, media }: { clip: Clip; media: Media
   };
 
   return (
-    <Section title={t.cutout.section} defaultOpen>
+    <Section title={`🤖 ${t.cutout.section}`} defaultOpen={false}>
       <div className="hint">{t.cutout.hint}</div>
       <SelectField label={t.cutout.detModel} value={o.detModel} onChange={(v) => upd({ detModel: v as AiDetectModel })} options={[
         { value: 'yolox-nano', label: t.ai.modelFast }, { value: 'yolox-tiny', label: t.ai.modelBetter }, { value: 'yolox-s', label: t.ai.modelBest },

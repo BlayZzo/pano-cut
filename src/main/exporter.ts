@@ -1,3 +1,4 @@
+import { easeExpr, hasReframe, panoEase, REFRAME_ZOOM_MAX } from '@shared/reframe';
 import path from 'node:path';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -414,8 +415,11 @@ export class ExportJob {
     if (media.info.is360 && c.pano) {
       chain.push(...this.panoChain(seg, opts.localOffset ?? seg.localOffset));
     }
+    // Ausschnitt-Fahrt (normale Videos/Bilder): Bereich aus dem vollen Quellbild per perspective auf das ganze Bild ziehen
+    const reframed = hasReframe(c) && !media.info.is360;
+    if (reframed) chain.push(this.reframeFilter(seg, opts.localOffset ?? seg.localOffset, opts.pad?.start ?? 0));
     // Zuschnitt und Spiegeln
-    const cr = c.crop;
+    const cr = reframed ? undefined : c.crop;
     if (cr && cr.left + cr.right + cr.top + cr.bottom > 0.01) {
       const kw = Math.max(0.05, 1 - (cr.left + cr.right) / 100), kh = Math.max(0.05, 1 - (cr.top + cr.bottom) / 100);
       chain.push(`crop=w=trunc(iw*${fnum(kw)}/2)*2:h=trunc(ih*${fnum(kh)}/2)*2:x=iw*${fnum(cr.left / 100)}:y=ih*${fnum(cr.top / 100)}`);
@@ -423,7 +427,8 @@ export class ExportJob {
     if (c.fx?.mirror) chain.push('hflip');
     if (c.fx?.flip) chain.push('vflip');
     // Einpassen
-    if (c.fit === 'cover') chain.push(`scale=w=${W}:h=${H}:force_original_aspect_ratio=increase,crop=${W}:${H}`);
+    if (reframed) chain.push(`scale=${W}:${H}`);
+    else if (c.fit === 'cover') chain.push(`scale=w=${W}:h=${H}:force_original_aspect_ratio=increase,crop=${W}:${H}`);
     else if (c.fit === 'stretch') chain.push(`scale=${W}:${H}`);
     else chain.push(`scale=w=${W}:h=${H}:force_original_aspect_ratio=decrease:force_divisible_by=2`);
     const pre = chain;
@@ -662,7 +667,8 @@ export class ExportJob {
       //  · Schwenken (yaw) als reines Verschieben des Panoramas (crop auf doppelt nebeneinandergelegtem Bild, kein Neuaufbau),
       //  · nur die Werte per Befehl ändern, die sich wirklich ändern (Neigung, Rollen, Sichtfeld).
       const kfs = pano.keyframes;
-      const easeT = (x: string) => (pano.smooth ? `(${x})*(${x})*(3-2*(${x}))` : `(${x})`);
+      const easeKind = panoEase(pano);
+      const easeT = (x: string) => easeExpr(easeKind, x);
       const shortest = (a: number, b: number) => a + (((b - a) % 360 + 540) % 360 - 180);
       // Keyframe-Zeiten relativ zum Stück; Gier-Werte entlang des kürzesten Wegs fortlaufend machen
       const pts = kfs.map((k) => ({ ...k, t: k.t - localOffset }));
@@ -692,10 +698,10 @@ export class ExportJob {
         const a = pts[i], b = pts[i + 1];
         if (b.t <= 0) continue;
         const parts: string[] = [];
-        if (!yawVar && Math.abs(b.yaw - a.yaw) > 1e-6) parts.push(`[expr] v360@${id} yaw 'lerp(${fnum(a.yaw)},${fnum(b.yaw)},${pano.smooth ? 'TI*TI*(3-2*TI)' : 'TI'})'`);
+        if (!yawVar && Math.abs(b.yaw - a.yaw) > 1e-6) parts.push(`[expr] v360@${id} yaw 'lerp(${fnum(a.yaw)},${fnum(b.yaw)},${easeExpr(easeKind, 'TI')})'`);
         for (const k of keys) {
           if (Math.abs(b[k] - a[k]) < 1e-6) continue;
-          const e = pano.smooth ? 'TI*TI*(3-2*TI)' : 'TI';
+          const e = easeExpr(easeKind, 'TI');
           if (k === 'fov') {
             parts.push(`[expr] v360@${id} h_fov 'lerp(${fnum(a.fov)},${fnum(b.fov)},${e})'`);
             parts.push(`[expr] v360@${id} v_fov 'lerp(${fnum(vf(a.fov))},${fnum(vf(b.fov))},${e})'`);
@@ -720,6 +726,32 @@ export class ExportJob {
     }
     chain.push(v360);
     return chain;
+  }
+
+  /** Ausschnitt-Fahrt als perspective-Filter (Ecken = Ausschnitt im Quellbild, je Bild neu; gleiche Formeln wie shared/reframe.ts). */
+  private reframeFilter(seg: Segment, localOffset: number, padStart: number): string {
+    const { width: W, height: H, fps } = this.options;
+    const rf = seg.clip.reframe!;
+    const A = W / H;
+    const k = rf.keyframes;
+    // Zeit im Clip: perspective zählt die Bilder ab 1 (Variable in)
+    const tt = `((in-1)/${fps}-${fnum(padStart)}+${fnum(localOffset)})`;
+    const piece = (key: 'zoom' | 'x' | 'y'): string => {
+      const clampV = (v: number) => (key === 'zoom' ? Math.max(1, Math.min(REFRAME_ZOOM_MAX, v)) : Math.max(0, Math.min(1, v)));
+      let e = fnum(clampV(k[k.length - 1][key]));
+      for (let i = k.length - 2; i >= 0; i--) {
+        const a = k[i], b = k[i + 1];
+        const span = Math.max(1e-6, b.t - a.t);
+        e = `if(lt(${tt},${fnum(b.t)}),(${fnum(clampV(a[key]))}+(${fnum(clampV(b[key]) - clampV(a[key]))})*${easeExpr(rf.ease, `(${tt}-${fnum(a.t)})/${fnum(span)}`)}),${e})`;
+      }
+      return `if(lt(${tt},${fnum(k[0].t)}),${fnum(clampV(k[0][key]))},${e})`;
+    };
+    const z = piece('zoom'), cx = piece('x'), cy = piece('y');
+    const fw = `(if(gt(W/H,${fnum(A)}),${fnum(A)}/(W/H),1)/(${z}))`;
+    const fh = `(if(gt(W/H,${fnum(A)}),1,(W/H)/${fnum(A)})/(${z}))`;
+    const x0 = `((1-${fw})*(${cx})*W)`, y0 = `((1-${fh})*(${cy})*H)`;
+    const x1 = `(${x0}+${fw}*W)`, y1 = `(${y0}+${fh}*H)`;
+    return `perspective=x0='${x0}':y0='${y0}':x1='${x1}':y1='${y0}':x2='${x0}':y2='${y1}':x3='${x1}':y3='${y1}':sense=source:eval=frame:interpolation=linear`;
   }
 
   /** drawtext-Filter für einen Titel (oder Untertitel-Segment). */

@@ -6,11 +6,13 @@ import { useUi } from '../store/ui';
 import { fmt, t } from '../i18n/de';
 import { Section, Slider , NumInput } from './InspectorBits';
 import { InspectorPano } from './InspectorPano';
+import { InspectorReframe } from './InspectorReframe';
 import { InspectorTitle } from './InspectorTitle';
 import { InspectorStabilize, InspectorSubtitles, InspectorTransition } from './InspectorExtras';
 import { InspectorChroma, InspectorObjects } from './InspectorAi';
 import { DuckingFields, InspectorColor, InspectorFx, InspectorLightFx, InspectorMotion, SaveEffectButton } from './InspectorLook';
 import { InspectorClickCutout } from './InspectorCutout';
+import { InspectorMaskDraw } from './InspectorMaskDraw';
 import { InspectorLayer, InspectorVfx } from './InspectorLayer';
 import { InspectorMusic } from './InspectorMusic';
 import { SpeedRampFields } from './InspectorRamp';
@@ -160,6 +162,7 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
       </>}
 
       {cat === 'motion' && <>
+      {!isTitle && media && (media.type === 'video' || media.type === 'image') && !media.info.is360 && !media.vfx && count === 1 && <InspectorReframe clip={clip} media={media} />}
       {!isImage && !isTitle && (
         <Section title={t.inspector.sectionSpeed} onReset={() => { beginTransaction(); setSpeed(1); patch({ reverse: false }); endTransaction(); }}>
           <div className="speed-presets">
@@ -217,6 +220,7 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
       </>}
 
       {cat === 'ai' && media && <>
+      {count === 1 && (media.type === 'video' || media.type === 'image') && <InspectorMaskDraw clip={clip} media={media} />}
       {count === 1 && media.type === 'video' && <InspectorClickCutout clip={clip} media={media} />}
       <InspectorObjects clip={clip} media={media} />
       </>}

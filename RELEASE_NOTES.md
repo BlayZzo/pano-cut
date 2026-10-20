@@ -1,3 +1,21 @@
+## PanoCut 0.9.1 – Kamerafahrten, Objekt verfolgen, Masken zeichnen
+
+**Installieren**
+- Mac mit Apple-Chip (M1–M4): `PanoCut-0.9.1-mac-arm64.dmg`
+- Mac mit Intel: `PanoCut-0.9.1-mac-x64.dmg`
+- Windows 10/11: `PanoCut-0.9.1-win-x64.exe`
+
+**🎥 Kamerafahrten**
+- **◆ Markieren** (Knopf unter der Vorschau oder Taste **K**): 360°-Clip in der Vorschau in die gewünschte Richtung drehen und markieren, weiterspulen, neu ausrichten, wieder markieren – dazwischen fährt die Kamera von selbst.
+- **Normale Videos und Fotos**: neuer Bereich „🎥 Kamerafahrt (Zoomen & Schwenken)“ im Inspektor (Reiter Bewegung). Zoom und Lage einstellen (oder in der Vorschau ziehen / Mausrad), markieren – fertig. Fertige Fahrten: Schwenk links/rechts/unten, rein-/rauszoomen, sanft treiben, Ken Burns. Gerechnet wird aus dem vollen Bild – mit einem 4K-Video im Full-HD-Projekt bis 2× Zoom ohne Qualitätsverlust.
+- Bewegungsart wählbar: weich, gleichmäßig, langsam los, langsam an.
+
+**🎯 Objekt verfolgen** (Knopf „Verfolgen“ unter der Vorschau)
+- Rechteck um ein Objekt ziehen – PanoCut verfolgt es ab dem Abspielkopf (mit Live-Ansicht des Suchbereichs). Bei 360° schaut die Kamera mit (auf Wunsch auch hoch/runter), bei normalen Videos läuft der Ausschnitt mit. Die Spur lässt sich außerdem zum Anheften von Titeln nutzen.
+
+**✏️ Maske zeichnen** (Reiter KI/Objekte)
+- Von Hand wie in Photoshop: Pinsel, Radierer, Lasso, alles/nichts, umkehren, weiche Kante, „Neue Maske ab hier“ für Änderungen über die Zeit. Die KI-Freistellung bleibt als zweite Möglichkeit darunter.
+
 ## PanoCut 0.9.0 – Schneller Import, Export repariert, Mehrfachauswahl und Anziehen
 
 **Installieren**
