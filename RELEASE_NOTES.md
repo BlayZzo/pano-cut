@@ -1,3 +1,16 @@
+## PanoCut 0.8.4 – 360°-Rohvideos sofort richtig in der Vorschau
+
+**Installieren**
+- Mac mit Apple-Chip (M1–M4): `PanoCut-0.8.4-mac-arm64.dmg`
+- Mac mit Intel: `PanoCut-0.8.4-mac-x64.dmg`
+- Windows 10/11: `PanoCut-0.8.4-win-x64.exe`
+
+**Behoben**
+- **Verzerrte 360°-Vorschau**: Rohvideos mit zwei Fischaugen nebeneinander (z. B. Insta360-`.lrv` oder `.insv`) wurden, solange das 360°-Bild im Hintergrund noch zusammengesetzt wurde, falsch umgerechnet und sahen extrem verzerrt aus. Jetzt setzt die Vorschau die beiden Fischaugen sofort selbst richtig zusammen – mit normaler Optik, auch schon während der Vorbereitung. Bei 8K-Dateien mit zwei getrennten Bildspuren bleibt die Vorschau bis zum Zusammensetzen leer statt verzerrt.
+
+**Schneller**
+- **Insta360 + LRV**: Liegen `VID_…_00_012.insv` und `LRV_…_01_012.lrv` zusammen im Ordner, ist das Video sofort in der Vorschau nutzbar, und das 360°-Bild wird aus der kleinen LRV-Datei zusammengesetzt statt aus dem riesigen 8K-Original – viel schneller. Sind die Linsen in der LRV-Datei andersherum angeordnet, erkennt PanoCut das automatisch. Exportiert wird immer aus dem Original.
+
 ## PanoCut 0.8.3 – Kleine Korrektur
 
 **Installieren**

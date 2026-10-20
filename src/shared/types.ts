@@ -50,6 +50,7 @@ export interface MediaItem {
   sprite?: SpriteInfo;     // Hover-Vorschau (Bildstreifen)
   proxy?: string;          // kleine Vorschau-Datei (Video)
   companion?: string;      // Kamera-Vorschaudatei (DJI .LRF, GoPro/Insta360 .LRV), dient als Vorschau-Datei
+  companionSwap?: boolean; // 360°: Linsen in der Kamera-Vorschaudatei andersherum als im Original
   proxyReversed?: string;  // rückwärts laufende Vorschau-Datei
   waveform?: string;       // Wellenform-Bild (Audio)
   stitch?: StitchSettings; // nur 360°-Videos

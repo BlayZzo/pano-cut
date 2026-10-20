@@ -184,7 +184,7 @@ export async function prepareMedia(item: MediaItem, update: MediaUpdateFn, proxy
         const raw = path.join(dir, 'thumb_raw.jpg');
         if (!fileExists(done) && !fileExists(raw)) {
           const at = Math.min(Math.max(0, dur * 0.1), 3);
-          await runFfmpeg(['-ss', at.toFixed(3), '-i', work.path, '-map', '0:v:0', '-vf', 'scale=320:-2', '-frames:v', '1', '-q:v', '4', raw], { lowPriority: true });
+          await runFfmpeg(['-ss', at.toFixed(3), '-i', companion ?? work.path, '-map', '0:v:0', '-vf', 'scale=320:-2', '-frames:v', '1', '-q:v', '4', raw], { lowPriority: true });
         }
         work.thumb = fileExists(done) ? done : raw;
         emit();
@@ -323,9 +323,41 @@ async function spriteBySeeking(file: string, dur: number, frames: number, out: s
   }
 }
 
+/** 360°: Sind die beiden Fischaugen in der Kamera-Vorschaudatei andersherum angeordnet als im Original? (Bildvergleich) */
+async function lensesSwapped(item: MediaItem, companion: string, dur: number): Promise<boolean> {
+  const W = 64, H = 32;
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'panocut-lens-'));
+  try {
+    const at = Math.min(1, dur / 2).toFixed(3);
+    const a = path.join(tmp, 'a.gray'), b = path.join(tmp, 'b.gray');
+    const tail = (f: string) => ['-frames:v', '1', '-f', 'rawvideo', f];
+    await runFfmpeg(['-ss', at, '-i', companion, '-map', '0:v:0', '-vf', `scale=${W}:${H}:flags=area,format=gray`, ...tail(a)], { lowPriority: true });
+    if (item.stitch?.mode === 'dualfisheye-2streams') {
+      await runFfmpeg(['-ss', at, '-i', item.path, '-filter_complex', `[0:v:0][0:v:1]hstack,scale=${W}:${H}:flags=area,format=gray[o]`, '-map', '[o]', ...tail(b)], { lowPriority: true });
+    } else {
+      await runFfmpeg(['-ss', at, '-i', item.path, '-map', '0:v:0', '-vf', `scale=${W}:${H}:flags=area,format=gray`, ...tail(b)], { lowPriority: true });
+    }
+    const A = fs.readFileSync(a), B = fs.readFileSync(b);
+    if (A.length < W * H || B.length < W * H) return false;
+    let same = 0, swapped = 0;
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const v = A[y * W + x];
+      same += Math.abs(v - B[y * W + x]);
+      swapped += Math.abs(v - B[y * W + ((x + W / 2) % W)]);
+    }
+    log.info('Linsen-Vergleich Kamera-Vorschau', path.basename(companion), { same, swapped });
+    return swapped < same * 0.8;
+  } catch (e) {
+    log.warn('Linsen-Vergleich fehlgeschlagen', (e as Error).message);
+    return false;
+  } finally {
+    fs.rm(tmp, { recursive: true, force: true }, () => undefined);
+  }
+}
+
 /** Sucht neben dem Video eine passende Kamera-Vorschaudatei (.LRF/.LRV) und prüft, ob sie wirklich dazugehört. */
 export async function attachCompanion(item: MediaItem): Promise<MediaItem> {
-  if (item.type !== 'video' || item.status === 'error' || needsStitching(item.stitch) || isCompanionName(item.name)) return item;
+  if (item.type !== 'video' || item.status === 'error' || isCompanionName(item.name)) return item;
   const dir = path.dirname(item.path);
   let names: string[];
   try { names = await fs.promises.readdir(dir); } catch { return item; }
@@ -347,7 +379,9 @@ export async function attachCompanion(item: MediaItem): Promise<MediaItem> {
     if (Math.abs(v.rotation ?? 0) % 180 === 90) [w, h] = [h, w];
     const ar = w / Math.max(1, h), AR = item.info.width / Math.max(1, item.info.height);
     if (Math.abs(ar - AR) / AR > 0.04) return reject(`Seitenverhältnis ${w}×${h}`);
-    return { ...item, companion: file, proxy: file };
+    const fish = !!item.stitch && item.stitch.mode !== 'equirect';
+    const swap = fish ? await lensesSwapped(item, file, D) : false;
+    return { ...item, companion: file, proxy: file, companionSwap: swap || undefined };
   } catch (e) {
     log.warn('Kamera-Vorschaudatei nicht lesbar', file, e);
     return item;
@@ -388,18 +422,28 @@ export async function ensureReversedProxy(item: MediaItem, update: MediaUpdateFn
 /** Erzeugt die Vorschau-Datei (Proxy); 360°-Rohvideos werden dabei zusammengesetzt. */
 async function buildProxy(work: MediaItem, dir: string, height: number, onPercent: (p: number) => void): Promise<string> {
   const stitched = needsStitching(work.stitch);
-  const key = stitched && work.stitch ? `${height}_s${Math.round(work.stitch.fov * 10)}_${Math.round(work.stitch.yaw * 10)}_${Math.round(work.stitch.pitch * 10)}_${Math.round(work.stitch.roll * 10)}` : `${height}`;
+  // 360°: Ist eine Kamera-Vorschaudatei (.LRV) da, wird aus ihr zusammengesetzt – viel kleiner, daher viel schneller
+  const comp = stitched && work.companion && fileExists(work.companion) ? work.companion : undefined;
+  const key = (stitched && work.stitch ? `${height}_s${Math.round(work.stitch.fov * 10)}_${Math.round(work.stitch.yaw * 10)}_${Math.round(work.stitch.pitch * 10)}_${Math.round(work.stitch.roll * 10)}` : `${height}`) + (comp ? (work.companionSwap ? '_cs' : '_c') : '');
   const proxy = path.join(dir, `proxy_${key}.mp4`);
   if (fileExists(proxy)) return proxy;
   // Erst in eine Zwischendatei schreiben – ein abgebrochener Lauf hinterlässt so keine kaputte Vorschau-Datei
   const part = path.join(dir, `proxy_${key}.part.mp4`);
   const h = stitched ? height : Math.min(height, work.info.height || height);
-  const args = ['-i', work.path];
+  const args = ['-i', comp ?? work.path];
   if (stitched && work.stitch) {
-    const two = work.stitch.mode === 'dualfisheye-2streams';
-    const inputs = two ? ['[0:v:0]', '[0:v:1]'] : ['[0:v:0]'];
+    const two = !comp && work.stitch.mode === 'dualfisheye-2streams';
+    const fish = work.stitch.mode !== 'equirect';
+    let pre = '';
+    let inputs = two ? ['[0:v:0]', '[0:v:1]'] : ['[0:v:0]'];
+    // Linsen in der Kamera-Vorschaudatei andersherum → Hälften tauschen, damit es genau wie das Original aussieht
+    if (comp && fish && work.companionSwap) {
+      pre = '[0:v:0]split[pa][pb];[pa]crop=iw/2:ih:0:0[pl];[pb]crop=iw/2:ih:iw/2:0[pr];[pr][pl]hstack[psw];';
+      inputs = ['[psw]'];
+    }
+    const st = comp && fish ? { ...work.stitch, mode: 'dualfisheye-sbs' as const } : work.stitch;
     const w = Math.round(h * 2);
-    const chain = stitchChain(work.stitch, inputs, w, h) + ',format=yuv420p[v]';
+    const chain = pre + stitchChain(st, inputs, w, h) + ',format=yuv420p[v]';
     args.push('-filter_complex', chain, '-map', '[v]');
   } else {
     args.push('-map', '0:v:0', '-vf', `scale=-2:${h}`);

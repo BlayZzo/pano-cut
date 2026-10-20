@@ -3,7 +3,7 @@ import { clamp, clipAt, clipDuration, clipEnd, clipsOnTrack, defaultColor, proje
 import { panoViewAt } from '@shared/pano';
 import { maskAt, trackBoxAt } from '@shared/ai';
 import type { Attachment } from '@shared/types';
-import { sharedPanoGL } from './panogl';
+import { sharedPanoGL, type FisheyeInput } from './panogl';
 import { sharedChromaGL } from './chromagl';
 import { sharedColorGL } from './colorgl';
 import { motionAt } from '@shared/effects';
@@ -360,10 +360,23 @@ export class PlaybackEngine {
     }
     if (clip.reverse && media.proxyReversed) return { src: url(media.proxyReversed), reversedFile: true };
     if (clip.stabilize?.enabled && media.proxyStabilized && !clip.reverse) return { src: url(media.proxyStabilized), reversedFile: false };
-    const flat = !media.stitch || media.stitch.mode === 'equirect';
+    const st = media.stitch;
+    const flat = !st || st.mode === 'dualfisheye-sbs' || (st.mode === 'equirect' && Math.abs(st.yaw) + Math.abs(st.pitch) + Math.abs(st.roll) < 1e-6);
     if (this.showOriginal && media.type === 'video' && flat && !this.originalFailed.has(media.id)) return { src: url(media.path), reversedFile: false };
     if (media.proxy) return { src: url(media.proxy), reversedFile: false };
     return { src: url(media.path), reversedFile: false };
+  }
+
+  /** Zeigt der Slot ein 360°-Rohvideo mit zwei Fischaugen? Dann Linsen-Daten fürs Zusammensetzen in der Vorschau. */
+  private fisheyeFor(slot: Slot, media: MediaItem): FisheyeInput | null | 'skip' {
+    const st = media.stitch;
+    if (!st || st.mode === 'equirect') return null;
+    const url = (p: string) => window.panocut.toMediaUrl(p);
+    const fromCompanion = !!media.companion && slot.src === url(media.companion);
+    const fromRaw = slot.src === url(media.path);
+    if (!fromCompanion && !fromRaw) return null;               // fertig zusammengesetzte Vorschau-Datei
+    if (fromRaw && st.mode === 'dualfisheye-2streams') return 'skip'; // zwei getrennte Bildspuren kann der Browser nicht zeigen
+    return { fov: st.fov, yaw: st.yaw, pitch: st.pitch, roll: st.roll, swap: fromCompanion && !!media.companionSwap };
   }
 
   setShowOriginal(on: boolean): void {
@@ -550,13 +563,16 @@ export class PlaybackEngine {
     const localT = extra.localT ?? (this.current - clip.start);
     if (media.info.is360 && clip.pano) {
       const pgl = sharedPanoGL();
+      // Rohvideo (zwei Fischaugen) noch ohne zusammengesetzte Vorschau-Datei: direkt hier zusammensetzen
+      const fish = this.fisheyeFor(slot, media);
+      if (fish === 'skip' || (fish && !pgl.available)) return;
       if (pgl.available) {
         const view = panoViewAt(clip.pano, localT);
         const mode = clip.pano.mode;
         const outW = mode === 'equirect' ? Math.min(vw, 2048) : W;
         const outH = mode === 'equirect' ? Math.round(outW / 2) : H;
         const srcTime = slot.isVideo ? (slot.el as HTMLVideoElement).currentTime : 0;
-        const out = pgl.render(source as TexImageSource, outW, outH, mode, view, srcTime);
+        const out = pgl.render(source as TexImageSource, outW, outH, mode, view, srcTime, fish ?? undefined);
         if (out) { source = out; vw = outW; vh = outH; }
       }
     }

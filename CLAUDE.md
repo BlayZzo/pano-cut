@@ -107,5 +107,8 @@ Wiedergabe: führendes Video = Uhr (`master`, nie rückwärts, 250 ms Schonzeit 
 `slot.hold`/`trackHold` = letztes Bild gegen Schwarz bei readyState<2; Oberflächen-Test spielt geteilte Clips und zählt Schwarzbilder/Rücksprünge.
 0.8.2: Ordner-Import (IPC `expandMediaPaths` → `listMediaInFolder`), Kamera-Vorschaudateien `shared/companion.ts` (DJI .LRF, GoPro GL*.LRV,
 Insta360 LRV_) → `attachCompanion` setzt `MediaItem.companion` = `proxy` (nicht bei Stitching), Export nutzt immer `path`. Bildstreifen per Sprung
-(`spriteBySeeking`, `-skip_frame nokey -noaccurate_seek`) ab 1 GB. Vorschau-Knopf „Original“ (`engine.setShowOriginal`, Rückfall bei `error`).
+(`spriteBySeeking`, `-skip_frame nokey -noaccurate_seek`) ab 1 GB. Vorschau-Knopf „Original“ (`engine.setShowOriginal`, Rückfall bei `error`/videoWidth 0).
+0.8.4: `panogl` kann Dual-Fisheye direkt (`FisheyeInput`, Formel = v360 `xyz_to_dfisheye`, Stitch-Rotation nach View-Rotation) → Rohvideo ohne Proxy
+richtig; 2-Streams-Rohvideo ohne Proxy = nicht zeichnen. 360° mit LRV: Proxy aus der LRV (`buildProxy` `comp`), Linsentausch per Bildvergleich
+(`lensesSwapped` → `companionSwap`, Vorschau `uSwap`, Proxy crop+hstack).
 Ansicht/Layout: `ViewSettings` (`settings.view`, `useView`/`updateView`), `Splitter.tsx`, `Popover.tsx`.
