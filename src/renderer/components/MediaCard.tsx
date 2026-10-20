@@ -69,12 +69,12 @@ export function MediaCard({ item, selected, onSelect, onOpen, onContextMenu }: P
         )}
         {hoverX !== null && item.sprite && <div className="scrub-line" style={{ left: `${hoverX * 100}%` }} />}
         {badge && <div className="media-badge">{badge}</div>}
-        {item.info.duration > 0 && <div className="media-dur">{formatDuration(item.info.duration)}</div>}
+        {item.info.duration > 0 && !prep && <div className="media-dur">{formatDuration(item.info.duration)}</div>}
         {item.status === 'analyzing' && <div className="media-status"><span className="spinner" />&nbsp;{t.library.analyzing}</div>}
         {item.status === 'processing' && !item.thumb && <div className="media-status"><span className="spinner" />&nbsp;{t.library.processing}</div>}
         {prep && item.thumb && (
           <div className="media-prep" title={t.library.workingHint}>
-            <div className="media-prep-text"><span>{prep.text}</span>{prep.eta && <span>{prep.eta}</span>}</div>
+            <div className="media-prep-text"><span>{prep.text}</span>{prep.etaShort && <span>~{prep.etaShort}</span>}</div>
             <div className="progress"><div style={{ width: `${prep.percent}%` }} /></div>
           </div>
         )}

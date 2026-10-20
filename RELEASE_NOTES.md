@@ -1,3 +1,21 @@
+## PanoCut 0.7.2 – Schneller importieren, mit Fortschrittsanzeige
+
+**Installieren**
+- Mac mit Apple-Chip (M1–M4): `PanoCut-0.7.2-mac-arm64.dmg`
+- Mac mit Intel: `PanoCut-0.7.2-mac-x64.dmg`
+- Windows 10/11: `PanoCut-0.7.2-win-x64.exe`
+
+Wenn PanoCut schon installiert ist, wird das Update beim Start angeboten.
+
+**Neu in 0.7.2**
+- **Fortschritt mit Restzeit**: Jede Datei in der Mediathek zeigt, was gerade passiert („Vorschau 42 % · ~1:23 min“, „360° …“, „Wartet …“). Oben in der Leiste steht, wie viele Dateien noch vorbereitet werden, der Gesamtfortschritt und wie lange es noch ungefähr dauert.
+- **Viel schnellerer Import**: Normale Full-HD-Videos (Handy, Kamera, H.264) brauchen keine eigene Vorschau-Datei mehr – sie sind sofort fertig. Vorschau-Dateien werden nur noch für 4K, HEVC/H.265, 10-Bit- und 360°-Videos erstellt. (Einstellungen → „Vorschau-Dateien: Immer“, wer lieber immer welche möchte.)
+- **Auf dem Mac zwei Dateien gleichzeitig** über den Grafikchip, auch beim 360°-Zusammensetzen.
+- Die Tonwelle wird aus der kleinen Vorschau-Datei berechnet statt aus dem riesigen Original.
+- **Flüssiger auf dem MacBook Air**: Die Vorschau zeichnet beim Abspielen nur noch so oft wie das Video Bilder hat (z. B. 30× statt 60–120× pro Sekunde) – spart Akku und Rechenzeit.
+- Abgebrochene Vorbereitungen hinterlassen keine kaputten Vorschau-Dateien mehr.
+- Ein automatischer Test auf einem echten Mac prüft jetzt auch 4K-HEVC-Videos und die Fortschrittsanzeige.
+
 ## PanoCut 0.7.1 – Vorschau repariert, Bereiche verschiebbar, Ansicht-Einstellungen
 
 **Installieren**

@@ -93,4 +93,6 @@ Oberflächen-Test im echten Electron: `electron . --ui-test` (`main/uitest.ts`, 
 importiert Testvideos, prüft per `capturePage`, dass die Vorschau sichtbar ist (Linux-CI + Job `mac-ui` auf macos-14,
 Mac-Protokoll + Screenshot im Branch `ci-logs-mac`). Lehre aus 0.7.0: `.preview-stage canvas` traf auch das Overlay-Canvas →
 schwarzes Bild über der Vorschau; Playwright-Element-Screenshots zeigten das, wurden aber als GPU-Problem fehlgedeutet.
+Import: `needsProxy` (Full-HD-H.264 8 Bit ohne Proxy, `settings.proxyMode`), `MediaItem.prep` = Fortschritt/Restzeit (TopBar `PrepIndicator`,
+MediaCard), Proxy über `.part.mp4` + rename, Mac 2 parallele Proxy-Slots (`heavySlot` in main.ts). Engine zeichnet max. mit Projekt-fps.
 Ansicht/Layout: `ViewSettings` (`settings.view`, `useView`/`updateView`), `Splitter.tsx`, `Popover.tsx`.
