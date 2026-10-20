@@ -124,6 +124,31 @@ export function InspectorFx({ clip, ids }: { clip: Clip; ids: string[] }): React
   );
 }
 
+// ---------- Licht & Bewegung (Glühen, Leuchtspuren, Bewegungsunschärfe) ----------
+
+export function InspectorLightFx({ clip, ids }: { clip: Clip; ids: string[] }): React.ReactElement {
+  const updateClips = useProject((s) => s.updateClips);
+  const fx = { ...NEUTRAL_FX, ...(clip.fx ?? {}) };
+  const patchFx = (p: Partial<ImageFx>) => updateClips(ids, { fx: { ...fx, ...p } });
+  const glow = fx.glow ?? 0, trails = fx.trails ?? 0, mb = fx.motionBlur ?? 0;
+  const active = glow > 0 || trails > 0 || mb > 0;
+  const pct = (v: number) => `${Math.round(v * 100)} %`;
+  const nightPreset = () => updateClips(ids, { fx: { ...fx, glow: 0.55, trails: 0.6 }, color: { ...clip.color, look: 'night', lookStrength: 1 } });
+  return (
+    <Section title={t.lightFx.section} defaultOpen={active} badge={active ? '•' : undefined} onReset={() => patchFx({ glow: 0, trails: 0, motionBlur: 0 })}>
+      <div className="field-row" style={{ flexWrap: 'wrap' }}>
+        <button className="btn sm" onClick={nightPreset}>🌃 {t.lightFx.night}</button>
+        <button className="btn sm" onClick={() => patchFx({ motionBlur: 0.6 })}>💨 {t.lightFx.speedPreset}</button>
+        <button className="btn sm" onClick={() => patchFx({ glow: 0.5 })}>✨ {t.lightFx.dreamPreset}</button>
+      </div>
+      <Slider label={t.lightFx.glow} value={glow} min={0} max={1} step={0.01} display={pct} onChange={(v) => patchFx({ glow: v })} />
+      <Slider label={t.lightFx.trails} value={trails} min={0} max={1} step={0.01} display={pct} onChange={(v) => patchFx({ trails: v })} />
+      <Slider label={t.lightFx.motionBlur} value={mb} min={0} max={1} step={0.01} display={pct} onChange={(v) => patchFx({ motionBlur: v })} />
+      <div className="hint">{t.lightFx.hint}</div>
+    </Section>
+  );
+}
+
 // ---------- Animation ----------
 
 export function InspectorMotion({ clip, ids }: { clip: Clip; ids: string[] }): React.ReactElement {

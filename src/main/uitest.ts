@@ -119,6 +119,21 @@ export async function runUiTest(win: BrowserWindow): Promise<number> {
       return { at };
     })()`);
     out('Wiedergabe:', JSON.stringify(play));
+    // v0.8: Sound einfügen (echte Berechnung im Hauptprozess) und Werkzeug-Fenster öffnen
+    const sfx = await win.webContents.executeJavaScript(`(async () => {
+      const T = window.__pcTest;
+      const id = await T.insertSfx('boom', {}, 1);
+      const p = T.useProject.getState().project;
+      const m = Object.values(p.media).find((x) => x.name.startsWith('Boom'));
+      T.useUi.getState().openTools('hook');
+      await new Promise((r) => setTimeout(r, 500));
+      const tools = document.querySelectorAll('.side-item').length;
+      T.useUi.getState().openDialog('none');
+      return { clip: !!id && !!p.clips[id], dur: m ? m.info.duration : 0, tools };
+    })()`);
+    out('Sound & Werkzeuge:', JSON.stringify(sfx));
+    if (!sfx.clip || Math.abs(sfx.dur - 1.8) > 0.2) failures.push('Sound-Effekt wurde nicht eingefügt');
+    if (sfx.tools < 7) failures.push('Werkzeug-Fenster unvollständig');
     await win.webContents.capturePage().then((img) => fs.writeFileSync(path.join(os.tmpdir(), 'panocut-ui-test.png'), img.toPNG()));
   } catch (e) {
     failures.push(`Abbruch: ${(e as Error).stack ?? e}`);

@@ -35,6 +35,7 @@ export function Preview(): React.ReactElement {
   const aiPanel = useUi((s) => s.aiPanel);
   const setAiPanel = useUi((s) => s.setAiPanel);
   const pickColor = useUi((s) => s.pickColor);
+  const pointPick = useUi((s) => s.pointPick);
   const setPickColor = useUi((s) => s.setPickColor);
   const vfxPanel = useUi((s) => s.vfxPanel);
   const imagePanel = useUi((s) => s.imagePanel);
@@ -196,6 +197,22 @@ export function Preview(): React.ReactElement {
     const rect = canvas.getBoundingClientRect();
     const toCanvas = (cx: number, cy: number) => ({ x: ((cx - rect.left) / rect.width) * canvas.width, y: ((cy - rect.top) / rect.height) * canvas.height });
 
+    // Punkt anklicken (z. B. „Objekt per Klick freistellen“)
+    const pp = useUi.getState().pointPick;
+    if (pp) {
+      const clip = clips[pp.clipId];
+      const m = clip ? media[clip.mediaId] : undefined;
+      const box = clip && m ? clipBox(clip, m, canvas.width, canvas.height) : null;
+      useUi.getState().setPointPick(null);
+      if (clip && box) {
+        const p0 = toCanvas(e.clientX, e.clientY);
+        const { u, v } = canvasToSource(box, clip, p0.x, p0.y);
+        if (u >= 0 && u <= 1 && v >= 0 && v <= 1) pp.onPick(u, v);
+        else useUi.getState().toast(t.cutout.outside, 'error');
+      }
+      return;
+    }
+
     // Masken-Pinsel
     if (maskBrush && selectedClip && selectedMedia && maskBrush.clipId === selectedClip.id && brushRef.current && brushTrack) {
       const box = clipBox(selectedClip, selectedMedia, canvas.width, canvas.height);
@@ -350,7 +367,7 @@ export function Preview(): React.ReactElement {
 
   return (
     <section className="preview">
-      <div className={`preview-stage${panoClip ? ' pano' : ''}${dragging ? ' dragging' : ''}${pickColor ? ' picking' : ''}${placing ? ' placing' : ''}${maskBrush ? ' brushing' : ''}${view.previewBackground === 'checker' ? ' checker' : ''}`} ref={stageRef} onPointerEnter={() => setHover(true)} onPointerLeave={() => setHover(false)}>
+      <div className={`preview-stage${panoClip ? ' pano' : ''}${dragging ? ' dragging' : ''}${pickColor || pointPick ? ' picking' : ''}${placing ? ' placing' : ''}${maskBrush ? ' brushing' : ''}${view.previewBackground === 'checker' ? ' checker' : ''}`} ref={stageRef} onPointerEnter={() => setHover(true)} onPointerLeave={() => setHover(false)}>
         <canvas ref={canvasRef} style={{ aspectRatio: `${settings.width} / ${settings.height}` }} onPointerDown={onPointerDown} onWheel={onWheel} />
         <canvas ref={overlayRef} className="preview-overlay" />
         <div className="preview-guides" ref={guidesRef} style={{ display: view.previewGuides === 'none' ? 'none' : undefined }}>
@@ -360,6 +377,7 @@ export function Preview(): React.ReactElement {
         {!hasClips && <div className="preview-empty">{t.preview.empty}</div>}
         {panoClip && !pickColor && <div className="preview-badge">360° · ziehen = umschauen · Mausrad = zoomen</div>}
         {pickColor && <div className="preview-badge">{t.ai.picking}</div>}
+        {pointPick && <div className="preview-badge">{t.cutout.clickHint} <button className="btn sm" style={{ marginLeft: 8 }} onClick={() => useUi.getState().setPointPick(null)}>{t.common.cancel}</button></div>}
         {maskBrush && (
           <div className="preview-badge">
             {brushMask ? t.layers.brushOn : t.layers.noMaskHere}
@@ -388,6 +406,7 @@ export function Preview(): React.ReactElement {
         <button className={`btn sm${aiPanel ? ' active' : ''}`} title={t.ai.title} onClick={() => setAiPanel(!aiPanel)} style={{ fontWeight: 700 }}>✦ {t.ai.button}</button>
         <button className={`btn sm${modelPanel ? ' active' : ''}`} title={t.model3d.title} onClick={() => setModelPanel(modelPanel ? null : {})} style={{ fontWeight: 700 }}>🧊 {t.model3d.button}</button>
         {hasMulticam && <button className={`btn sm${multicamPanel ? ' active' : ''}`} title={t.multicam.title} onClick={() => setMulticamPanel(multicamPanel ? null : (groupAt(useUi.getState().playhead)?.id ?? Object.keys(multicamGroups ?? {})[0] ?? null))}>🎥 {t.multicam.button}</button>}
+        <button className="btn sm" title={t.tools.title} onClick={() => useUi.getState().openTools()} style={{ fontWeight: 700 }}>🧰 {t.tools.button}</button>
         <Popover label={`⚙ ${t.view.button}`} title={t.view.previewTitle} align="right" up>
           <div className="form-grid compact">
             <label>{t.view.quality}</label>

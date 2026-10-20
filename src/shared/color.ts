@@ -18,6 +18,9 @@ export const LOOKS: LookDef[] = [
   { id: 'sepia', name: 'Sepia', grade: { saturation: 0, temperature: 45, tint: 5, contrast: 1.05 } },
   { id: 'teal', name: 'Teal & Orange', grade: { splitShadow: -45, splitHighlight: 40, vibrance: 15, contrast: 1.08 } },
   { id: 'drone', name: 'Drohne (Himmel & Grün)', grade: { vibrance: 30, highlights: -25, shadows: 15, contrast: 1.05, dehaze: 25 } },
+  { id: 'night', name: 'Nacht (Stadtlichter)', grade: { exposure: -0.35, contrast: 1.18, temperature: -28, tint: 6, saturation: 0.9, shadows: -15, highlights: 10, splitShadow: -35, splitHighlight: 20, vibrance: 15 } },
+  { id: 'carshow', name: 'Auto-Showroom', grade: { contrast: 1.12, vibrance: 30, highlights: -15, shadows: 8, dehaze: 18, saturation: 1.05 } },
+  { id: 'neon', name: 'Neon', grade: { contrast: 1.2, saturation: 1.25, tint: 18, temperature: -12, splitShadow: -40, splitHighlight: -15, blacks: -10 } },
 ];
 
 export function lookById(id: string | undefined): LookDef | undefined {

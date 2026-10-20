@@ -19,6 +19,9 @@ import { stopTranslators, translateLocal, type MtLang } from './mt';
 import { startRemote, stopRemote } from './remote';
 import { vfxBegin, vfxCancel, vfxEnd, vfxFrame, type VfxBeginRequest } from './vfx';
 import { analyzeBeats, audioEnvelope } from './audio';
+import { renderSfxFile } from './sfx';
+import { blurCurve, motionCurve, silences } from './analysis';
+import { cleanStorage, storageInfo, watchFolder } from './storage';
 import { MODEL_EXTENSIONS } from '@shared/model3d';
 import { aiAvailable, aiModelStatus, detectObjects, segmentObject } from './ai';
 import { maskDir, renderObject } from './objects';
@@ -258,6 +261,23 @@ ipcMain.handle(IPC.prepareMedia, async (_e, item: MediaItem, options?: { reverse
   await heavySlot(() => prepareMedia(latest, send, settings.proxyHeight, { ...options, stage: 'heavy', proxyMode }));
 });
 
+// ---- Sound-Effekte ----
+ipcMain.handle(IPC.renderSfx, (_e, id: string, params: Record<string, number>) => renderSfxFile(id, params));
+
+ipcMain.handle(IPC.motionCurve, (_e, p: string, s: number, d: number) => motionCurve(p, s, d));
+ipcMain.handle(IPC.silences, (_e, p: string, s: number, d: number, th?: number, md?: number) => silences(p, s, d, th, md));
+ipcMain.handle(IPC.blurCurve, (_e, p: string, s: number, d: number) => blurCurve(p, s, d));
+
+// ---- Ordner beobachten & Speicher ----
+const startWatch = (dir: string | null) => watchFolder(dir, (files) => sendToWindow(IPC.watchNew, files));
+ipcMain.handle(IPC.setWatchFolder, (_e, dir: string | null) => startWatch(dir));
+ipcMain.handle(IPC.selectFolder, async (_e, title: string) => {
+  const res = await dialog.showOpenDialog(mainWindow!, { title, properties: ['openDirectory', 'createDirectory'] });
+  return res.canceled ? null : res.filePaths[0] ?? null;
+});
+ipcMain.handle(IPC.storageInfo, () => storageInfo());
+ipcMain.handle(IPC.cleanStorage, (_e, mode: 'old' | 'unused' | 'all', keep: string[]) => cleanStorage(mode, keep));
+
 // ---- Untertitel ----
 
 let transcribeController: AbortController | null = null;
@@ -430,15 +450,38 @@ ipcMain.handle(IPC.selectExportPath, async (_e, defaultName: string, ext: string
   return res.canceled || !res.filePath ? null : res.filePath;
 });
 
-ipcMain.handle(IPC.startExport, async (_e, project: Project, options: ExportOptions) => {
-  const jobId = `job_${Date.now()}`;
-  const job = new ExportJob(project, options, (p) => sendToWindow(IPC.exportProgress, { ...p, jobId } satisfies ExportProgress));
+// Export-Warteschlange: ein Auftrag nach dem anderen, im Hintergrund – man kann dabei weiterschneiden
+const exportQueue: Array<{ jobId: string; project: Project; options: ExportOptions }> = [];
+let exportRunning = false;
+function pumpExports(): void {
+  if (exportRunning) return;
+  const next = exportQueue.shift();
+  if (!next) return;
+  exportRunning = true;
+  const { jobId, project, options } = next;
+  const job = new ExportJob(project, options, (p) => sendToWindow(IPC.exportProgress, { ...p, jobId, name: options.name } satisfies ExportProgress));
   exportJobs.set(jobId, job);
-  job.run().catch((err) => log.warn('Export beendet mit Fehler', err?.message)).finally(() => exportJobs.delete(jobId));
+  job.run().catch((err) => log.warn('Export beendet mit Fehler', err?.message)).finally(() => {
+    exportJobs.delete(jobId);
+    exportRunning = false;
+    pumpExports();
+  });
+}
+ipcMain.handle(IPC.startExport, async (_e, project: Project, options: ExportOptions) => {
+  const jobId = `job_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+  exportQueue.push({ jobId, project, options });
+  sendToWindow(IPC.exportProgress, { jobId, phase: 'queued', percent: 0, name: options.name, outputPath: options.outputPath } satisfies ExportProgress);
+  pumpExports();
   return jobId;
 });
 
 ipcMain.handle(IPC.cancelExport, (_e, jobId: string) => {
+  const i = exportQueue.findIndex((q) => q.jobId === jobId);
+  if (i >= 0) {
+    const [q] = exportQueue.splice(i, 1);
+    sendToWindow(IPC.exportProgress, { jobId, phase: 'cancelled', percent: 0, name: q.options.name } satisfies ExportProgress);
+    return;
+  }
   exportJobs.get(jobId)?.cancel();
 });
 
@@ -470,6 +513,7 @@ app.whenReady().then(async () => {
   }
   refreshMenu();
   applyRemoteSetting();
+  { const st = loadSettings(); if (st.watchEnabled && st.watchFolder) startWatch(st.watchFolder); }
   initUpdater((s: UpdateStatus) => sendToWindow(IPC.updateStatus, s));
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();

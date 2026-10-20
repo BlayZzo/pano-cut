@@ -17,7 +17,7 @@ export interface Toast {
   kind: 'info' | 'success' | 'error';
 }
 
-export type Dialog = 'none' | 'export' | 'settings' | 'newProject' | 'shortcuts' | 'about';
+export type Dialog = 'none' | 'export' | 'settings' | 'newProject' | 'shortcuts' | 'about' | 'tools';
 
 export interface UiState {
   appInfo: AppInfo | null;
@@ -25,7 +25,14 @@ export interface UiState {
   selection: string[];
   playhead: number;
   playing: boolean;
-  importing: number;      // Dateien, die gerade eingelesen werden
+  importing: number;
+  toolsPage: string;
+  setToolsPage(p: string): void;
+  openTools(p?: string): void;
+  settingsPage: string;
+  setSettingsPage(p: string): void;
+  inspectorTab: string;
+  setInspectorTab(tab: string): void;      // Dateien, die gerade eingelesen werden
   setImporting(n: number): void;
   loop: boolean;
   zoom: number;           // Pixel pro Sekunde
@@ -37,11 +44,15 @@ export interface UiState {
   rangeOut: number | null;
   toasts: Toast[];
   exportProgress: ExportProgress | null;
+  exportJobs: Record<string, ExportProgress>;   // Export-Warteschlange (Hintergrund)
+  removeExportJob(id: string): void;
   updateStatus: UpdateStatus;
-  libraryTab: 'media' | 'effects' | 'transitions' | 'titles' | 'objects';
+  libraryTab: 'media' | 'effects' | 'transitions' | 'titles' | 'objects' | 'sounds';
   aiPanel: boolean;
   aiBusy: { percent: number; message: string } | null;
   pickColor: boolean;   // Green-Screen-Farbe in der Vorschau wählen
+  pointPick: { clipId: string; onPick: (u: number, v: number) => void } | null;   // Punkt im Bild anklicken (z. B. Objekt freistellen)
+  setPointPick(p: UiState['pointPick']): void;
   vfxPanel: boolean;    // Effekt-Studio offen
   imagePanel: boolean;  // Bild-Assistent offen
   vfxPreset: string | null;  // vorgewählte Effektart (aus der Bibliothek)
@@ -99,6 +110,13 @@ export const useUi = create<UiState>()((set, get) => ({
   playhead: 0,
   playing: false,
   importing: 0,
+  toolsPage: 'reframe',
+  setToolsPage: (toolsPage) => set({ toolsPage }),
+  openTools: (p) => set((s) => ({ dialog: 'tools', toolsPage: p ?? s.toolsPage })),
+  settingsPage: 'project',
+  setSettingsPage: (settingsPage) => set({ settingsPage }),
+  inspectorTab: 'clip',
+  setInspectorTab: (inspectorTab) => set({ inspectorTab }),
   setImporting: (importing) => set({ importing: Math.max(0, importing) }),
   loop: false,
   zoom: 60,
@@ -110,11 +128,15 @@ export const useUi = create<UiState>()((set, get) => ({
   rangeOut: null,
   toasts: [],
   exportProgress: null,
+  exportJobs: {},
+  removeExportJob: (id) => set((s) => { const j = { ...s.exportJobs }; delete j[id]; return { exportJobs: j }; }),
   updateStatus: { state: 'idle' },
   libraryTab: 'media',
   aiPanel: false,
   aiBusy: null,
   pickColor: false,
+  pointPick: null,
+  setPointPick: (pointPick) => set({ pointPick }),
   vfxPanel: false,
   imagePanel: false,
   vfxPreset: null,
@@ -146,7 +168,7 @@ export const useUi = create<UiState>()((set, get) => ({
     setTimeout(() => get().dismissToast(id), Math.max(kind === 'error' ? 8000 : 3500, text.length * 55));
   },
   dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
-  setExportProgress: (exportProgress) => set({ exportProgress }),
+  setExportProgress: (exportProgress) => set((s) => (exportProgress ? { exportProgress, exportJobs: { ...s.exportJobs, [exportProgress.jobId]: { ...s.exportJobs[exportProgress.jobId], ...exportProgress } } } : { exportProgress })),
   setUpdateStatus: (updateStatus) => set({ updateStatus }),
   setLibraryTab: (libraryTab) => set({ libraryTab }),
   setAiPanel: (aiPanel) => set({ aiPanel }),

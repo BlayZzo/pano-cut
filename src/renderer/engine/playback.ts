@@ -22,6 +22,83 @@ interface Slot {
   isImage: boolean;
   lastSeek: number;
   work?: HTMLCanvasElement;   // Zwischen-Canvas für Freistellen
+  fx?: { cur: HTMLCanvasElement; mb: HTMLCanvasElement; tr: HTMLCanvasElement; gl: HTMLCanvasElement; small: HTMLCanvasElement; t: number };
+}
+
+/** Bewegungsunschärfe, Leuchtspuren und Glühen – Vorschau-Gegenstück zu FFmpeg tmix / lagfun / Bloom. */
+function temporalFx(slot: Slot, clip: Clip, source: CanvasImageSource, vw: number, vh: number, localT: number, playing: boolean, fps: number): { source: CanvasImageSource; vw: number; vh: number } {
+  const fx = clip.fx;
+  const mb = fx?.motionBlur ?? 0, tr = fx?.trails ?? 0, gl = fx?.glow ?? 0;
+  if (mb < 0.01 && tr < 0.01 && gl < 0.01) { slot.fx = undefined; return { source, vw, vh }; }
+  const w = Math.max(2, Math.min(vw, 1280)), h = Math.max(2, Math.round((w * vh) / vw));
+  const mk = () => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
+  if (!slot.fx || slot.fx.cur.width !== w || slot.fx.cur.height !== h) slot.fx = { cur: mk(), mb: mk(), tr: mk(), gl: mk(), small: document.createElement('canvas'), t: -1 };
+  const st = slot.fx;
+  // Zusammenhängende Wiedergabe? Sonst (Springen, Standbild) neu beginnen
+  const dt = localT - st.t;
+  const cont = playing && st.t >= 0 && dt > 0 && dt < 0.25;
+  const frames = cont ? Math.max(1, dt * fps) : 1;
+  st.t = localT;
+  const cctx = st.cur.getContext('2d')!;
+  cctx.globalCompositeOperation = 'copy';
+  cctx.globalAlpha = 1;
+  cctx.drawImage(source, 0, 0, w, h);
+  let out: HTMLCanvasElement = st.cur;
+  if (mb >= 0.01) {
+    const N = 2 + 6 * mb;
+    const x = st.mb.getContext('2d')!;
+    x.globalCompositeOperation = cont ? 'source-over' : 'copy';
+    x.globalAlpha = cont ? Math.min(1, 1 - Math.pow(1 - 2 / (N + 1), frames)) : 1;
+    x.drawImage(out, 0, 0);
+    out = st.mb;
+  }
+  if (tr >= 0.01) {
+    const decay = 0.86 + 0.12 * tr;
+    const x = st.tr.getContext('2d')!;
+    if (cont) {
+      // alt × Abklingen …
+      x.globalCompositeOperation = 'source-over';
+      x.globalAlpha = 1 - Math.pow(decay, frames);
+      x.fillStyle = '#000';
+      x.fillRect(0, 0, w, h);
+      // … und davon das hellere (= max je Farbkanal, wie lagfun)
+      x.globalAlpha = 1;
+      x.globalCompositeOperation = 'lighten';
+    } else {
+      x.globalAlpha = 1;
+      x.globalCompositeOperation = 'copy';
+    }
+    x.drawImage(out, 0, 0);
+    out = st.tr;
+  }
+  if (gl >= 0.01) {
+    // Helle Stellen herausfiltern (klein gerechnet), weichzeichnen und aufhellend darüberlegen
+    const sw = Math.max(2, Math.round(w / 6)), sh = Math.max(2, Math.round(h / 6));
+    if (st.small.width !== sw || st.small.height !== sh) { st.small.width = sw; st.small.height = sh; }
+    const sx = st.small.getContext('2d', { willReadFrequently: true })!;
+    sx.globalCompositeOperation = 'copy';
+    sx.drawImage(out, 0, 0, sw, sh);
+    const img = sx.getImageData(0, 0, sw, sh);
+    const d = img.data;
+    for (let i = 0; i < d.length; i += 4) {
+      d[i] = Math.max(0, Math.min(255, (d[i] - 170) * 3));
+      d[i + 1] = Math.max(0, Math.min(255, (d[i + 1] - 170) * 3));
+      d[i + 2] = Math.max(0, Math.min(255, (d[i + 2] - 170) * 3));
+    }
+    sx.putImageData(img, 0, 0);
+    const x = st.gl.getContext('2d')!;
+    x.globalCompositeOperation = 'copy';
+    x.globalAlpha = 1;
+    x.filter = 'none';
+    x.drawImage(out, 0, 0);
+    x.globalCompositeOperation = 'screen';
+    x.globalAlpha = Math.min(1, 0.4 + 0.6 * gl);
+    x.filter = `blur(${Math.max(1, h * 0.012 * (0.6 + gl))}px)`;
+    x.drawImage(st.small, 0, 0, w, h);
+    x.filter = 'none';
+    out = st.gl;
+  }
+  return { source: out, vw: w, vh: h };
 }
 
 // Masken sind Graustufen-PNGs (hell = Objekt). Für die Vorschau wird die Helligkeit zu Transparenz umgerechnet.
@@ -416,6 +493,11 @@ export class PlaybackEngine {
         const out = kgl.render(source as TexImageSource, Math.min(vw, 1920), Math.round((Math.min(vw, 1920) * vh) / vw), clip.chroma.color, clip.chroma.similarity, clip.chroma.blend, clip.chroma.despill);
         if (out) { source = out; vw = out.width; vh = out.height; }
       }
+    }
+    // Bewegungsunschärfe, Leuchtspuren, Glühen
+    if (clip.fx && ((clip.fx.motionBlur ?? 0) > 0.01 || (clip.fx.trails ?? 0) > 0.01 || (clip.fx.glow ?? 0) > 0.01)) {
+      const r = temporalFx(slot, clip, source, vw, vh, localT, this.playing, this.project.settings.fps || 30);
+      source = r.source; vw = r.vw; vh = r.vh;
     }
     // Freistellen anhand der Objektmaske
     const cut = clip.cutout;

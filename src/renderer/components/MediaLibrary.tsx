@@ -6,6 +6,7 @@ import { addMediaToTimeline, addTitleToTimeline, applyEffectToClips, applyTransi
 import { t } from '../i18n/de';
 import { IconImport } from './Icons';
 import { MediaCard } from './MediaCard';
+import { SoundLibrary } from './SoundLibrary';
 import { ContextMenu, type MenuEntry } from './ContextMenu';
 import { TITLE_TEMPLATES, TRANSITIONS, defaultTitle } from '@shared/pano';
 import { DRAG_EFFECT, DRAG_TITLE, DRAG_TRANSITION, setDragging } from '../utils/dnd';
@@ -67,8 +68,11 @@ export function MediaLibrary(): React.ReactElement {
         <div className={`tab${tab === 'effects' ? ' active' : ''}`} onClick={() => setTab('effects')}>{t.library.tabEffects}</div>
         <div className={`tab${tab === 'titles' ? ' active' : ''}`} onClick={() => setTab('titles')}>{t.library.tabTitles}</div>
         <div className={`tab${tab === 'objects' ? ' active' : ''}`} onClick={() => setTab('objects')}>{t.ai.objectsTab}</div>
+        <div className={`tab${tab === 'sounds' ? ' active' : ''}`} onClick={() => setTab('sounds')}>{t.sfx.tab}</div>
       </div>
-      {tab === 'transitions' ? (
+      {tab === 'sounds' ? (
+        <SoundLibrary />
+      ) : tab === 'transitions' ? (
         <TransitionLibrary />
       ) : tab === 'objects' ? (
         <ObjectLibrary onContextMenu={(x, y, item) => { setSelected(item.id); setMenu({ x, y, item }); }} selected={selected} onSelect={setSelected} />
@@ -116,14 +120,22 @@ export function MediaLibrary(): React.ReactElement {
   );
 }
 
+let lastTransGroup = 'all';
+
 /** Übergänge: auf einen Clip ziehen oder bei Auswahl doppelklicken. */
 function TransitionLibrary(): React.ReactElement {
   const selection = useUi((s) => s.selection);
   const groups = Array.from(new Set(TRANSITIONS.map((x) => x.group)));
+  const [grp, setGrpState] = useState<string>(lastTransGroup);
+  const setGrp = (g: string) => { lastTransGroup = g; setGrpState(g); };
   return (
     <div className="panel-body">
       <div className="hint" style={{ padding: '8px 10px' }}>{t.transition.libraryHint}</div>
-      {groups.map((g) => (
+      <div className="library-filters" style={{ flexWrap: 'wrap' }}>
+        <button className={`chip${grp === 'all' ? ' active' : ''}`} onClick={() => setGrp('all')}>{t.library.all}</button>
+        {groups.map((g) => <button key={g} className={`chip${grp === g ? ' active' : ''}`} onClick={() => setGrp(g)}>{g}</button>)}
+      </div>
+      {groups.filter((g) => grp === 'all' || grp === g).map((g) => (
         <div key={g}>
           <div className="panel-header" style={{ border: 'none', paddingBottom: 2 }}>{g}</div>
           <div className="transition-grid">
@@ -201,7 +213,22 @@ function lookSwatch(lookId: string): string {
 
 const NO_EFFECTS: never[] = [];
 
+type EffectCat = 'all' | 'sim' | 'weather' | 'fire' | 'light' | 'party' | 'motion' | 'look' | 'fx' | 'own';
+const VFX_GROUPS: Array<{ id: EffectCat; name: string; kinds: string[] }> = [
+  { id: 'fire', name: 'Feuer & Explosion', kinds: ['explosion', 'fire', 'smoke', 'sparks', 'lightning', 'impact'] },
+  { id: 'weather', name: 'Wetter', kinds: ['snow', 'rain', 'fog', 'dust'] },
+  { id: 'light', name: 'Licht', kinds: ['flare', 'bokeh', 'leaks', 'glitter'] },
+  { id: 'party', name: 'Social & Party', kinds: ['confetti', 'hearts', 'speedlines'] },
+];
+const EFFECT_CATS: Array<{ id: EffectCat; name: string }> = [
+  { id: 'all', name: 'Alle' }, { id: 'sim', name: 'Simulationen' }, { id: 'fire', name: 'Feuer' }, { id: 'weather', name: 'Wetter' }, { id: 'light', name: 'Licht' },
+  { id: 'party', name: 'Party' }, { id: 'motion', name: 'Animationen' }, { id: 'look', name: 'Looks' }, { id: 'fx', name: 'Bild' }, { id: 'own', name: 'Eigene' },
+];
+let lastEffectCat: EffectCat = 'all';
+
 function EffectLibrary(): React.ReactElement {
+  const [cat, setCatState] = useState<EffectCat>(lastEffectCat);
+  const setCat = (c: EffectCat) => { lastEffectCat = c; setCatState(c); };
   const selection = useUi((s) => s.selection);
   const userEffects = useUi((s) => s.settings.userEffects) ?? NO_EFFECTS;
   const swatches = useMemo(() => Object.fromEntries(EFFECT_BLOCKS.filter((b) => b.kind === 'look').map((b) => [b.id, lookSwatch(b.id.slice(2))])), []);
@@ -225,21 +252,27 @@ function EffectLibrary(): React.ReactElement {
     { kind: 'look', title: t.effects.groupLook },
     { kind: 'fx', title: t.effects.groupFx },
   ];
+  const show = (c: EffectCat) => cat === 'all' || cat === c;
   return (
     <div className="panel-body" style={{ padding: '8px 10px' }}>
-      <div className="effect-group">
-        <div className="effect-group-title">{t.effects.groupSim}</div>
-        <div className="effect-grid">
-          {VFX_KINDS.map((k) => (
-            <div key={k.kind} className="effect-tile" title={t.effects.simHint} onClick={() => useUi.getState().setVfxPanel(true, k.kind)}>
-              <span className="effect-icon">{k.icon}</span><span>{k.name}</span>
-            </div>
-          ))}
-        </div>
-        <div className="hint" style={{ marginTop: 6 }}>{t.effects.simHint}</div>
+      <div className="library-filters" style={{ flexWrap: 'wrap', padding: '0 0 8px' }}>
+        {EFFECT_CATS.map((c) => <button key={c.id} className={`chip${cat === c.id ? ' active' : ''}`} onClick={() => setCat(c.id)}>{c.name}</button>)}
       </div>
-      <div className="hint" style={{ marginBottom: 8 }}>{t.effects.hint}</div>
-      {groups.map((g) => (
+      {VFX_GROUPS.filter((g) => show('sim') || show(g.id)).map((g) => (
+        <div key={g.id} className="effect-group">
+          <div className="effect-group-title">{g.name}</div>
+          <div className="effect-grid">
+            {VFX_KINDS.filter((k) => g.kinds.includes(k.kind)).map((k) => (
+              <div key={k.kind} className="effect-tile" title={t.effects.simHint} onClick={() => useUi.getState().setVfxPanel(true, k.kind)}>
+                <span className="effect-icon">{k.icon}</span><span>{k.name}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+      {(show('sim') || VFX_GROUPS.some((g) => show(g.id))) && <div className="hint" style={{ marginBottom: 8 }}>{t.effects.simHint}</div>}
+      {(show('motion') || show('look') || show('fx')) && <div className="hint" style={{ marginBottom: 8 }}>{t.effects.hint}</div>}
+      {groups.filter((g) => show(g.kind)).map((g) => (
         <div key={g.kind} className="effect-group">
           <div className="effect-group-title">{g.title}</div>
           <div className="effect-grid">
@@ -250,7 +283,7 @@ function EffectLibrary(): React.ReactElement {
           </div>
         </div>
       ))}
-      <div className="effect-group">
+      {show('own') && <div className="effect-group">
         <div className="effect-group-title">{t.effects.groupOwn}</div>
         {userEffects.length === 0 ? <div className="hint">{t.effects.ownEmpty}</div> : (
           <div className="effect-grid">
@@ -258,7 +291,7 @@ function EffectLibrary(): React.ReactElement {
               <button className="effect-del" title={t.effects.deleteOwn} onClick={(e) => { e.stopPropagation(); void deleteUserEffect(u.id); }}>×</button>))}
           </div>
         )}
-      </div>
+      </div>}
     </div>
   );
 }

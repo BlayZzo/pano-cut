@@ -9,6 +9,7 @@ import { beginTransaction, endTransaction, untracked, useProject } from '../stor
 import { useUi } from '../store/ui';
 import { engine } from '../engine/instance';
 import { t } from '../i18n/de';
+import { insertSfx } from '../actions';
 import { LIGHT_SCALE, renderVfx } from './render';
 
 const GLOW_KINDS: VfxKind[] = ['flare', 'bokeh', 'leaks', 'glitter'];
@@ -198,7 +199,10 @@ export function isEffectMedia(m: MediaItem | undefined): boolean {
 
 // ---------- Objekt ins Video fallen lassen (Auftritt + Aufprall) ----------
 
-export interface DropInOptions { style: EntranceStyle; strength: number; dust: boolean; shake: boolean }
+export interface DropInOptions {
+  style: EntranceStyle; strength: number; dust: boolean; shake: boolean;
+  sound?: string;   // Sound-Effekt beim Aufprall bzw. Hereinrasen ('' = keiner)
+}
 
 /** Lage des Objekts im fertigen Bild (0..1): aus der gemerkten Objekt-Box, dem Freistell-Tracking oder dem ganzen Clip. */
 export function objectFrameBox(clip: Clip, media: MediaItem, W: number, H: number, localT: number): FrameBox {
@@ -249,6 +253,11 @@ export async function dropObjectIn(clipId: string, opts: DropInOptions, onProgre
   useProject.getState().updateClip(clip.id, { motion: { preset: opts.style, intensity: opts.strength, smooth: false, keyframes: kfs } });
   if (scene && opts.shake && impact !== null) shakeScene(scene, clip.start + impact + 0.02, shakeStrength);
   endTransaction();
+  if (opts.sound) {
+    // Aufprall: Sound genau beim Aufschlag; Hereinrasen: Whoosh am Anfang
+    const at = impact !== null ? clip.start + impact - 0.03 : clip.start;
+    await insertSfx(opts.sound, { intensity: Math.max(0.4, Math.min(1.5, 0.6 + 0.4 * opts.strength)) }, Math.max(0, at)).catch(() => null);
+  }
   if (impact === null || !opts.dust) { useUi.getState().toast(t.dropIn.done, 'success'); return; }
 
   // Staubfarbe vom Boden unter dem Objekt nehmen (Staub besteht aus dem, was dort liegt)

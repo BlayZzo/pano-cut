@@ -128,9 +128,11 @@ export function applyCameraMove(p: PanoSettings, move: CameraMove, start: number
 
 // ---------- Tempo-Rampen ----------
 
-export type SpeedRamp = 'slowMid' | 'fastMid' | 'brake' | 'accelerate' | 'hero';
+export type SpeedRamp = 'slowMid' | 'fastMid' | 'brake' | 'accelerate' | 'hero' | 'passby' | 'drift';
 
 export const SPEED_RAMPS: Array<{ id: SpeedRamp; name: string }> = [
+  { id: 'passby', name: 'Vorbeifahrt (schnell → kurze Zeitlupe → schnell)' },
+  { id: 'drift', name: 'Drift (lange Zeitlupe in der Kurve)' },
   { id: 'slowMid', name: 'Schnell → Zeitlupe → Schnell' },
   { id: 'hero', name: 'Hero-Moment (plötzliche Zeitlupe)' },
   { id: 'fastMid', name: 'Zeitlupe → Schnell → Zeitlupe' },
@@ -139,12 +141,15 @@ export const SPEED_RAMPS: Array<{ id: SpeedRamp; name: string }> = [
 ];
 
 /** Relatives Tempo an der Stelle x (0..1) einer Rampe. */
-export function rampProfile(r: SpeedRamp, x: number, strength: number): number {
+export function rampProfile(r: SpeedRamp, x: number, strength: number, center = 0.5): number {
   const s = Math.max(0.1, Math.min(2, strength));
+  const m = Math.max(0.05, Math.min(0.95, center));
   const bell = (c: number, w: number) => Math.exp(-Math.pow((x - c) / w, 2));
   switch (r) {
-    case 'slowMid': return Math.max(0.08, 1 - 0.8 * Math.min(1.15, s) * bell(0.5, 0.2));
-    case 'fastMid': return 1 + 2.5 * s * bell(0.5, 0.18);
+    case 'passby': return Math.max(0.06, (1 + 0.9 * s * (1 - bell(m, 0.22))) * (1 - 0.88 * Math.min(1.1, s) * bell(m, 0.07)));
+    case 'drift': return Math.max(0.1, (1 + 0.6 * s * (1 - bell(m, 0.3))) * (1 - 0.7 * Math.min(1.2, s) * bell(m, 0.2)));
+    case 'slowMid': return Math.max(0.08, 1 - 0.8 * Math.min(1.15, s) * bell(m, 0.2));
+    case 'fastMid': return 1 + 2.5 * s * bell(m, 0.18);
     case 'brake': return Math.max(0.1, 1 + 1.2 * s * (1 - ease(x)) - 0.8 * Math.min(1.1, s) * ease(x));
     case 'accelerate': return Math.max(0.1, 1 - 0.8 * Math.min(1.1, s) * (1 - ease(x)) + 1.2 * s * ease(x));
     case 'hero': {
@@ -158,10 +163,10 @@ export function rampProfile(r: SpeedRamp, x: number, strength: number): number {
  * Tempo-Rampe: Clip in `pieces` Stücke mit stufenweise wechselndem Tempo teilen. Die Gesamtlänge auf der
  * Timeline und der benutzte Quellbereich bleiben gleich – nachfolgende Clips verschieben sich nicht.
  */
-export function speedRampPieces(c: Clip, ramp: SpeedRamp, strength: number, pieces = 16): Clip[] {
+export function speedRampPieces(c: Clip, ramp: SpeedRamp, strength: number, pieces = 16, center = 0.5): Clip[] {
   const D = clipDuration(c);
   const n = Math.max(4, Math.min(48, pieces));
-  const r = Array.from({ length: n }, (_, i) => rampProfile(ramp, (i + 0.5) / n, strength));
+  const r = Array.from({ length: n }, (_, i) => rampProfile(ramp, (i + 0.5) / n, strength, center));
   const sum = r.reduce((a, b) => a + b, 0);
   const srcLen = c.out - c.in;
   const k = (n * srcLen) / (D * sum);   // Grundtempo, damit die Quelle genau aufgebraucht wird

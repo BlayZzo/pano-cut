@@ -94,6 +94,7 @@ function ffColor(hex: string, alpha = 1): string {
 }
 
 export class ExportJob {
+  private labelSeq = 0;
   private controller = new AbortController();
   private tempDir: string;
   private tmpCounter = 0;
@@ -451,6 +452,15 @@ export class ExportJob {
       if (fx.blur > 0.01) color.push(`gblur=sigma=${fnum(fx.blur * 0.02 * H)}`);
       if (fx.vignette > 0.01 && !alphaSrc) color.push(`vignette=angle=${fnum(0.15 + fx.vignette * 0.95)}`);
       if (fx.grain > 0.01 && !alphaSrc) color.push(`noise=alls=${Math.round(fx.grain * 28)}:allf=t`);
+      // Bewegungsunschärfe, Leuchtspuren, Glühen (Vorschau: engine temporalFx)
+      const mb = fx.motionBlur ?? 0, tr = fx.trails ?? 0, gl = fx.glow ?? 0;
+      if (mb > 0.01) color.push(`tmix=frames=${Math.round(2 + 6 * mb)}`);
+      if (tr > 0.01) color.push('format=gbrp', `lagfun=decay=${fnum(0.86 + 0.12 * tr)}`);
+      if (gl > 0.01) {
+        const id = `gl${++this.labelSeq}`;
+        const bright = "'clip((val-170)*3,0,255)'";
+        color.push(`format=gbrp,split[${id}a][${id}b];[${id}b]lutrgb=r=${bright}:g=${bright}:b=${bright},gblur=sigma=${fnum(H * 0.012 * (0.6 + gl))}[${id}g];[${id}a][${id}g]blend=all_mode=screen:all_opacity=${fnum(Math.min(1, 0.4 + 0.6 * gl))}`);
+      }
     }
     // Green Screen
     if (c.chroma?.enabled && !opts.forTransition) {
@@ -869,7 +879,7 @@ export class ExportJob {
       else args.push('-ss', fnum(tr.srcB), '-t', fnum(winB), '-i', tr.b.file);
       tr.inputB = inputCount++;
     }
-    const wantAudio = o.codec !== 'gif' && pass.pass !== 1; // Durchgang 1 analysiert nur das Bild
+    const wantAudio = o.codec !== 'gif' && o.codec !== 'jpeg' && pass.pass !== 1; // Durchgang 1 analysiert nur das Bild
     const silenceIdx = inputCount;
     if (wantAudio) args.push('-f', 'lavfi', '-t', fnum(total), '-i', 'anullsrc=r=48000:cl=stereo');
 
@@ -1013,7 +1023,7 @@ export class ExportJob {
         last = outLabel2;
       }
     }
-    const finalPix = o.codec === 'prores' ? 'yuv422p10le' : 'yuv420p';
+    const finalPix = o.codec === 'prores' ? 'yuv422p10le' : o.codec === 'jpeg' ? 'yuvj444p' : 'yuv420p';
     if (o.codec === 'gif') {
       filters.push(`[${last}]format=rgb24,split[gifa][gifb];[gifa]palettegen=stats_mode=diff[pal];[gifb][pal]paletteuse=dither=bayer:bayer_scale=4:diff_mode=rectangle[vout]`);
     } else {
@@ -1061,7 +1071,7 @@ export class ExportJob {
       } else {
         finalLabels.push(...[...audioLabels, ...ducked.map((d) => d.label)].map((l) => `[${l}]`));
       }
-      filters.push(`${finalLabels.join('')}amix=inputs=${finalLabels.length}:duration=first:normalize=0,aformat=sample_fmts=fltp:channel_layouts=stereo[aout]`);
+      filters.push(`${finalLabels.join('')}amix=inputs=${finalLabels.length}:duration=first:normalize=0${this.options.loudness ? `,loudnorm=I=${fnum(Math.max(-30, Math.min(-8, this.options.loudness)))}:TP=-1.5:LRA=11,aresample=48000` : ''},aformat=sample_fmts=fltp:channel_layouts=stereo[aout]`);
     }
 
     const graphFile = this.tmpFile(`graph_${pass.pass ?? 0}.txt`);
@@ -1121,6 +1131,10 @@ export class ExportJob {
         break;
       case 'gif':
         break;
+      case 'jpeg':
+        // Einzelbild (Vorschaubild / Cover)
+        args.push('-c:v', 'mjpeg', '-q:v', '2', '-frames:v', '1', '-update', '1', o.outputPath);
+        return args;
     }
     if (pass.pass && pass.logFile) {
       args.push('-pass', String(pass.pass), '-passlogfile', pass.logFile);

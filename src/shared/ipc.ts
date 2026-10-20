@@ -54,6 +54,21 @@ export interface PanoCutApi {
   vfxEnd(jobId: string): Promise<MediaItem>;
   vfxCancel(jobId: string): Promise<void>;
 
+  // Analysen (Hook-Finder, Grobschnitt) – nur auf Knopfdruck
+  motionCurve(path: string, start: number, duration: number): Promise<{ values: number[]; hop: number }>;
+  silences(path: string, start: number, duration: number, thresholdDb?: number, minDur?: number): Promise<Array<{ start: number; end: number }>>;
+  blurCurve(path: string, start: number, duration: number): Promise<{ values: number[]; hop: number }>;
+
+  // Ordner beobachten & Speicher
+  setWatchFolder(dir: string | null): Promise<{ ok: boolean; message?: string }>;
+  onWatchNew(cb: (files: string[]) => void): () => void;
+  selectFolder(title: string): Promise<string | null>;
+  storageInfo(): Promise<import('./types').StorageInfo>;
+  cleanStorage(mode: 'old' | 'unused' | 'all', keepMediaPaths: string[]): Promise<{ freedBytes: number }>;
+
+  // Sound-Effekte
+  renderSfx(id: string, params: Partial<import('./sfx').SfxParams>): Promise<string>;
+
   // Ton-Analyse: Takt (Auto-Musik-Schnitt), Hüllkurve (Mehrkamera-Sync)
   analyzeBeats(path: string): Promise<BeatInfo>;
   audioEnvelope(path: string, start?: number, duration?: number): Promise<{ env: number[]; hop: number }>;
@@ -132,6 +147,15 @@ export const IPC = {
   vfxEnd: 'vfx:end',
   vfxCancel: 'vfx:cancel',
   analyzeBeats: 'audio:beats',
+  renderSfx: 'sfx:render',
+  setWatchFolder: 'watch:set',
+  watchNew: 'watch:new',
+  selectFolder: 'fs:selectFolder',
+  storageInfo: 'storage:info',
+  cleanStorage: 'storage:clean',
+  motionCurve: 'an:motion',
+  silences: 'an:silences',
+  blurCurve: 'an:blur',
   audioEnvelope: 'audio:envelope',
 
   cloudTest: 'cloud:test',

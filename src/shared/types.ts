@@ -277,6 +277,9 @@ export interface ImageFx {
   denoise: number;    // 0..1
   blur: number;       // 0..1
   grain: number;      // 0..1
+  glow?: number;        // 0..1 Glühen um helle Stellen (Bloom)
+  trails?: number;      // 0..1 Leuchtspuren: helle Stellen ziehen Spuren (FFmpeg lagfun)
+  motionBlur?: number;  // 0..1 Bewegungsunschärfe (mehrere Bilder gemittelt, FFmpeg tmix)
   mirror: boolean;    // horizontal spiegeln
   flip: boolean;      // vertikal spiegeln
 }
@@ -439,6 +442,7 @@ export interface Project {
   id: string;
   name: string;
   settings: ProjectSettings;
+  defaults?: ProjectDefaults;
   media: Record<string, MediaItem>;
   tracks: Track[];
   clips: Record<string, Clip>;
@@ -507,8 +511,8 @@ export interface ProjectFile {
 
 // ---------- Export ----------
 
-export type ExportFormat = 'mp4' | 'mov' | 'webm' | 'gif';
-export type ExportCodec = 'h264' | 'h265' | 'prores' | 'vp9' | 'gif';
+export type ExportFormat = 'mp4' | 'mov' | 'webm' | 'gif' | 'jpg';
+export type ExportCodec = 'h264' | 'h265' | 'prores' | 'vp9' | 'gif' | 'jpeg';
 export type ExportQuality = 'low' | 'medium' | 'high' | 'max';
 
 export interface ExportOptions {
@@ -524,17 +528,20 @@ export interface ExportOptions {
   range?: { start: number; end: number };
   maxSizeMB?: number;      // Ziel: Datei nicht größer als … (Bitrate wird berechnet)
   spherical?: boolean;     // 360°-Metadaten einfügen (YouTube/Facebook erkennen das Video als Panorama)
+  loudness?: number;       // Ziel-Lautheit in LUFS (z. B. −14 für Social Media); leer = unverändert
+  name?: string;           // Anzeigename in der Export-Warteschlange
 }
 
 export interface ExportProgress {
   jobId: string;
-  phase: 'preparing' | 'rendering' | 'done' | 'error' | 'cancelled';
+  phase: 'queued' | 'preparing' | 'rendering' | 'done' | 'error' | 'cancelled';
   percent: number;
   fps?: number;
   speed?: string;
   eta?: number;
   message?: string;
   outputPath?: string;
+  name?: string;
 }
 
 // ---------- Updates ----------
@@ -579,8 +586,36 @@ export const DEFAULT_VIEW: ViewSettings = {
   trackSize: 'medium', thumbnails: true, waveforms: true, followPlayhead: true,
 };
 
+/** Vorgaben eines Projekts (aus einer Vorlage): neue Clips bekommen diesen Look, Untertitel diesen Stil. */
+export interface ProjectDefaults {
+  color?: Partial<ColorGrade>;
+  fx?: Partial<ImageFx>;
+  subtitlePreset?: string;          // id aus SUBTITLE_PRESETS
+  subtitleSpoken?: 'de' | 'en' | 'auto';
+  subtitleShow?: 'original' | 'both' | 'translation';
+  exportPreset?: string;            // id aus EXPORT_PRESETS
+}
+
+/** Projekt-Vorlage: Format, Vorgaben und optional ein Intro (Clips am Anfang). */
+export interface ProjectTemplate {
+  id: string;
+  name: string;
+  createdAt: number;
+  settings: ProjectSettings;
+  defaults: ProjectDefaults;
+  intro?: { clips: Clip[]; media: MediaItem[]; tracks: Track[]; duration: number };
+}
+
+export interface StorageInfo {
+  cacheBytes: number; cacheItems: number; oldBytes: number;
+  soundsBytes: number; effectsBytes: number; modelsBytes: number;
+}
+
 export interface Settings {
   view?: Partial<ViewSettings>;
+  watchFolder?: string;        // beobachteter Ordner (neue Dateien werden gemeldet)
+  watchEnabled?: boolean;
+  templates?: ProjectTemplate[];
   cloud?: CloudSettings;
   translateUrl?: string;      // eigener LibreTranslate-Server (optional)
   translateKey?: string;

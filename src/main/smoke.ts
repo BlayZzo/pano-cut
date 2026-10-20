@@ -18,6 +18,12 @@ import { analyzeBeats, audioEnvelope } from './audio';
 import { stopTranslators, translateLocal } from './mt';
 import { correlateEnvelopes } from '@shared/multicam';
 import { SUBTITLE_PRESETS } from '@shared/subtitles';
+import { SFX } from '@shared/sfx';
+import { NEUTRAL_FX } from '@shared/effects';
+import { insertAtStart, rippleCut } from '@shared/edit';
+import { clipDuration } from '@shared/timeline';
+import { renderSfxFile } from './sfx';
+import { motionCurve, silences } from './analysis';
 
 export async function runSmokeTest(): Promise<number> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'panocut-smoke-'));
@@ -306,6 +312,71 @@ export async function runSmokeTest(): Promise<number> {
       if (!(y3.cx > y1.cx + 60)) throw new Error('Hervorhebung wandert nicht mit');
       log('Social-Untertitel ok');
     }
+
+    // v0.8: Sounds, Licht-Effekte, Lautheit, Vorschaubild, Schnitt-Werkzeuge, Analysen
+    step('v0.8: Sound-Effekte …');
+    {
+      const t0 = Date.now();
+      let n = 0;
+      for (const sd of SFX) {
+        const f = renderSfxFile(sd.id, { length: 1, pitch: 0, intensity: 1, seed: 1 });
+        const pr = await probeFile(f);
+        if (Math.abs((pr.format.duration ?? 0) - sd.duration) > 0.15) throw new Error(`Sound ${sd.id}: falsche Länge ${pr.format.duration}`);
+        n++;
+      }
+      log(`Sounds: ${n} erzeugt (${Date.now() - t0} ms)`);
+    }
+    step('v0.8: Glühen, Leuchtspuren, Bewegungsunschärfe, Lautheit …');
+    {
+      const lp = createProject('SmokeLight', 640, 360, 30);
+      lp.media[vid.id] = vid; lp.media[mus.id] = mus;
+      const lv = lp.tracks.filter((t) => t.kind === 'video');
+      const la = lp.tracks.filter((t) => t.kind === 'audio');
+      const l1 = createClip(vid, lv[1].id, 0); l1.out = 2; l1.fx = { ...NEUTRAL_FX, glow: 0.7, trails: 0.6, motionBlur: 0.5 };
+      l1.color = { ...l1.color, look: 'night' };
+      const l2 = createClip(mus, la[0].id, 0); l2.out = 2;
+      lp.clips[l1.id] = l1; lp.clips[l2.id] = l2;
+      const outL = path.join(dir, 'export_light.mp4');
+      await new ExportJob(lp, { ...options, outputPath: outL, loudness: -14 }, (p) => { if (p.phase === 'error') log(' Fehler:', p.message); }).run();
+      const prL = await probeFile(outL);
+      if (Math.abs((prL.format.duration ?? 0) - 2) > 0.2) throw new Error(`Licht-Effekte: falsche Länge ${prL.format.duration}`);
+      const eb = await runFfmpeg(['-i', outL, '-vn', '-af', 'ebur128', '-f', 'null', '-']);
+      const I = parseFloat(/I:\s+(-?[\d.]+) LUFS/.exec(eb.slice(eb.lastIndexOf('Summary')))?.[1] ?? 'NaN');
+      log(`Licht-Effekte ok · Lautheit ${I} LUFS`);
+      if (!(I > -18 && I < -10)) throw new Error(`Lautheit nicht angeglichen (${I} LUFS)`);
+      // Vorschaubild (JPEG) bei 1 s mit Titel
+      const outJ = path.join(dir, 'cover.jpg');
+      const cp = structuredClone(lp);
+      const tc = createTitleClip(lv[0].id, 0.5, { ...defaultTitle(), text: 'COVER' }, 1);
+      cp.clips[tc.id] = tc;
+      await new ExportJob(cp, { ...options, outputPath: outJ, format: 'jpg', codec: 'jpeg', quality: 'max', range: { start: 1, end: 1.2 } }, () => undefined).run();
+      const prJ = await probeFile(outJ);
+      const vs = prJ.streams.find((x) => x.codec_type === 'video');
+      log(`Vorschaubild: ${vs?.width}x${vs?.height} ${fs.statSync(outJ).size} Bytes`);
+      if (vs?.width !== 640 || vs?.height !== 360) throw new Error('Vorschaubild hat falsche Größe');
+    }
+    step('v0.8: Schnitt-Werkzeuge und Analysen …');
+    {
+      const ep = createProject('SmokeEdit', 640, 360, 30);
+      ep.media[vid.id] = vid; ep.media[mus.id] = mus;
+      const ev = ep.tracks.filter((t) => t.kind === 'video');
+      const ea = ep.tracks.filter((t) => t.kind === 'audio');
+      const e1 = createClip(vid, ev[1].id, 0); e1.out = 4;
+      const e2 = createClip(mus, ea[0].id, 0); e2.out = 6;
+      ep.clips[e1.id] = e1; ep.clips[e2.id] = e2;
+      const cut = rippleCut(ep, [{ start: 1, end: 2 }], new Set([ev[1].id]));
+      const vidPieces = cut.filter((c) => c.trackId === ev[1].id).sort((a, b) => a.start - b.start);
+      const total = vidPieces.reduce((s2, c) => s2 + clipDuration(c), 0);
+      if (vidPieces.length !== 2 || Math.abs(total - 3) > 0.02 || Math.abs(vidPieces[1].start - 1) > 0.01) throw new Error(`Grobschnitt falsch: ${vidPieces.map((c) => `${c.start}+${clipDuration(c)}`).join(', ')}`);
+      if (cut.find((c) => c.id === e2.id)?.start !== 0) throw new Error('Musik wurde verschoben');
+      const ins = insertAtStart(ep, ev[1].id, 2, 3);
+      if (ins.length !== 3 || Math.min(...ins.map((c) => c.start)) !== 0 || ins.find((c) => c.id === e1.id)?.start !== 1) throw new Error('Hook einfügen falsch');
+      const mc = await motionCurve(video, 0, 4);
+      const sil = await silences(music, 0, 6);
+      log(`Schnitt ok · Bewegung ${mc.values.length} Werte (Mittel ${(mc.values.reduce((a, b) => a + b, 0) / Math.max(1, mc.values.length)).toFixed(3)}) · Pausen in Musik: ${sil.length}`);
+      if (mc.values.length < 10) throw new Error('Bewegungsanalyse liefert zu wenig Werte');
+    }
+    log('v0.8 ok');
 
     // KI: Erkennung und Maske. In der CI liegt ein Testbild (Hund, Fahrrad, Auto) unter PANOCUT_TEST_IMAGE.
     if (aiAvailable()) {

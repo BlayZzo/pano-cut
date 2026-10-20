@@ -73,7 +73,9 @@ export function InspectorSubtitles({ clip, media }: { clip: Clip; media: MediaIt
   const fps = useProject((s) => s.project.settings.fps);
   const toast = useUi((s) => s.toast);
   const [status, setStatus] = useState<{ available: boolean; models: Record<WhisperModel, boolean> } | null>(null);
-  const [opts, setOpts] = useState(lastSubSettings);
+  const projDefaults = useProject((s) => s.project.defaults);
+  // Vorgaben aus der Projekt-Vorlage (falls vorhanden)
+  const [opts, setOpts] = useState(() => ({ ...lastSubSettings, ...(projDefaults?.subtitleSpoken ? { spoken: projDefaults.subtitleSpoken } : {}), ...(projDefaults?.subtitleShow ? { show: projDefaults.subtitleShow as ShowMode } : {}), ...(projDefaults?.subtitlePreset ? { preset: projDefaults.subtitlePreset } : {}) }));
   const [progress, setProgress] = useState<WhisperProgress | null>(null);
   const [busy, setBusy] = useState(false);
   const [custom, setCustom] = useState(false);

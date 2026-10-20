@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import type { ExportCodec, ExportFormat, ExportOptions, ExportQuality } from '@shared/types';
-import { CODEC_NAMES, EXPORT_PRESETS, FORMAT_CODECS, QUALITY_NAMES } from '@shared/presets';
+import { CODEC_NAMES, EXPORT_PRESETS, EXPORT_PRESET_GROUPS, FORMAT_CODECS, QUALITY_NAMES, type ExportPresetGroup } from '@shared/presets';
 import { formatBytes, formatDuration, projectDuration } from '@shared/timeline';
 import { useProject } from '../store/project';
 import { useUi } from '../store/ui';
 import { stopPlayback } from '../engine/instance';
-import { t } from '../i18n/de';
+import { fmt, t } from '../i18n/de';
 import { IconClose } from './Icons';
 
 export function ExportDialog(): React.ReactElement {
@@ -13,13 +13,14 @@ export function ExportDialog(): React.ReactElement {
   const close = () => useUi.getState().openDialog('none');
   const appInfo = useUi((s) => s.appInfo);
   const settings = useUi((s) => s.settings);
-  const progress = useUi((s) => s.exportProgress);
-  const setProgress = useUi((s) => s.setExportProgress);
   const rangeIn = useUi((s) => s.rangeIn);
   const rangeOut = useUi((s) => s.rangeOut);
   const toast = useUi((s) => s.toast);
 
-  const [presetId, setPresetId] = useState('hd');
+  const portrait = project.settings.height > project.settings.width;
+  const defPreset = EXPORT_PRESETS.find((p) => p.id === project.defaults?.exportPreset);
+  const [presetId, setPresetId] = useState(defPreset?.id ?? (portrait ? 'reels' : 'hd'));
+  const [group, setGroup] = useState<ExportPresetGroup>(defPreset?.group ?? (portrait ? 'social' : 'video'));
   const preset = EXPORT_PRESETS.find((p) => p.id === presetId)!;
   const [width, setWidth] = useState(preset.width);
   const [height, setHeight] = useState(preset.height);
@@ -33,6 +34,8 @@ export function ExportDialog(): React.ReactElement {
   const [spherical, setSpherical] = useState(!!project.settings.is360);
   const [outputPath, setOutputPath] = useState<string | null>(null);
   const [jobId, setJobId] = useState<string | null>(null);
+  const progress = useUi((s) => (jobId ? s.exportJobs[jobId] ?? null : null));
+  const [loudness, setLoudness] = useState<number | null>(preset.loudness ?? null);
   const [photosState, setPhotosState] = useState<'idle' | 'busy' | 'done' | 'error'>('idle');
   const [cloudState, setCloudState] = useState<'idle' | 'busy' | 'done'>('idle');
   const uploadToCloud = async () => {
@@ -53,13 +56,13 @@ export function ExportDialog(): React.ReactElement {
     if (id === 'custom') { setWidth(project.settings.width); setHeight(project.settings.height); setFps(project.settings.fps); }
     else { setWidth(p.width); setHeight(p.height); setFps(p.fps); }
     setFormat(p.format); setCodec(p.codec); setQuality(p.quality);
+    setLoudness(p.loudness ?? null);
   };
 
   useEffect(() => {
     if (!FORMAT_CODECS[format].includes(codec)) setCodec(FORMAT_CODECS[format][0]);
   }, [format]);
 
-  useEffect(() => { setProgress(null); return () => { /* Fortschritt bleibt sichtbar bis zum Schließen */ }; }, []);
 
   const duration = useMemo(() => {
     const total = projectDuration(project);
@@ -91,6 +94,8 @@ export function ExportDialog(): React.ReactElement {
       range: useRange && rangeIn !== null && rangeOut !== null ? { start: rangeIn, end: rangeOut } : undefined,
       maxSizeMB: isFinite(maxSizeMB) && maxSizeMB > 0 ? maxSizeMB : undefined,
       spherical: spherical && (presetId === 'pano' || Math.abs(width / height - 2) < 0.02),
+      loudness: loudness ?? undefined,
+      name: out.split(/[\\/]/).pop(),
     };
     setPhotosState('idle');
     const id = await window.panocut.startExport(project, options);
@@ -107,26 +112,29 @@ export function ExportDialog(): React.ReactElement {
     if (r.ok) toast(t.export.photosDone, 'success'); else toast(r.message ?? 'Fehler', 'error');
   };
 
-  const busy = progress && (progress.phase === 'preparing' || progress.phase === 'rendering');
+  const busy = progress && (progress.phase === 'queued' || progress.phase === 'preparing' || progress.phase === 'rendering');
   const done = progress?.phase === 'done';
   const failed = progress?.phase === 'error';
   const isCustom = presetId === 'custom';
   const empty = projectDuration(project) <= 0;
 
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget && !busy) close(); }}>
+    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) close(); }}>
       <div className="modal wide">
         <div className="modal-header">
           <span>{t.export.title}</span>
-          <button className="btn icon ghost" onClick={close} disabled={!!busy}><IconClose /></button>
+          <button className="btn icon ghost" onClick={close}><IconClose /></button>
         </div>
         <div className="modal-body">
           {!busy && !done && (
             <>
               <div>
                 <div className="hint" style={{ marginBottom: 8, fontSize: 12 }}>{t.export.preset}</div>
+                <div className="library-filters" style={{ padding: '0 0 8px' }}>
+                  {EXPORT_PRESET_GROUPS.map((g) => <button key={g.id} className={`chip${group === g.id ? ' active' : ''}`} onClick={() => setGroup(g.id)}>{g.name}</button>)}
+                </div>
                 <div className="preset-list">
-                  {EXPORT_PRESETS.map((p) => (
+                  {EXPORT_PRESETS.filter((p) => p.group === group).map((p) => (
                     <div key={p.id} className={`preset${presetId === p.id ? ' active' : ''}`} onClick={() => selectPreset(p.id)}>
                       <div className="name">{p.name}</div>
                       <div className="desc">{p.description}</div>
@@ -185,6 +193,17 @@ export function ExportDialog(): React.ReactElement {
                     <label className="toggle"><input type="checkbox" checked={spherical} onChange={(e) => setSpherical(e.target.checked)} /> {t.exportExtra.spherical}</label>
                   </>
                 )}
+                {codec !== 'gif' && (
+                  <>
+                    <label>{t.exportExtra.loudness}</label>
+                    <select value={loudness === null ? '' : String(loudness)} onChange={(e) => setLoudness(e.target.value === '' ? null : Number(e.target.value))}>
+                      <option value="">{t.exportExtra.loudnessOff}</option>
+                      <option value="-14">{t.exportExtra.loudnessSocial}</option>
+                      <option value="-16">{t.exportExtra.loudnessPodcast}</option>
+                      <option value="-23">{t.exportExtra.loudnessTv}</option>
+                    </select>
+                  </>
+                )}
                 <label>{t.export.outputTo}</label>
                 <div className="inline">
                   <span className="hint" style={{ flex: 1, wordBreak: 'break-all' }}>{outputPath ?? `… /${safeName}.${format}`}</span>
@@ -194,13 +213,14 @@ export function ExportDialog(): React.ReactElement {
               <div className="hint">
                 {t.export.estimatedSize}: ~{formatBytes(estSize)} · {formatDuration(duration)} · {width}×{height} @ {fps} fps
               </div>
+              {preset.maxSeconds && duration > preset.maxSeconds && <div className="hint warn">{fmt(t.exportExtra.tooLong, { name: preset.name, max: formatDuration(preset.maxSeconds) })}</div>}
               {failed && <div className="error-box">{progress?.message}</div>}
             </>
           )}
 
           {busy && (
             <div>
-              <div style={{ marginBottom: 8, fontWeight: 600 }}>{progress?.message ?? t.export.rendering}</div>
+              <div style={{ marginBottom: 8, fontWeight: 600 }}>{progress?.phase === 'queued' ? t.exportExtra.queued : progress?.message ?? t.export.rendering}</div>
               <div className="progress"><div style={{ width: `${progress?.percent ?? 0}%` }} /></div>
               <div className="progress-text">
                 <span>{progress?.percent ?? 0} %{progress?.fps ? ` · ${Math.round(progress.fps)} fps` : ''}{progress?.speed ? ` · ${progress.speed}` : ''}</span>
@@ -230,7 +250,10 @@ export function ExportDialog(): React.ReactElement {
         </div>
         <div className="modal-footer">
           {busy ? (
-            <button className="btn danger" onClick={cancel}>{t.export.cancel}</button>
+            <>
+              <button className="btn danger" onClick={cancel}>{t.export.cancel}</button>
+              <button className="btn primary" onClick={close} title={t.exportExtra.backgroundHint}>{t.exportExtra.background}</button>
+            </>
           ) : done ? (
             <button className="btn primary" onClick={close}>{t.export.close}</button>
           ) : (

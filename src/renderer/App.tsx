@@ -12,6 +12,7 @@ import { Toasts } from './components/Toasts';
 import { UpdateBanner } from './components/UpdateBanner';
 import { useUi, useView } from './store/ui';
 import { Splitter } from './components/Splitter';
+import { ToolsDialog, WatchBanner } from './components/ToolsDialog';
 import { onDirtyChange, untracked, useProject, isDirty } from './store/project';
 import { useKeyboard } from './hooks/useKeyboard';
 import {
@@ -117,6 +118,8 @@ export function App(): React.ReactElement {
       {dialog === 'newProject' && <NewProjectDialog />}
       {dialog === 'shortcuts' && <ShortcutsDialog />}
       {dialog === 'about' && <AboutDialog />}
+      {dialog === 'tools' && <ToolsDialog />}
+      <WatchBanner />
     </div>
   );
 }

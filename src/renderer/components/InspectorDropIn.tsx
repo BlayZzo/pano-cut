@@ -6,7 +6,7 @@ import { t } from '../i18n/de';
 import { Section, SelectField, Toggle } from './InspectorBits';
 import { dropObjectIn } from '../vfx/actions';
 
-let last = { style: 'dropin' as EntranceStyle, strength: 1, dust: true, shake: true };
+let last = { style: 'dropin' as EntranceStyle, strength: 1, dust: true, shake: true, sound: '' };
 
 /** Freigestelltes Objekt mit Effekt ins Video fallen lassen. */
 export function InspectorDropIn({ clip }: { clip: Clip }): React.ReactElement {
@@ -40,6 +40,12 @@ export function InspectorDropIn({ clip }: { clip: Clip }): React.ReactElement {
       </div>
       {hasImpact && <Toggle label={t.dropIn.dust} checked={o.dust} onChange={(v) => upd({ dust: v })} />}
       <Toggle label={t.dropIn.shake} checked={o.shake} onChange={(v) => upd({ shake: v })} />
+      <SelectField label={t.dropIn.sound} value={o.sound} onChange={(v) => upd({ sound: v })} options={[
+        { value: '', label: t.dropIn.soundNone },
+        ...(hasImpact
+          ? [{ value: 'boom', label: 'Boom (Bass-Einschlag)' }, { value: 'hit', label: 'Schlag' }, { value: 'crack', label: 'Knall' }, { value: 'metal', label: 'Metall-Klirren' }]
+          : [{ value: 'whoosh', label: 'Whoosh' }, { value: 'passby', label: 'Vorbeifahrt (Auto)' }, { value: 'swoosh-deep', label: 'Tiefer Swoosh' }]),
+      ]} />
       <button className="btn primary" style={{ width: '100%' }} disabled={!!busy} onClick={() => void apply()}>{busy ?? t.dropIn.apply}</button>
       <div className="hint">{t.dropIn.hint}</div>
     </Section>

@@ -73,6 +73,11 @@ export function addMediaToTimeline(media: MediaItem, at?: number): void {
     if (last && start < clipEnd(last)) start = clipEnd(last);
   }
   const clip = store.addClip(media.id, track.id, start);
+  // Vorgaben aus der Projekt-Vorlage (Look, Bild-Effekte) auf neue Bild-/Video-Clips anwenden
+  const d = project.defaults;
+  if (clip && d && media.type !== 'audio' && (d.color || d.fx)) {
+    untracked(() => useProject.getState().updateClip(clip.id, { color: { ...clip.color, ...(d.color ?? {}) }, fx: d.fx ? { ...(clip.fx ?? {}), ...d.fx } as Clip['fx'] : clip.fx }));
+  }
   if (clip) useUi.getState().select([clip.id]);
 }
 
@@ -360,3 +365,31 @@ export function toggleAiPanel(): void {
 }
 
 export { engine };
+
+// ---------- Sound-Effekte ----------
+
+/** Freie Tonspur für [t, t+dur] finden – sonst eine neue Spur „Sounds“ anlegen. */
+export function freeAudioTrack(t0: number, dur: number): string {
+  const store = useProject.getState();
+  const p = store.project;
+  const free = p.tracks.filter((tr) => tr.kind === 'audio' && !tr.locked)
+    .find((tr) => clipsOnTrack(p, tr.id).every((c) => clipEnd(c) <= t0 + 1e-3 || c.start >= t0 + dur - 1e-3));
+  return free ? free.id : store.addAudioTrack(t.sfx.trackName);
+}
+
+/** Sound berechnen (falls nötig), in die Mediathek legen und am Abspielkopf (oder `at`) einfügen. */
+export async function insertSfx(id: string, params: Partial<import('@shared/sfx').SfxParams>, at?: number): Promise<string | null> {
+  const file = await api().renderSfx(id, params);
+  let media = Object.values(useProject.getState().project.media).find((m) => m.path === file);
+  if (!media) {
+    const [item] = await api().importMedia([file]);
+    if (!item) return null;
+    untracked(() => useProject.getState().addMedia([item]));
+    void api().prepareMedia(item);
+    media = item;
+  }
+  const start = Math.max(0, at ?? useUi.getState().playhead);
+  const trackId = freeAudioTrack(start, media.info.duration || 1);
+  const clip = useProject.getState().addClip(media.id, trackId, start);
+  return clip?.id ?? null;
+}
