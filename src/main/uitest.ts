@@ -110,14 +110,39 @@ export async function runUiTest(win: BrowserWindow): Promise<number> {
     out('Einzelbild für KI:', JSON.stringify(grab));
     if (!grab.ok || grab.mean < 20) failures.push(`Einzelbild für KI fehlgeschlagen: ${grab.msg ?? grab.mean}`);
 
-    // Wiedergabe: läuft das Bild weiter?
+    // Wiedergabe: läuft das Bild gleichmäßig weiter (kein Zurückspringen, keine schwarzen Bilder, kaum Nachstellen)?
     const play = await win.webContents.executeJavaScript(`(async () => {
       const T = window.__pcTest;
-      T.engine.seek(0.2); T.engine.play();
-      await new Promise((r) => setTimeout(r, 1500));
-      const at = T.engine.current ?? 0; T.engine.pause();
-      return { at };
+      const e = T.engine;
+      let seeks = 0;
+      const els = [...e.slots.values()].map((s) => s.el).filter((el) => el instanceof HTMLVideoElement);
+      const onSeek = () => seeks++;
+      e.seek(0.2);
+      await new Promise((r) => setTimeout(r, 600));
+      for (const el of els) el.addEventListener('seeking', onSeek);
+      e.play();
+      const c = document.querySelector('.preview-stage canvas');
+      const x = c.getContext('2d');
+      let back = 0, black = 0, n = 0, last = e.time;
+      const t0 = performance.now();
+      while (performance.now() - t0 < 2500) {
+        await new Promise((r) => setTimeout(r, 50));
+        const now = e.time;
+        if (now < last - 0.02) back++;
+        last = now;
+        const d = x.getImageData(c.width / 2 - 20, c.height / 2 - 20, 40, 40).data;
+        let s = 0; for (let i = 0; i < d.length; i += 4) s += d[i] + d[i + 1] + d[i + 2];
+        if (s / (d.length / 4) / 3 < 12) black++;
+        n++;
+      }
+      const at = e.time; e.pause();
+      for (const el of els) el.removeEventListener('seeking', onSeek);
+      return { at, back, black, samples: n, seeks };
     })()`);
+    if (play.back > 0) failures.push(`Wiedergabe springt zurück (${play.back}×)`);
+    if (play.black > 1) failures.push(`Schwarze Bilder beim Abspielen (${play.black}×)`);
+    if (play.seeks > 2) failures.push(`Video wird beim Abspielen ständig nachgestellt (${play.seeks}×)`);
+    if (play.at < 1.8) failures.push(`Wiedergabe zu langsam (bei ${play.at.toFixed(2)} s statt ~2,7 s)`);
     out('Wiedergabe:', JSON.stringify(play));
     // v0.8: Sound einfügen (echte Berechnung im Hauptprozess) und Werkzeug-Fenster öffnen
     const sfx = await win.webContents.executeJavaScript(`(async () => {

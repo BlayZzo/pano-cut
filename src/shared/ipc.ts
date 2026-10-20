@@ -3,6 +3,7 @@ import type { AiDetectModel, AiProgress, AiSegmentModel, AppInfo, CloudSettings,
 
 export interface FramePayload { data: Uint8Array; width: number; height: number }
 export interface MaskPayload { width: number; height: number; alpha: Uint8Array }
+export interface PrepQueueEntry { id: string; stage: 'quick' | 'heavy'; running: boolean }
 export interface CloudEntry { name: string; path: string; size: number; isDir: boolean; modified?: string }
 
 /** Die API, die das Preload-Skript der Oberfläche als `window.panocut` bereitstellt. */
@@ -26,6 +27,11 @@ export interface PanoCutApi {
   importMedia(paths: string[]): Promise<MediaItem[]>;
   prepareMedia(item: MediaItem, options?: { reversed?: boolean; stabilized?: number }): Promise<void>;
   onMediaUpdate(cb: (item: MediaItem) => void): () => void;
+  /** Vorbereitungs-Warteschlange: Reihenfolge ändern, überspringen, beobachten */
+  prepReorder(ids: string[]): Promise<void>;
+  prepSkip(id: string): Promise<void>;
+  prepQueueGet(): Promise<PrepQueueEntry[]>;
+  onPrepQueue(cb: (q: PrepQueueEntry[]) => void): () => void;
 
   // Untertitel
   whisperStatus(): Promise<{ available: boolean; models: Record<WhisperModel, boolean> }>;
@@ -118,6 +124,10 @@ export const IPC = {
   importMedia: 'media:import',
   prepareMedia: 'media:prepare',
   mediaUpdate: 'media:update',
+  prepQueue: 'media:prepQueue',
+  prepReorder: 'media:prepReorder',
+  prepSkip: 'media:prepSkip',
+  prepQueueGet: 'media:prepQueueGet',
 
   newProjectDialog: 'project:newDialog',
   saveProject: 'project:save',

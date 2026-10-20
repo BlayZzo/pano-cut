@@ -26,6 +26,8 @@ export interface UiState {
   playhead: number;
   playing: boolean;
   importing: number;
+  prepQueue: Array<{ id: string; stage: 'quick' | 'heavy'; running: boolean }>;
+  setPrepQueue(q: UiState['prepQueue']): void;
   toolsPage: string;
   setToolsPage(p: string): void;
   openTools(p?: string): void;
@@ -33,7 +35,8 @@ export interface UiState {
   setSettingsPage(p: string): void;
   inspectorTab: string;
   setInspectorTab(tab: string): void;      // Dateien, die gerade eingelesen werden
-  setImporting(n: number): void;
+  importingFiles: string[];
+  setImporting(n: number, files?: string[]): void;
   loop: boolean;
   zoom: number;           // Pixel pro Sekunde
   scrollX: number;
@@ -110,6 +113,8 @@ export const useUi = create<UiState>()((set, get) => ({
   playhead: 0,
   playing: false,
   importing: 0,
+  prepQueue: [],
+  setPrepQueue: (prepQueue) => set({ prepQueue }),
   toolsPage: 'reframe',
   setToolsPage: (toolsPage) => set({ toolsPage }),
   openTools: (p) => set((s) => ({ dialog: 'tools', toolsPage: p ?? s.toolsPage })),
@@ -117,7 +122,8 @@ export const useUi = create<UiState>()((set, get) => ({
   setSettingsPage: (settingsPage) => set({ settingsPage }),
   inspectorTab: 'clip',
   setInspectorTab: (inspectorTab) => set({ inspectorTab }),
-  setImporting: (importing) => set({ importing: Math.max(0, importing) }),
+  importingFiles: [],
+  setImporting: (importing, files) => set((s) => ({ importing: Math.max(0, importing), importingFiles: importing <= 0 ? [] : files ?? s.importingFiles })),
   loop: false,
   zoom: 60,
   scrollX: 0,

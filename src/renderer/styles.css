@@ -426,3 +426,22 @@ textarea:focus { border-color: var(--accent); }
 .result-list { display: flex; flex-direction: column; gap: 4px; max-height: 260px; overflow-y: auto; }
 .pill.reason-pause { background: #2b4a7a; } .pill.reason-blur { background: #6a4a1a; } .pill.reason-filler { background: #5a2a5a; }
 .watch-banner { position: fixed; left: 50%; transform: translateX(-50%); top: calc(var(--topbar-h) + 8px); z-index: 70; display: flex; align-items: center; gap: 10px; background: var(--panel-2); border: 1px solid var(--accent); border-radius: 10px; padding: 8px 12px; max-width: 70vw; box-shadow: 0 8px 24px rgba(0,0,0,0.5); }
+
+/* Vorbereitungs-Warteschlange */
+.prep-indicator-btn { display: inline-flex; align-items: center; gap: 8px; font-size: 12px; }
+.prep-indicator-btn .progress { display: inline-block; width: 90px; height: 4px; }
+.prep-indicator-btn .progress > span, .prep-row .progress > span { display: block; height: 100%; background: var(--accent); transition: width 0.3s; }
+.queue-list { display: flex; flex-direction: column; gap: 4px; min-width: 460px; max-height: 60vh; overflow-y: auto; }
+.prep-row { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 8px; background: var(--panel); }
+.prep-row.running { border-color: var(--accent); }
+.prep-row.over { border-top: 3px solid var(--accent); }
+.prep-row.dragging { opacity: 0.4; }
+.prep-row[draggable='true'] { cursor: grab; }
+.prep-handle { width: 14px; color: var(--text-dim); text-align: center; }
+.prep-thumb { width: 54px; height: 32px; border-radius: 4px; background: #000 center/cover no-repeat; flex: none; }
+.prep-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.prep-title { display: flex; gap: 6px; align-items: baseline; min-width: 0; }
+.prep-name { font-weight: 600; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.prep-status { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-dim); }
+.prep-row .progress { display: block; height: 4px; }
+.prep-actions { display: flex; gap: 2px; }

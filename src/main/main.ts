@@ -238,28 +238,99 @@ ipcMain.handle(IPC.importMedia, async (_e, paths: string[]) => {
 
 // Vorbereitung in zwei Warteschlangen: zuerst für alle Dateien die schnellen Vorschaubilder/Wellenformen,
 // danach nacheinander die Proxys – so erscheinen beim Import vieler Dateien sofort alle Vorschaubilder.
-let quickQueue: Promise<void> = Promise.resolve();
-// Vorschau-Dateien: auf dem Mac (Grafikchip) zwei gleichzeitig, sonst eine nach der anderen
-const HEAVY_SLOTS = process.platform === 'darwin' ? 2 : 1;
-let heavyRunning = 0;
-const heavyWaiting: Array<() => void> = [];
-async function heavySlot<T>(fn: () => Promise<T>): Promise<T> {
-  if (heavyRunning >= HEAVY_SLOTS) await new Promise<void>((r) => heavyWaiting.push(r));
-  heavyRunning++;
-  try { return await fn(); } finally { heavyRunning--; heavyWaiting.shift()?.(); }
+// Vorbereitungs-Warteschlange mit Reihenfolge: zuerst die schnellen Vorschaubilder, dann die Vorschau-Dateien.
+// Die Reihenfolge kann in der Oberfläche per Ziehen geändert werden (oben = als Nächstes).
+interface PrepJob {
+  id: string;                      // Medien-ID
+  item: MediaItem;
+  options?: { reversed?: boolean; stabilized?: number };
+  stage: 'quick' | 'heavy';
+  running: boolean;
+  skip?: boolean;                  // Vorschau-Datei überspringen
+  done: () => void;
 }
-ipcMain.handle(IPC.prepareMedia, async (_e, item: MediaItem, options?: { reversed?: boolean; stabilized?: number }) => {
+const prepJobs: PrepJob[] = [];
+const HEAVY_SLOTS = process.platform === 'darwin' ? 2 : 1;
+let quickRunning = false;
+let heavyRunning = 0;
+
+function broadcastPrepQueue(): void {
+  sendToWindow(IPC.prepQueue, prepJobs.map((j) => ({ id: j.id, stage: j.stage, running: j.running })));
+}
+
+function pumpPrep(): void {
   const settings = loadSettings();
   const proxyMode = settings.proxyMode ?? 'auto';
-  let latest = item;
-  const send = (updated: MediaItem) => { latest = updated; sendToWindow(IPC.mediaUpdate, updated); };
-  const quick = async () => { await prepareMedia(item, send, settings.proxyHeight, { ...options, stage: 'quick', proxyMode }); };
-  quickQueue = quickQueue.then(quick, quick);
-  await quickQueue.catch(() => undefined);
-  if (latest.status === 'error' || latest.type === 'image' || latest.type === 'audio') return;
-  if (latest.type === 'video' && latest.status !== 'ready') send({ ...latest, prep: { stage: 'waiting', percent: 0 } });
-  await heavySlot(() => prepareMedia(latest, send, settings.proxyHeight, { ...options, stage: 'heavy', proxyMode }));
+  // Schnelle Schritte: einer nach dem anderen
+  if (!quickRunning) {
+    const job = prepJobs.find((j) => j.stage === 'quick' && !j.running);
+    if (job) {
+      quickRunning = true;
+      job.running = true;
+      broadcastPrepQueue();
+      void prepareMedia(job.item, (u) => { job.item = u; sendToWindow(IPC.mediaUpdate, u); }, settings.proxyHeight, { ...job.options, stage: 'quick', proxyMode })
+        .finally(() => {
+          quickRunning = false;
+          job.running = false;
+          const it = job.item;
+          if (it.status === 'error' || it.type !== 'video' || it.status === 'ready') finishPrep(job);
+          else {
+            job.stage = 'heavy';
+            sendToWindow(IPC.mediaUpdate, { ...it, prep: { stage: 'waiting', percent: 0 } });
+          }
+          broadcastPrepQueue();
+          pumpPrep();
+        });
+    }
+  }
+  // Vorschau-Dateien: in der gewählten Reihenfolge, mit begrenzter Anzahl gleichzeitig
+  while (heavyRunning < HEAVY_SLOTS) {
+    const job = prepJobs.find((j) => j.stage === 'heavy' && !j.running);
+    if (!job) break;
+    heavyRunning++;
+    job.running = true;
+    broadcastPrepQueue();
+    const mode = job.skip ? 'auto' : proxyMode;
+    const item = job.skip ? { ...job.item, info: { ...job.item.info } } : job.item;
+    void prepareMedia(item, (u) => { job.item = u; sendToWindow(IPC.mediaUpdate, u); }, settings.proxyHeight, { ...job.options, stage: 'heavy', proxyMode: mode, skipProxy: job.skip })
+      .finally(() => {
+        heavyRunning--;
+        finishPrep(job);
+        broadcastPrepQueue();
+        pumpPrep();
+      });
+  }
+}
+
+function finishPrep(job: PrepJob): void {
+  const i = prepJobs.indexOf(job);
+  if (i >= 0) prepJobs.splice(i, 1);
+  job.done();
+}
+
+ipcMain.handle(IPC.prepareMedia, (_e, item: MediaItem, options?: { reversed?: boolean; stabilized?: number }) => new Promise<void>((resolve) => {
+  // Schon in der Warteschlange? Dann nur Optionen ergänzen
+  const existing = prepJobs.find((j) => j.id === item.id);
+  if (existing) { existing.options = { ...existing.options, ...options }; resolve(); return; }
+  prepJobs.push({ id: item.id, item, options, stage: 'quick', running: false, done: resolve });
+  broadcastPrepQueue();
+  pumpPrep();
+}));
+
+/** Neue Reihenfolge (Medien-IDs, oben = zuerst). Laufende Aufträge bleiben, wo sie sind. */
+ipcMain.handle(IPC.prepReorder, (_e, ids: string[]) => {
+  const rank = new Map(ids.map((id, i) => [id, i]));
+  prepJobs.sort((a, b) => (rank.get(a.id) ?? 1e9) - (rank.get(b.id) ?? 1e9));
+  broadcastPrepQueue();
 });
+/** Vorschau-Datei für eine Datei nicht erstellen (sofort benutzbar, Abspielen evtl. weniger flüssig). */
+ipcMain.handle(IPC.prepSkip, (_e, id: string) => {
+  const job = prepJobs.find((j) => j.id === id);
+  if (job && !job.running) { job.skip = true; job.stage = 'heavy'; prepJobs.splice(prepJobs.indexOf(job), 1); prepJobs.unshift(job); }
+  broadcastPrepQueue();
+  pumpPrep();
+});
+ipcMain.handle(IPC.prepQueueGet, () => prepJobs.map((j) => ({ id: j.id, stage: j.stage, running: j.running })));
 
 // ---- Sound-Effekte ----
 ipcMain.handle(IPC.renderSfx, (_e, id: string, params: Record<string, number>) => renderSfxFile(id, params));

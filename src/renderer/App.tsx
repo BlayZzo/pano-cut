@@ -41,6 +41,7 @@ export function App(): React.ReactElement {
       untracked(() => useProject.getState().updateMedia(item));
     });
     const offExport = api.onExportProgress((p) => useUi.getState().setExportProgress(p));
+    const offPrep = api.onPrepQueue((q) => useUi.getState().setPrepQueue(q));
     const offUpdate = api.onUpdateStatus((s) => useUi.getState().setUpdateStatus(s));
     const offDirty = onDirtyChange((d) => useUi.getState().setDirty(d));
 
@@ -84,7 +85,7 @@ export function App(): React.ReactElement {
         case 'cam': if (arg) switchToAngle(Number(arg) - 1); break;
       }
     });
-    return () => { offMedia(); offExport(); offUpdate(); offDirty(); offMenu(); };
+    return () => { offMedia(); offExport(); offPrep(); offUpdate(); offDirty(); offMenu(); };
   }, []);
 
   // Automatisch speichern (alle 60 s, wenn ein Pfad existiert und etwas geändert wurde)

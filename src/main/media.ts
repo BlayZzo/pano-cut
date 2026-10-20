@@ -113,6 +113,7 @@ export interface PrepareOptions {
   /** 'quick' = nur Vorschaubild, Streifen, Wellenform; 'heavy' = nur Proxy & Varianten; Standard: alles */
   stage?: 'quick' | 'heavy' | 'all';
   proxyMode?: 'auto' | 'always';
+  skipProxy?: boolean;   // vom Nutzer übersprungen
 }
 
 export async function prepareMedia(item: MediaItem, update: MediaUpdateFn, proxyHeight = 540, options: PrepareOptions = {}): Promise<void> {
@@ -166,7 +167,7 @@ export async function prepareMedia(item: MediaItem, update: MediaUpdateFn, proxy
 
     // ---- Video ----
     // Braucht die Datei eine eigene Vorschau-Datei? Normale Full-HD-H.264-Videos (Handy, Kamera) spielen direkt flüssig.
-    const willProxy = needsProxy(work, options.proxyMode ?? 'auto');
+    const willProxy = !options.skipProxy && needsProxy(work, options.proxyMode ?? 'auto');
     // 360°-Rohvideos: zuerst den gestitchten Proxy erzeugen; Vorschaubilder kommen dann daraus.
     const stitched = needsStitching(work.stitch);
     let visualSource = work.path;

@@ -33,6 +33,10 @@ const api: PanoCutApi = {
   importMedia: (paths) => ipcRenderer.invoke(IPC.importMedia, paths),
   prepareMedia: (item, options) => ipcRenderer.invoke(IPC.prepareMedia, item, options),
   onMediaUpdate: subscribe(IPC.mediaUpdate),
+  prepReorder: (ids) => ipcRenderer.invoke(IPC.prepReorder, ids),
+  prepSkip: (id) => ipcRenderer.invoke(IPC.prepSkip, id),
+  prepQueueGet: () => ipcRenderer.invoke(IPC.prepQueueGet),
+  onPrepQueue: subscribe(IPC.prepQueue),
 
   whisperStatus: () => ipcRenderer.invoke(IPC.whisperStatus),
   downloadWhisperModel: (m) => ipcRenderer.invoke(IPC.downloadWhisperModel, m),

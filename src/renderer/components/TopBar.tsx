@@ -8,6 +8,9 @@ import { IconExport, IconRedo, IconSave, IconSettings, IconUndo } from './Icons'
 import logo from '../assets/logo.svg';
 import { fmt } from '../i18n/de';
 import { formatEta } from '../utils/prep';
+import type { MediaItem } from '@shared/types';
+import { formatBytes, formatDuration } from '@shared/timeline';
+import { cssUrl } from '../utils/dom';
 import { Popover } from './Popover';
 
 /** Export-Warteschlange: laufende und fertige Exporte, mit Fortschritt, Abbrechen und „Im Ordner zeigen“. */
@@ -38,24 +41,111 @@ function ExportQueue(): React.ReactElement | null {
   );
 }
 
-/** Anzeige oben: wie viele Dateien gerade vorbereitet werden, Gesamtfortschritt und Restzeit. */
+/** Restzeit aller Vorbereitungen schätzen: aus dem Tempo der laufenden Vorschau-Dateien. */
+function estimate(busy: MediaItem[], mac: boolean): { percent: number; eta?: number } {
+  if (!busy.length) return { percent: 0 };
+  const now = Date.now();
+  let doneSec = 0, totalSec = 0, speedSum = 0, speedN = 0;
+  for (const m of busy) {
+    const d = Math.max(1, m.info.duration || 1);
+    const pct = m.prep?.percent ?? 0;
+    totalSec += d;
+    doneSec += (d * pct) / 100;
+    if (m.prep && (m.prep.stage === 'proxy' || m.prep.stage === 'stitch') && m.prep.startedAt && pct > 2) {
+      const el = (now - m.prep.startedAt) / 1000;
+      if (el > 1) { speedSum += (d * pct) / 100 / el; speedN++; }
+    }
+  }
+  const percent = Math.round((doneSec / totalSec) * 100);
+  if (!speedN) return { percent };
+  const speed = (speedSum / speedN) * Math.min(mac ? 2 : 1, busy.length);
+  return { percent, eta: Math.max(1, (totalSec - doneSec) / Math.max(0.01, speed)) };
+}
+
+function prepStageText(m: MediaItem, running: boolean): string {
+  const p = m.prep;
+  if (!p || p.stage === 'waiting') return running ? t.library.prepThumbs : t.library.queueWaiting;
+  if (p.stage === 'proxy') return fmt(t.library.queueProxy, { p: p.percent });
+  if (p.stage === 'stitch') return fmt(t.library.queueStitch, { p: p.percent });
+  if (p.stage === 'wave') return t.library.prepWave;
+  return t.library.prepThumbs;
+}
+
+/** Anzeige oben: wie viele Dateien gerade vorbereitet werden – anklicken zeigt die Warteschlange (Reihenfolge per Ziehen). */
 function PrepIndicator(): React.ReactElement | null {
   const importing = useUi((s) => s.importing);
+  const importingFiles = useUi((s) => s.importingFiles);
   const media = useProject((s) => s.project.media);
+  const queue = useUi((s) => s.prepQueue);
+  const mac = useUi((s) => s.appInfo?.platform === 'darwin');
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
   const busy = Object.values(media).filter((m) => m.status === 'processing' || m.status === 'analyzing');
   if (!importing && busy.length === 0) return null;
-  if (importing) return <div className="prep-indicator"><span className="spinner" />{fmt(t.library.importing, { n: importing })}</div>;
-  const percent = Math.round(busy.reduce((s, m) => s + (m.prep?.percent ?? 0), 0) / busy.length);
-  const etas = busy.map((m) => m.prep?.etaSec).filter((x): x is number => x !== undefined);
-  const waiting = busy.filter((m) => !m.prep || m.prep.stage === 'waiting').length;
-  const eta = etas.length ? Math.max(...etas) : undefined;
-  return (
-    <div className="prep-indicator" title={t.library.preparingHint}>
+  if (importing) {
+    return (
+      <Popover label={<span className="prep-indicator-btn"><span className="spinner" />{fmt(t.library.importing, { n: importing })}</span>} title={t.library.queueTitle} align="right">
+        <div className="hint">{t.library.importingHint}</div>
+        <div className="queue-list">{importingFiles.map((f) => <div key={f} className="prep-row"><span className="spinner" /><span className="prep-name">{f.split(/[\\/]/).pop()}</span></div>)}</div>
+      </Popover>
+    );
+  }
+  const est = estimate(busy, mac);
+  // Reihenfolge wie im Hauptprozess; Dateien ohne Eintrag (z. B. gerade fertig) hinten
+  const rank = new Map(queue.map((q, i) => [q.id, i]));
+  const running = new Set(queue.filter((q) => q.running).map((q) => q.id));
+  const rows = [...busy].sort((a, b) => (running.has(b.id) ? 1 : 0) - (running.has(a.id) ? 1 : 0) || (rank.get(a.id) ?? 1e9) - (rank.get(b.id) ?? 1e9));
+  const order = rows.map((m) => m.id);
+  const move = (id: string, to: number) => {
+    const ids = order.filter((x) => x !== id);
+    ids.splice(Math.max(0, Math.min(ids.length, to)), 0, id);
+    void window.panocut.prepReorder(ids);
+  };
+  const firstWaiting = rows.findIndex((m) => !running.has(m.id));
+  const label = (
+    <span className="prep-indicator-btn" title={t.library.preparingHint}>
       <span className="spinner" />
       <span>{fmt(t.library.preparing, { n: busy.length })}</span>
-      <div className="progress"><div style={{ width: `${percent}%` }} /></div>
-      <span>{percent} %{eta !== undefined ? ` · ${fmt(t.library.eta, { t: formatEta(eta) })}${waiting ? ' +' : ''}` : ''}</span>
-    </div>
+      <span className="progress"><span style={{ width: `${est.percent}%` }} /></span>
+      <span>{est.percent} %{est.eta !== undefined ? ` · ${fmt(t.library.eta, { t: formatEta(est.eta) })}` : ''}</span>
+    </span>
+  );
+  return (
+    <Popover label={label} title={t.library.queueTitle} align="right">
+      <div className="hint">{t.library.queueHint}</div>
+      <div className="queue-list">
+        {rows.map((m, i) => {
+          const run = running.has(m.id);
+          const p = m.prep;
+          const eta = p?.etaSec;
+          return (
+            <div
+              key={m.id}
+              className={`prep-row${run ? ' running' : ''}${overId === m.id && dragId && dragId !== m.id ? ' over' : ''}${dragId === m.id ? ' dragging' : ''}`}
+              draggable={!run}
+              onDragStart={(e) => { setDragId(m.id); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', m.id); }}
+              onDragEnd={() => { setDragId(null); setOverId(null); }}
+              onDragOver={(e) => { if (dragId && !run) { e.preventDefault(); setOverId(m.id); } }}
+              onDrop={(e) => { e.preventDefault(); if (dragId && dragId !== m.id) move(dragId, order.filter((x) => x !== dragId).indexOf(m.id)); setDragId(null); setOverId(null); }}
+            >
+              <span className="prep-handle" title={run ? t.library.queueRunning : t.library.queueDrag}>{run ? '▶' : '⠿'}</span>
+              <span className="prep-thumb" style={{ backgroundImage: m.thumb ? cssUrl(m.thumb) : undefined }} />
+              <div className="prep-main">
+                <div className="prep-title"><span className="prep-name" title={m.path}>{m.name}</span><span className="hint">{formatBytes(m.info.fileSize)}{m.info.duration ? ` · ${formatDuration(m.info.duration)}` : ''}{m.info.width ? ` · ${m.info.width}×${m.info.height}` : ''}</span></div>
+                <div className="prep-status"><span>{run ? prepStageText(m, true) : `${i - Math.max(0, firstWaiting) + 1}. ${prepStageText(m, false)}`}</span><span>{run && eta !== undefined ? fmt(t.library.eta, { t: formatEta(eta) }) : ''}</span></div>
+                <span className="progress"><span style={{ width: `${p?.percent ?? 0}%` }} /></span>
+              </div>
+              {!run && (
+                <div className="prep-actions">
+                  <button className="btn sm ghost" title={t.library.queueNext} onClick={() => move(m.id, 0)}>⤒</button>
+                  {!m.stitch || m.stitch.mode === 'equirect' ? <button className="btn sm ghost" title={t.library.queueSkipHint} onClick={() => void window.panocut.prepSkip(m.id)}>{t.library.queueSkip}</button> : null}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </Popover>
   );
 }
 
