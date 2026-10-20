@@ -11,6 +11,8 @@ import { availableFilters } from './ffmpeg';
 import { escapeFilterPath } from './fonts';
 import { defaultStitch } from '@shared/pano';
 import type { StitchSettings } from '@shared/types';
+import { dropCompanions, isCompanionFor, isCompanionName } from '@shared/companion';
+import os from 'node:os';
 
 const VIDEO_EXT = new Set(['.mp4', '.mov', '.m4v', '.mkv', '.avi', '.webm', '.mts', '.m2ts', '.ts', '.mxf', '.insv', '.360', '.wmv', '.flv', '.3gp', '.lrv']);
 const AUDIO_EXT = new Set(['.mp3', '.wav', '.aac', '.m4a', '.flac', '.ogg', '.oga', '.opus', '.aif', '.aiff', '.wma']);
@@ -167,10 +169,14 @@ export async function prepareMedia(item: MediaItem, update: MediaUpdateFn, proxy
 
     // ---- Video ----
     // Braucht die Datei eine eigene Vorschau-Datei? Normale Full-HD-H.264-Videos (Handy, Kamera) spielen direkt flüssig.
-    const willProxy = !options.skipProxy && needsProxy(work, options.proxyMode ?? 'auto');
+    // Kamera-Vorschaudatei (.LRF/.LRV) vorhanden? Dann ist sie die Vorschau-Datei – nichts muss umgerechnet werden.
+    const companion = work.companion && fileExists(work.companion) ? work.companion : undefined;
+    if (work.companion && !companion) { if (work.proxy === work.companion) work.proxy = undefined; work.companion = undefined; }
+    if (companion) work.proxy = companion;
+    const willProxy = !companion && !options.skipProxy && needsProxy(work, options.proxyMode ?? 'auto');
     // 360°-Rohvideos: zuerst den gestitchten Proxy erzeugen; Vorschaubilder kommen dann daraus.
     const stitched = needsStitching(work.stitch);
-    let visualSource = work.path;
+    let visualSource = companion ?? work.path;
     if (stitched && work.stitch) {
       if (!heavy) {
         // Schnell: erst ein Rohbild als Vorschaubild – das Zusammensetzen (dauert) folgt im Hintergrund
@@ -212,11 +218,15 @@ export async function prepareMedia(item: MediaItem, update: MediaUpdateFn, proxy
         '-vf', `fps=${rate.toFixed(6)},scale=${SPRITE_WIDTH}:-2,tile=${frames}x1`,
         '-frames:v', '1', '-q:v', '5', sprite,
       ];
-      try {
-        await runFfmpeg(spriteArgs(keyOnly), { lowPriority: true });
-      } catch (e) {
-        if (!keyOnly.length) throw e;
-        await runFfmpeg(spriteArgs([]), { lowPriority: true });
+      // Lange Videos: 24 Stellen direkt anspringen statt die ganze (evtl. riesige) Datei durchzulesen
+      const seeked = visualSource === work.path && dur > 60 && (work.info.fileSize ?? 0) > SEEK_SPRITE_BYTES ? await spriteBySeeking(visualSource, dur, frames, sprite) : false;
+      if (!seeked) {
+        try {
+          await runFfmpeg(spriteArgs(keyOnly), { lowPriority: true });
+        } catch (e) {
+          if (!keyOnly.length) throw e;
+          await runFfmpeg(spriteArgs([]), { lowPriority: true });
+        }
       }
     }
     const sh = Math.round((SPRITE_WIDTH * work.info.height) / Math.max(1, work.info.width) / 2) * 2;
@@ -228,7 +238,7 @@ export async function prepareMedia(item: MediaItem, update: MediaUpdateFn, proxy
       if (!fileExists(wave)) {
         try {
           await runFfmpeg([
-            '-vn', '-i', work.path,
+            '-vn', '-i', companion ?? work.path,
             '-filter_complex', 'aformat=channel_layouts=mono,compand=gain=-2,showwavespic=s=2000x80:colors=#5eead4:scale=sqrt',
             '-frames:v', '1', wave,
           ], { lowPriority: true });
@@ -239,6 +249,13 @@ export async function prepareMedia(item: MediaItem, update: MediaUpdateFn, proxy
       } else work.waveform = wave;
       emit();
     }
+    }
+    // Keine Vorschau-Datei nötig (Kamera-Vorschau vorhanden oder Datei spielt direkt flüssig): sofort fertig
+    if (!heavy && !willProxy && !stitched && !options.reversed && !options.stabilized) {
+      work.prep = undefined;
+      work.status = 'ready';
+      emit();
+      return;
     }
     if (!heavy) return;
 
@@ -272,6 +289,88 @@ export async function prepareMedia(item: MediaItem, update: MediaUpdateFn, proxy
     log.warn('Vorbereitung fehlgeschlagen', work.path, err);
     emit();
   }
+}
+
+// Große Dateien: Bildstreifen per Sprung erzeugen (die ganze Datei zu lesen dauert bei vielen GB von SD-Karte/USB lange)
+const SEEK_SPRITE_BYTES = Number(process.env.PANOCUT_SEEK_SPRITE_BYTES ?? 1e9);
+
+/** Bildstreifen aus `frames` angesprungenen Stellen (4 gleichzeitig). Liefert false, wenn etwas nicht klappt. */
+async function spriteBySeeking(file: string, dur: number, frames: number, out: string): Promise<boolean> {
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'panocut-sprite-'));
+  try {
+    let next = 0;
+    let failed = false;
+    const worker = async () => {
+      while (next < frames && !failed) {
+        const i = next++;
+        const at = ((i + 0.5) / frames) * dur;
+        const f = path.join(tmp, `f_${String(i).padStart(3, '0')}.jpg`);
+        try {
+          await runFfmpeg(['-skip_frame', 'nokey', '-noaccurate_seek', '-ss', at.toFixed(3), '-i', file, '-map', '0:v:0', '-vf', `scale=${SPRITE_WIDTH}:-2`, '-frames:v', '1', '-q:v', '5', f], { lowPriority: true });
+          if (!fileExists(f)) failed = true;
+        } catch { failed = true; }
+      }
+    };
+    await Promise.all(Array.from({ length: 4 }, worker));
+    if (failed) return false;
+    await runFfmpeg(['-framerate', '1', '-start_number', '0', '-i', path.join(tmp, 'f_%03d.jpg'), '-vf', `tile=${frames}x1`, '-frames:v', '1', '-q:v', '5', out], { lowPriority: true });
+    return fileExists(out);
+  } catch (e) {
+    log.warn('Bildstreifen per Sprung fehlgeschlagen', (e as Error).message);
+    return false;
+  } finally {
+    fs.rm(tmp, { recursive: true, force: true }, () => undefined);
+  }
+}
+
+/** Sucht neben dem Video eine passende Kamera-Vorschaudatei (.LRF/.LRV) und prüft, ob sie wirklich dazugehört. */
+export async function attachCompanion(item: MediaItem): Promise<MediaItem> {
+  if (item.type !== 'video' || item.status === 'error' || needsStitching(item.stitch) || isCompanionName(item.name)) return item;
+  const dir = path.dirname(item.path);
+  let names: string[];
+  try { names = await fs.promises.readdir(dir); } catch { return item; }
+  const cand = names.find((n) => isCompanionFor(item.name, n));
+  if (!cand) return item;
+  const file = path.join(dir, cand);
+  try {
+    const probe = await probeFile(file);
+    const v = probe.streams.find((s) => s.codec_type === 'video' && !s.attachedPic);
+    const a = probe.streams.find((s) => s.codec_type === 'audio');
+    const reject = (why: string) => { log.info('Kamera-Vorschaudatei passt nicht', file, why); return item; };
+    if (!v) return reject('kein Bild');
+    const D = item.info.duration, d = probe.format.duration ?? 0;
+    if (!(d > 0) || Math.abs(d - D) > Math.max(0.6, D * 0.02)) return reject(`Länge ${d} statt ${D}`);
+    if (item.info.hasAudio && !a) return reject('kein Ton');
+    const playable = v.codec_name === 'h264' || (process.platform === 'darwin' && v.codec_name === 'hevc');
+    if (!playable) return reject(`Format ${v.codec_name}`);
+    let w = v.width ?? 0, h = v.height ?? 0;
+    if (Math.abs(v.rotation ?? 0) % 180 === 90) [w, h] = [h, w];
+    const ar = w / Math.max(1, h), AR = item.info.width / Math.max(1, item.info.height);
+    if (Math.abs(ar - AR) / AR > 0.04) return reject(`Seitenverhältnis ${w}×${h}`);
+    return { ...item, companion: file, proxy: file };
+  } catch (e) {
+    log.warn('Kamera-Vorschaudatei nicht lesbar', file, e);
+    return item;
+  }
+}
+
+/** Alle unterstützten Dateien in einem Ordner (optional mit Unterordnern), ohne Kamera-Vorschaudateien mit Hauptvideo. */
+export async function listMediaInFolder(dir: string, recursive: boolean): Promise<string[]> {
+  const out: string[] = [];
+  const walk = async (d: string, depth: number) => {
+    if (out.length > 5000) return;
+    let entries: fs.Dirent[];
+    try { entries = await fs.promises.readdir(d, { withFileTypes: true }); } catch { return; }
+    entries.sort((a, b) => a.name.localeCompare(b.name, 'de', { numeric: true }));
+    for (const e of entries) {
+      if (e.name.startsWith('.') || e.name.startsWith('._')) continue;
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) { if (recursive && depth < 8) await walk(p, depth + 1); }
+      else if (e.isFile() && mediaTypeFor(p)) out.push(p);
+    }
+  };
+  await walk(dir, 0);
+  return dropCompanions(out);
 }
 
 /** Erzeugt eine rückwärts laufende Variante des Proxys (für die Vorschau von Rückwärts-Clips). */

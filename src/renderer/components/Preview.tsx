@@ -6,7 +6,7 @@ import { useUi, usePlayheadCoarse, useView, updateView, getView } from '../store
 import { Popover } from './Popover';
 import { engine, playPause } from '../engine/instance';
 import { goEnd, goStart, stepFrames } from '../actions';
-import { t } from '../i18n/de';
+import { fmt, t } from '../i18n/de';
 import { IconLoop, IconPause, IconPlay, IconSkipBack, IconSkipFwd, IconStepBack, IconStepFwd } from './Icons';
 import { AiPanel } from './AiPanel';
 import { EffectPanel } from './EffectPanel';
@@ -24,6 +24,9 @@ export function Preview(): React.ReactElement {
   const hasClips = useProject((s) => Object.keys(s.project.clips).length > 0);
   const duration = useProject((s) => projectDuration(s.project));
   const playing = useUi((s) => s.playing);
+  const [original, setOriginal] = useState(engine.showOriginal);
+  useEffect(() => { engine.onNotice = (name) => useUi.getState().toast(fmt(t.preview.originalFailed, { n: name }), 'error'); }, []);
+  const toggleOriginal = () => { const on = !original; setOriginal(on); engine.setShowOriginal(on); };
   const loop = useUi((s) => s.loop);
   const setLoop = useUi((s) => s.setLoop);
   const selection = useUi((s) => s.selection);
@@ -375,6 +378,7 @@ export function Preview(): React.ReactElement {
           {(view.previewGuides === 'safe' || view.previewGuides === 'both') && <div className="safe"><span>{t.view.guidesSafe}</span></div>}
         </div>
         {!hasClips && <div className="preview-empty">{t.preview.empty}</div>}
+        {original && hasClips && <div className="preview-source-badge">{t.preview.originalBadge}</div>}
         {panoClip && !pickColor && <div className="preview-badge">360° · ziehen = umschauen · Mausrad = zoomen</div>}
         {pickColor && <div className="preview-badge">{t.ai.picking}</div>}
         {pointPick && <div className="preview-badge">{t.cutout.clickHint} <button className="btn sm" style={{ marginLeft: 8 }} onClick={() => useUi.getState().setPointPick(null)}>{t.common.cancel}</button></div>}
@@ -407,6 +411,7 @@ export function Preview(): React.ReactElement {
         <button className={`btn sm${modelPanel ? ' active' : ''}`} title={t.model3d.title} onClick={() => setModelPanel(modelPanel ? null : {})} style={{ fontWeight: 700 }}>🧊 {t.model3d.button}</button>
         {hasMulticam && <button className={`btn sm${multicamPanel ? ' active' : ''}`} title={t.multicam.title} onClick={() => setMulticamPanel(multicamPanel ? null : (groupAt(useUi.getState().playhead)?.id ?? Object.keys(multicamGroups ?? {})[0] ?? null))}>🎥 {t.multicam.button}</button>}
         <button className="btn sm" title={t.tools.title} onClick={() => useUi.getState().openTools()} style={{ fontWeight: 700 }}>🧰 {t.tools.button}</button>
+        <button className={`btn sm${original ? ' active' : ''}`} title={t.preview.originalHint} onClick={toggleOriginal}>🔍 {t.preview.original}</button>
         <Popover label={`⚙ ${t.view.button}`} title={t.view.previewTitle} align="right" up>
           <div className="form-grid compact">
             <label>{t.view.quality}</label>

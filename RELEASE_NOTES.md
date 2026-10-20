@@ -1,3 +1,19 @@
+## PanoCut 0.8.2 – Ganze Ordner importieren, Kamera-Vorschau sofort bereit
+
+**Installieren**
+- Mac mit Apple-Chip (M1–M4): `PanoCut-0.8.2-mac-arm64.dmg`
+- Mac mit Intel: `PanoCut-0.8.2-mac-x64.dmg`
+- Windows 10/11: `PanoCut-0.8.2-win-x64.exe`
+
+Wenn PanoCut schon installiert ist, wird das Update beim Start angeboten.
+
+**Neu**
+- **Ordner importieren**: In der Mediathek „📁 Ordner“ (oder Menü Datei → Ordner importieren, ⌘⇧I) – alle Videos, Fotos und Töne im Ordner werden übernommen, auf Wunsch mit Unterordnern. Ein Ordner lässt sich auch einfach in die Mediathek ziehen. Schon importierte Dateien werden nicht doppelt angelegt.
+- **Kamera-Vorschaudateien werden gebündelt**: Liegt neben dem Video die kleine Datei der Kamera (DJI `.LRF`, GoPro/Insta360 `.LRV`, z. B. `DJI_0042.MP4` + `DJI_0042.LRF`), wird daraus ein Eintrag. Die kleine Datei dient als Vorschau – das Video ist in Sekunden bereit, nichts muss umgerechnet werden. Exportiert wird immer aus dem großen Original. Erkennbar am gelben ⚡-Zeichen auf der Kachel. PanoCut prüft vorher, ob die kleine Datei wirklich passt (Länge, Bildformat, Ton) – sonst wird wie bisher eine eigene Vorschau-Datei erstellt.
+- **Knopf „🔍 Original“** unter der Vorschau: zeigt die Vorschau aus dem Original-Video statt aus der kleinen Vorschau-Datei – um die echte Qualität zu prüfen. Nochmal klicken = zurück zur flüssigen Vorschau.
+- **Schnellere Vorschaubildchen bei großen Dateien**: Für den Bildstreifen in der Mediathek springt PanoCut bei Dateien über 1 GB direkt an 24 Stellen, statt die ganze Datei zu lesen.
+- Einstellungen → Import: „Kamera-Vorschaudateien nutzen“ und „Unterordner mit durchsuchen“ (beides an/aus).
+
 ## PanoCut 0.8.1 – Ruhige Vorschau und Warteschlange zum Sortieren
 
 **Installieren**

@@ -41,6 +41,7 @@ export function buildMenu(win: () => BrowserWindow | null, recent: () => string[
         { label: 'Speichern unter …', accelerator: 'CmdOrCtrl+Shift+S', click: send('saveAs') },
         { type: 'separator' },
         { label: 'Medien importieren …', accelerator: 'CmdOrCtrl+I', click: send('import') },
+        { label: 'Ordner importieren …', accelerator: 'CmdOrCtrl+Shift+I', click: send('importFolder') },
         { label: 'Exportieren …', accelerator: 'CmdOrCtrl+E', click: send('export') },
         ...(isMac ? [] : [
           { type: 'separator' as const },

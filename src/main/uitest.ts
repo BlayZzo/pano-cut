@@ -168,6 +168,64 @@ export async function runUiTest(win: BrowserWindow): Promise<number> {
     out('Sound & Werkzeuge:', JSON.stringify(sfx));
     if (!sfx.clip || Math.abs(sfx.dur - 1.8) > 0.2) failures.push('Sound-Effekt wurde nicht eingefügt');
     if (sfx.tools < 7) failures.push('Werkzeug-Fenster unvollständig');
+
+    // v0.8.2: Ordner-Import mit Kamera-Vorschaudatei (.LRF) – das Video ist ohne Umrechnen sofort bereit
+    const drone = path.join(dir, 'drohne');
+    fs.mkdirSync(path.join(drone, 'unter'), { recursive: true });
+    await runFfmpeg(['-f', 'lavfi', '-i', 'testsrc2=duration=3:size=1920x1080:rate=30', '-f', 'lavfi', '-i', 'sine=frequency=300:duration=3',
+      '-c:v', 'libx265', '-preset', 'ultrafast', '-tag:v', 'hvc1', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', path.join(drone, 'DJI_0042.MP4')]);
+    await runFfmpeg(['-f', 'lavfi', '-i', 'testsrc2=duration=3:size=640x360:rate=30', '-f', 'lavfi', '-i', 'sine=frequency=300:duration=3',
+      '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', '-f', 'mp4', path.join(drone, 'DJI_0042.LRF')]);
+    await runFfmpeg(['-f', 'lavfi', '-i', 'testsrc2=size=640x360', '-frames:v', '1', path.join(drone, 'unter', 'foto.png')]);
+    const folder = await win.webContents.executeJavaScript(`(async () => {
+      const T = window.__pcTest;
+      const before = Object.keys(T.useProject.getState().project.media).length;
+      const t0 = performance.now();
+      await T.importFiles(${JSON.stringify([drone])});
+      let m;
+      for (let i = 0; i < 300; i++) {
+        m = Object.values(T.useProject.getState().project.media).find((x) => x.name === 'DJI_0042.MP4');
+        if (m && (m.status === 'ready' || m.status === 'error')) break;
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      const readyMs = Math.round(performance.now() - t0);
+      const all = Object.values(T.useProject.getState().project.media);
+      const added = all.length - before;
+      const lrfItems = all.filter((x) => /\\.lrf$/i.test(x.name)).length;
+      // ans Ende legen und Vorschau zeigen
+      const p0 = T.useProject.getState().project;
+      const at = Math.max(0, ...Object.values(p0.clips).map((c) => c.start + (c.out - c.in) / (c.speed || 1))) + 1;
+      T.addMediaToTimeline(m, at);
+      T.useUi.getState().setPlayhead(at + 1.5); T.engine.seek(at + 1.5);
+      await new Promise((r) => setTimeout(r, 1500)); T.engine.seek(at + 1.5);
+      await new Promise((r) => setTimeout(r, 400));
+      const c = document.querySelector('.preview-stage canvas'); const r = c.getBoundingClientRect();
+      const btn = [...document.querySelectorAll('button')].find((b) => b.textContent.includes('Original'));
+      return { readyMs, added, lrfItems, status: m && m.status, companion: m && m.companion, proxy: m && m.proxy, at, hasBtn: !!btn,
+        rect: { x: r.x + r.width * 0.1, y: r.y + r.height * 0.1, width: r.width * 0.8, height: r.height * 0.8 } };
+    })()`);
+    const shownLrf = await meanOf(win, folder.rect);
+    out('Ordner-Import mit LRF:', JSON.stringify({ ...folder, rect: undefined }), 'Vorschau sichtbar', shownLrf.toFixed(0));
+    if (folder.status !== 'ready') failures.push(`Ordner-Import: Video nicht bereit (${folder.status})`);
+    if (!folder.companion || !/\.LRF$/i.test(folder.proxy ?? '')) failures.push('Kamera-Vorschaudatei (.LRF) wurde nicht gebündelt');
+    if (folder.lrfItems > 0) failures.push('LRF-Datei erscheint zusätzlich als eigenes Video');
+    if (folder.added !== 2) failures.push(`Ordner-Import: ${folder.added} statt 2 Dateien (Video + Foto im Unterordner)`);
+    if (folder.readyMs > 8000) failures.push(`Ordner-Import mit LRF zu langsam (${folder.readyMs} ms)`);
+    if (shownLrf < 25) failures.push('Vorschau aus der LRF-Datei ist schwarz');
+    if (!folder.hasBtn) failures.push('Knopf „Original“ fehlt');
+    // „Original“ einschalten: Vorschau muss weiter ein Bild zeigen (aus dem Original oder, wenn nicht abspielbar, aus der Vorschau-Datei)
+    const orig = await win.webContents.executeJavaScript(`(async () => {
+      const T = window.__pcTest;
+      [...document.querySelectorAll('button')].find((b) => b.textContent.includes('Original')).click();
+      await new Promise((r) => setTimeout(r, 2500)); T.engine.seek(${folder.at} + 1.5);
+      await new Promise((r) => setTimeout(r, 800));
+      return { badge: !!document.querySelector('.preview-source-badge') };
+    })()`);
+    const shownOrig = await meanOf(win, folder.rect);
+    await win.webContents.executeJavaScript(`[...document.querySelectorAll('button')].find((b) => b.textContent.includes('Original')).click()`);
+    out('Original-Ansicht:', JSON.stringify(orig), 'sichtbar', shownOrig.toFixed(0));
+    if (!orig.badge) failures.push('Original-Ansicht: Hinweis fehlt');
+    if (shownOrig < 25) failures.push('Original-Ansicht ist schwarz');
     await win.webContents.capturePage().then((img) => fs.writeFileSync(path.join(os.tmpdir(), 'panocut-ui-test.png'), img.toPNG()));
   } catch (e) {
     failures.push(`Abbruch: ${(e as Error).stack ?? e}`);

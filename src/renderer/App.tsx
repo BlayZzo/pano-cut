@@ -16,7 +16,7 @@ import { ToolsDialog, WatchBanner } from './components/ToolsDialog';
 import { onDirtyChange, untracked, useProject, isDirty } from './store/project';
 import { useKeyboard } from './hooks/useKeyboard';
 import {
-  deleteSelection, doRedo, doUndo, duplicateSelection, goEnd, goStart, importDialog, loadProjectPath, newProjectFlow,
+  deleteSelection, doRedo, doUndo, duplicateSelection, goEnd, goStart, importDialog, importFolderDialog, loadProjectPath, newProjectFlow,
   openProject, saveProject, selectAll, splitAtPlayhead, zoomBy, setRangeIn, setRangeOut, clearRange, stepFrames,
   toggleLoop, toggleAiPanel, autoEnhanceClips,
 } from './actions';
@@ -56,6 +56,7 @@ export function App(): React.ReactElement {
         case 'saveAs': void saveProject(true); break;
         case 'saveAndQuit': void saveProject(false).then((ok) => { if (ok) window.panocut.quitApp(); }); break;
         case 'import': void importDialog(); break;
+        case 'importFolder': void importFolderDialog(); break;
         case 'export': useUi.getState().openDialog('export'); break;
         case 'settings': useUi.getState().openDialog('settings'); break;
         case 'shortcuts': useUi.getState().openDialog('shortcuts'); break;

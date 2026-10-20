@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import type { MediaItem } from '@shared/types';
 import { untracked, useProject } from '../store/project';
 import { useUi } from '../store/ui';
-import { addMediaToTimeline, addTitleToTimeline, applyEffectToClips, applyTransitionToClip, deleteUserEffect, importDialog, importFiles } from '../actions';
+import { addMediaToTimeline, addTitleToTimeline, applyEffectToClips, applyTransitionToClip, deleteUserEffect, importDialog, importFiles, importFolderDialog } from '../actions';
 import { t } from '../i18n/de';
 import { IconImport } from './Icons';
 import { MediaCard } from './MediaCard';
@@ -84,6 +84,7 @@ export function MediaLibrary(): React.ReactElement {
         <>
           <div className="library-toolbar">
             <button className="btn sm" onClick={() => void importDialog()}><IconImport />{t.library.import}</button>
+            <button className="btn sm" title={t.library.importFolderHint} onClick={() => void importFolderDialog()}>📁 {t.library.importFolder}</button>
             <input type="text" placeholder={t.library.search} value={query} onChange={(e) => setQuery(e.target.value)} style={{ height: 26 }} />
           </div>
           <div className="library-filters">

@@ -445,3 +445,7 @@ textarea:focus { border-color: var(--accent); }
 .prep-status { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-dim); }
 .prep-row .progress { display: block; height: 4px; }
 .prep-actions { display: flex; gap: 2px; }
+
+/* Kamera-Vorschaudatei (.LRF/.LRV) gebündelt */
+.media-badge.companion { left: auto; right: 4px; top: 4px; background: rgba(250, 204, 21, 0.9); color: #1a1a1a; }
+.preview-source-badge { position: absolute; left: 8px; top: 8px; z-index: 4; pointer-events: none; font-size: 11px; padding: 2px 7px; border-radius: 4px; background: rgba(250, 204, 21, 0.92); color: #1a1a1a; font-weight: 600; }

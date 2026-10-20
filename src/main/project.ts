@@ -58,6 +58,7 @@ export function readProject(filePath: string): Project {
       m.error = 'Datei nicht gefunden: ' + m.path;
       continue;
     }
+    if (m.companion && !fs.existsSync(m.companion)) { if (m.proxy === m.companion) delete m.proxy; delete m.companion; }
     const missing = [m.thumb, m.proxy, m.sprite?.path, m.waveform].some((p) => p && !fs.existsSync(p));
     if (missing || m.status === 'analyzing') m.status = 'processing';
     if (m.proxyReversed && !fs.existsSync(m.proxyReversed)) delete m.proxyReversed;

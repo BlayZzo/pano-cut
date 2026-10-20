@@ -49,6 +49,7 @@ export interface MediaItem {
   thumb?: string;          // Vorschaubild
   sprite?: SpriteInfo;     // Hover-Vorschau (Bildstreifen)
   proxy?: string;          // kleine Vorschau-Datei (Video)
+  companion?: string;      // Kamera-Vorschaudatei (DJI .LRF, GoPro/Insta360 .LRV), dient als Vorschau-Datei
   proxyReversed?: string;  // rückwärts laufende Vorschau-Datei
   waveform?: string;       // Wellenform-Bild (Audio)
   stitch?: StitchSettings; // nur 360°-Videos
@@ -629,6 +630,10 @@ export interface Settings {
   proxyHeight: number;
   /** Vorschau-Dateien: 'auto' = nur wenn nötig (4K, HEVC, 10 Bit …), 'always' = immer */
   proxyMode?: 'auto' | 'always';
+  /** Kamera-Vorschaudateien (.LRF/.LRV) als Vorschau nutzen (Standard: an) */
+  useCompanion?: boolean;
+  /** Ordner-Import: Unterordner mit durchsuchen (Standard: an) */
+  folderRecursive?: boolean;
   hardwareAccel: boolean;
   autosave: boolean;
   language: 'de';

@@ -15,8 +15,15 @@ const api = () => window.panocut;
 
 // ---------- Medien ----------
 
-export async function importFiles(paths: string[]): Promise<void> {
-  if (paths.length === 0) return;
+export async function importFiles(pathsIn: string[]): Promise<void> {
+  if (pathsIn.length === 0) return;
+  // Ordner durch ihre Medien-Dateien ersetzen; schon importierte Dateien nicht doppelt anlegen
+  let paths = await api().expandMediaPaths(pathsIn);
+  const known = new Set(Object.values(useProject.getState().project.media).filter((m) => !m.isObject && !m.vfx).map((m) => m.path));
+  const already = paths.filter((p) => known.has(p)).length;
+  paths = paths.filter((p) => !known.has(p));
+  if (already > 0) useUi.getState().toast(fmt(t.toast.alreadyImported, { n: already }), 'info');
+  if (paths.length === 0) { if (!already) useUi.getState().toast(t.toast.folderEmpty, 'error'); return; }
   // Blackmagic RAW braucht Blackmagics eigene Software – freundlich erklären statt nur „nicht unterstützt“
   if (paths.some((p) => /\.braw$/i.test(p))) {
     useUi.getState().toast(t.toast.braw, 'error');
@@ -38,7 +45,8 @@ export async function importFiles(paths: string[]): Promise<void> {
   if (items.length) {
     untracked(() => useProject.getState().addMedia(items));
     setDirty(true);
-    useUi.getState().toast(fmt(t.toast.imported, { n: items.length }), 'success');
+    const fast = items.filter((m) => m.companion).length;
+    useUi.getState().toast(fmt(fast ? t.toast.importedCompanion : t.toast.imported, { n: items.length, k: fast }), 'success');
     for (const item of items) {
       if (item.status !== 'error') void api().prepareMedia(item);
     }
@@ -49,6 +57,12 @@ export async function importFiles(paths: string[]): Promise<void> {
 export async function importDialog(): Promise<void> {
   const paths = await api().selectMediaFiles();
   await importFiles(paths);
+}
+
+/** Ganzen Ordner importieren (mit Unterordnern, je nach Einstellung). */
+export async function importFolderDialog(): Promise<void> {
+  const dir = await api().selectFolder(t.library.importFolderTitle);
+  if (dir) await importFiles([dir]);
 }
 
 export function ensureMediaPrepared(project: Project): void {

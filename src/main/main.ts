@@ -7,7 +7,8 @@ import { IPC } from '@shared/ipc';
 import type { AppInfo, ExportOptions, ExportProgress, MediaItem, Project, ProjectFile, Settings, UpdateStatus } from '@shared/types';
 import { installMediaProtocol, registerMediaScheme } from './protocol';
 import { getCacheDir, getProjectsDir } from './paths';
-import { mediaTypeFor, prepareMedia, probeMedia, SUPPORTED_EXTENSIONS } from './media';
+import { attachCompanion, listMediaInFolder, mediaTypeFor, prepareMedia, probeMedia, SUPPORTED_EXTENSIONS } from './media';
+import { dropCompanions } from '@shared/companion';
 import { defaultProjectPath, loadSettings, PROJECT_EXT, readProject, rememberProject, saveSettings, writeProject } from './project';
 import { ExportJob } from './exporter';
 import { killAll } from './ffmpeg';
@@ -221,15 +222,33 @@ ipcMain.handle(IPC.selectMediaFiles, async () => {
   return res.canceled ? [] : res.filePaths;
 });
 
+// Ordner (aus dem Dialog oder hereingezogen) durch die enthaltenen Medien-Dateien ersetzen
+ipcMain.handle(IPC.expandMediaPaths, async (_e, paths: string[]) => {
+  const recursive = loadSettings().folderRecursive !== false;
+  const out: string[] = [];
+  for (const p of paths) {
+    let dir = false;
+    try { dir = fs.statSync(p).isDirectory(); } catch { /* fehlt */ }
+    if (dir) out.push(...await listMediaInFolder(p, recursive));
+    else out.push(p);
+  }
+  return [...new Set(out)];
+});
+
 ipcMain.handle(IPC.importMedia, async (_e, paths: string[]) => {
   // Mehrere Dateien gleichzeitig untersuchen (je Datei nur ein kurzer Blick in den Dateikopf)
-  const list = paths.filter((p) => mediaTypeFor(p));
+  // Kamera-Vorschaudateien (.LRF/.LRV) nicht als eigenes Video importieren, wenn das große Video dabei ist
+  const list = dropCompanions(paths.filter((p) => mediaTypeFor(p)));
+  const useCompanion = loadSettings().useCompanion !== false;
   const results: Array<MediaItem | null> = new Array(list.length).fill(null);
   let next = 0;
   const worker = async () => {
     while (next < list.length) {
       const i = next++;
-      try { results[i] = await probeMedia(list[i]); } catch (err) { log.warn('Import fehlgeschlagen', list[i], err); }
+      try {
+        const item = await probeMedia(list[i]);
+        results[i] = useCompanion ? await attachCompanion(item) : item;
+      } catch (err) { log.warn('Import fehlgeschlagen', list[i], err); }
     }
   };
   await Promise.all(Array.from({ length: Math.min(4, list.length) }, worker));

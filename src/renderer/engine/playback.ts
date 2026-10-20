@@ -197,6 +197,12 @@ export class PlaybackEngine {
   muted = false;
   /** Vergleich: Bild ohne Farbkorrektur zeigen (Bild-Assistent „Vorher“). */
   compareOriginal = false;
+  /** Vorschau aus den Original-Dateien statt aus den kleinen Vorschau-Dateien (Qualität prüfen). */
+  showOriginal = false;
+  /** Originale, die der Browser nicht abspielen kann (dann bleibt die Vorschau-Datei). */
+  private originalFailed = new Set<string>();
+  /** Hinweis an die Oberfläche (z. B. „Original kann nicht direkt gezeigt werden“). */
+  onNotice: (text: string) => void = () => {};
   onTime: (t: number) => void = () => {};
   onEnded: () => void = () => {};
   /** Wird gerufen, wenn für einen Rückwärts-Clip noch keine Rückwärts-Vorschau existiert. */
@@ -354,8 +360,16 @@ export class PlaybackEngine {
     }
     if (clip.reverse && media.proxyReversed) return { src: url(media.proxyReversed), reversedFile: true };
     if (clip.stabilize?.enabled && media.proxyStabilized && !clip.reverse) return { src: url(media.proxyStabilized), reversedFile: false };
+    const flat = !media.stitch || media.stitch.mode === 'equirect';
+    if (this.showOriginal && media.type === 'video' && flat && !this.originalFailed.has(media.id)) return { src: url(media.path), reversedFile: false };
     if (media.proxy) return { src: url(media.proxy), reversedFile: false };
     return { src: url(media.path), reversedFile: false };
+  }
+
+  setShowOriginal(on: boolean): void {
+    this.showOriginal = on;
+    this.originalFailed.clear();
+    this.redraw();
   }
 
   private getSlot(clip: Clip, media: MediaItem): Slot {
@@ -377,6 +391,13 @@ export class PlaybackEngine {
       (m as HTMLVideoElement).playsInline = true;
       m.addEventListener('seeked', () => { if (!this.playing) this.render(this.current); });
       m.addEventListener('loadeddata', () => { if (!this.playing) this.render(this.current); });
+      if (isVideo && this.showOriginal && media.proxy && src === window.panocut.toMediaUrl(media.path)) {
+        m.addEventListener('error', () => {
+          this.originalFailed.add(media.id);
+          this.onNotice(media.name);
+          this.redraw();
+        });
+      }
     }
     // Medien als „freigegeben“ laden, damit WebGL (Farbe, 360°) und KI sie lesen dürfen
     (el as HTMLImageElement | HTMLMediaElement).crossOrigin = 'anonymous';

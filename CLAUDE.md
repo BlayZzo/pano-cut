@@ -105,4 +105,7 @@ MediaCard), Proxy über `.part.mp4` + rename, Mac 2 parallele Proxy-Slots (`heav
 Vorbereitung: sortierbare Warteschlange in main.ts (`prepJobs`, IPC prepReorder/prepSkip, Event prepQueue), Anzeige `PrepIndicator` in TopBar.
 Wiedergabe: führendes Video = Uhr (`master`, nie rückwärts, 250 ms Schonzeit nach Wechsel), sonst Tempo-Angleichen statt Springen;
 `slot.hold`/`trackHold` = letztes Bild gegen Schwarz bei readyState<2; Oberflächen-Test spielt geteilte Clips und zählt Schwarzbilder/Rücksprünge.
+0.8.2: Ordner-Import (IPC `expandMediaPaths` → `listMediaInFolder`), Kamera-Vorschaudateien `shared/companion.ts` (DJI .LRF, GoPro GL*.LRV,
+Insta360 LRV_) → `attachCompanion` setzt `MediaItem.companion` = `proxy` (nicht bei Stitching), Export nutzt immer `path`. Bildstreifen per Sprung
+(`spriteBySeeking`, `-skip_frame nokey -noaccurate_seek`) ab 1 GB. Vorschau-Knopf „Original“ (`engine.setShowOriginal`, Rückfall bei `error`).
 Ansicht/Layout: `ViewSettings` (`settings.view`, `useView`/`updateView`), `Splitter.tsx`, `Popover.tsx`.

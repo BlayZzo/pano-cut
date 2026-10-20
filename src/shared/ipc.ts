@@ -25,6 +25,8 @@ export interface PanoCutApi {
   // Medien
   selectMediaFiles(): Promise<string[]>;
   importMedia(paths: string[]): Promise<MediaItem[]>;
+  /** Ordner durch die darin enthaltenen Medien-Dateien ersetzen (Kamera-Vorschaudateien mit Hauptvideo fallen weg). */
+  expandMediaPaths(paths: string[]): Promise<string[]>;
   prepareMedia(item: MediaItem, options?: { reversed?: boolean; stabilized?: number }): Promise<void>;
   onMediaUpdate(cb: (item: MediaItem) => void): () => void;
   /** Vorbereitungs-Warteschlange: Reihenfolge ändern, überspringen, beobachten */
@@ -122,6 +124,7 @@ export const IPC = {
 
   selectMediaFiles: 'media:select',
   importMedia: 'media:import',
+  expandMediaPaths: 'media:expand',
   prepareMedia: 'media:prepare',
   mediaUpdate: 'media:update',
   prepQueue: 'media:prepQueue',

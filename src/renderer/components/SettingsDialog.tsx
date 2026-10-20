@@ -99,6 +99,12 @@ export function SettingsDialog(): React.ReactElement {
               <option value="always">{t.settings.proxyAlways}</option>
             </select>
             <label />
+            <label className="toggle"><input type="checkbox" checked={settings.useCompanion !== false} onChange={(e) => void patch({ useCompanion: e.target.checked })} /> {t.settings.useCompanion}</label>
+            <label />
+            <div className="hint">{t.settings.useCompanionHint}</div>
+            <label />
+            <label className="toggle"><input type="checkbox" checked={settings.folderRecursive !== false} onChange={(e) => void patch({ folderRecursive: e.target.checked })} /> {t.settings.folderRecursive}</label>
+            <label />
             <label className="toggle"><input type="checkbox" checked={settings.hardwareAccel} onChange={(e) => void patch({ hardwareAccel: e.target.checked })} /> {t.settings.hardware}</label>
             <label />
             <label className="toggle"><input type="checkbox" checked={settings.autosave} onChange={(e) => void patch({ autosave: e.target.checked })} /> {t.settings.autosave}</label>

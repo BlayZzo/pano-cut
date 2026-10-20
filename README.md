@@ -46,7 +46,7 @@ Außerdem: **Hilfe → Nach Updates suchen …**
 
 ## So funktioniert's
 
-1. **Importieren** – Videos, Bilder und Musik per Drag & Drop in die Mediathek ziehen (oder „Importieren“). PanoCut erzeugt im Hintergrund kleine Vorschau-Dateien, damit alles flüssig läuft – auch bei 4K und 360°.
+1. **Importieren** – Videos, Bilder und Musik per Drag & Drop in die Mediathek ziehen (oder „Importieren“, für ganze Ordner „📁 Ordner“). PanoCut erzeugt im Hintergrund kleine Vorschau-Dateien, damit alles flüssig läuft – auch bei 4K und 360°. Liegen Kamera-Vorschaudateien daneben (DJI `.LRF`, GoPro/Insta360 `.LRV`), werden sie mit dem Video gebündelt: sofort bereit, Export trotzdem aus dem Original. „🔍 Original“ unter der Vorschau zeigt die echte Qualität.
 2. **Hover-Vorschau** – mit der Maus über eine Kachel fahren, um den Clip grob durchzuspulen.
 3. **In die Timeline ziehen** – Clips auf die Video- oder Audiospuren ziehen. Sie rasten an anderen Clips und am Abspielkopf ein.
 4. **Schneiden** – Abspielkopf setzen und **S** drücken (oder die Schere). Ränder ziehen zum Trimmen.

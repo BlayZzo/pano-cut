@@ -3,7 +3,7 @@ import type { MediaItem } from '@shared/types';
 import { formatDuration } from '@shared/timeline';
 import { cssUrl, mediaUrl } from '../utils/dom';
 import { DRAG_MIME, setDraggingMedia } from '../utils/dnd';
-import { t } from '../i18n/de';
+import { fmt, t } from '../i18n/de';
 import { prepLabel } from '../utils/prep';
 import { IconFilm, IconImage, IconMusic } from './Icons';
 
@@ -69,6 +69,7 @@ export function MediaCard({ item, selected, onSelect, onOpen, onContextMenu }: P
         )}
         {hoverX !== null && item.sprite && <div className="scrub-line" style={{ left: `${hoverX * 100}%` }} />}
         {badge && <div className="media-badge">{badge}</div>}
+        {item.companion && <div className="media-badge companion" title={fmt(t.library.companionTip, { f: item.companion.split(/[\\/]/).pop() ?? '' })}>⚡ {(item.companion.split('.').pop() ?? '').toUpperCase()}</div>}
         {item.info.duration > 0 && !prep && <div className="media-dur">{formatDuration(item.info.duration)}</div>}
         {item.status === 'analyzing' && <div className="media-status"><span className="spinner" />&nbsp;{t.library.analyzing}</div>}
         {item.status === 'processing' && !item.thumb && <div className="media-status"><span className="spinner" />&nbsp;{t.library.processing}</div>}
