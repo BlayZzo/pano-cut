@@ -287,30 +287,33 @@ export class PlaybackEngine {
   /** Das Video, nach dessen Uhr die Wiedergabe läuft (verhindert Springen/Flackern durch ständiges Nachstellen). */
   private master: { slot: Slot; clip: Clip } | null = null;
   private masterNext: { slot: Slot; clip: Clip } | null = null;
+  private masterSince = 0;
 
   private tick = (): void => {
     if (!this.playing) return;
     const dur = projectDuration(this.project);
     let t = this.startTime + (performance.now() - this.startWall) / 1000;
-    // Zeit vom führenden Video übernehmen, solange es normal läuft – dann muss es nie nachgestellt werden
+    // Zeit vom führenden Video übernehmen, solange es normal läuft – dann muss es nie nachgestellt werden.
+    // Nie rückwärts; direkt nach einem Wechsel des führenden Videos (Schnitt) läuft zunächst die normale Uhr weiter.
     const ms = this.master;
-    if (ms) {
+    if (ms && performance.now() - this.masterSince > 250) {
       const m = ms.slot.el as HTMLMediaElement;
       const c = ms.clip;
       if (!m.paused && !m.seeking && m.readyState >= 3) {
         const tm = c.start + (m.currentTime - c.in) / c.speed;
-        if (tm >= c.start - 0.05 && tm < clipEnd(c) - 0.02 && Math.abs(tm - t) < 0.75) {
+        if (tm >= this.current - 0.005 && tm < clipEnd(c) - 0.02 && Math.abs(tm - t) < 0.4) {
           t = tm;
           this.startTime = tm;
           this.startWall = performance.now();
         }
-      } else if (m.readyState < 3 || m.seeking) {
-        // Video lädt noch → Uhr anhalten statt weiterlaufen und dann zurückspringen
+      } else if (m.readyState < 3 && !m.paused) {
+        // Video lädt noch (Daten fehlen) → Uhr kurz anhalten statt weiterlaufen und dann springen
         t = this.current;
         this.startTime = t;
         this.startWall = performance.now();
       }
     }
+    if (t < this.current) t = this.current;
     if (t >= dur) {
       if (this.loop && dur > 0) {
         this.current = 0;
@@ -471,7 +474,7 @@ export class PlaybackEngine {
         if (Math.abs(drift) > (isMaster ? 0.75 : SEEK_TOLERANCE)) {
           m.currentTime = target;
           if (Math.abs(m.playbackRate - rate) > 1e-3) m.playbackRate = rate;
-        } else if (!isMaster && Math.abs(drift) > 0.04) {
+        } else if (Math.abs(drift) > (isMaster ? 0.08 : 0.04)) {
           // Kleine Abweichung: sanft über das Tempo angleichen statt springen
           m.playbackRate = clamp(rate * (1 - clamp(drift, -0.3, 0.3) * 0.5), RATE_MIN, RATE_MAX);
         } else if (Math.abs(m.playbackRate - rate) > 1e-3) m.playbackRate = rate;
@@ -945,6 +948,7 @@ export class PlaybackEngine {
         }
       }
     }
+    if (this.masterNext?.slot !== this.master?.slot) this.masterSince = performance.now();
     this.master = this.masterNext;
     // Speicher sparen: bei vielen Clips weit entfernte Video-Player freigeben (werden bei Bedarf neu geladen)
     if (this.slots.size > MAX_SLOTS) {
