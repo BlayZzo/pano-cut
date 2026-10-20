@@ -15,6 +15,7 @@ export interface MediaInfo {
   rotation: number;      // Metadaten-Rotation in Grad
   is360: boolean;        // Equirectangular (2:1) erkannt
   fileSize: number;
+  pixFmt?: string;       // z. B. yuv420p (8 Bit) oder yuv420p10le (10 Bit)
 }
 
 export interface SpriteInfo {
@@ -59,7 +60,16 @@ export interface MediaItem {
   beats?: BeatInfo;        // erkannter Takt (Auto-Musik-Schnitt)
   bbox?: { x: number; y: number; w: number; h: number };  // freigestelltes Objekt: typische Lage im Bild (0..1)
   model3d?: Model3DSpec;   // gerendertes 3D-Modell (kann neu gerendert werden)
+  prep?: MediaPrep;        // laufende Vorbereitung (nur zur Anzeige, wird nicht gespeichert)
   addedAt: number;
+}
+
+/** Fortschritt der Vorbereitung einer Datei (Vorschaubilder, Vorschau-Datei, 360°-Zusammensetzen). */
+export interface MediaPrep {
+  stage: 'waiting' | 'thumbs' | 'proxy' | 'stitch' | 'wave';
+  percent: number;        // 0..100
+  etaSec?: number;        // geschätzte Restzeit
+  startedAt?: number;
 }
 
 /** 360°-Ansicht eines Clips (Reframing). */
@@ -582,6 +592,8 @@ export interface Settings {
   lastProject?: string;
   recentProjects: string[];
   proxyHeight: number;
+  /** Vorschau-Dateien: 'auto' = nur wenn nötig (4K, HEVC, 10 Bit …), 'always' = immer */
+  proxyMode?: 'auto' | 'always';
   hardwareAccel: boolean;
   autosave: boolean;
   language: 'de';

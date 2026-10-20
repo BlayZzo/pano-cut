@@ -4,6 +4,7 @@ import { formatDuration } from '@shared/timeline';
 import { cssUrl, mediaUrl } from '../utils/dom';
 import { DRAG_MIME, setDraggingMedia } from '../utils/dnd';
 import { t } from '../i18n/de';
+import { prepLabel } from '../utils/prep';
 import { IconFilm, IconImage, IconMusic } from './Icons';
 
 interface Props {
@@ -32,6 +33,7 @@ export function MediaCard({ item, selected, onSelect, onOpen, onContextMenu }: P
     setDraggingMedia(item.id);
   };
 
+  const prep = prepLabel(item);
   const frames = item.sprite?.frames ?? 1;
   const frameIndex = hoverX === null ? -1 : Math.min(frames - 1, Math.floor(hoverX * frames));
   const spriteStyle: React.CSSProperties | undefined = item.sprite && frameIndex >= 0
@@ -70,7 +72,12 @@ export function MediaCard({ item, selected, onSelect, onOpen, onContextMenu }: P
         {item.info.duration > 0 && <div className="media-dur">{formatDuration(item.info.duration)}</div>}
         {item.status === 'analyzing' && <div className="media-status"><span className="spinner" />&nbsp;{t.library.analyzing}</div>}
         {item.status === 'processing' && !item.thumb && <div className="media-status"><span className="spinner" />&nbsp;{t.library.processing}</div>}
-        {item.status === 'processing' && item.thumb && <div className="media-working" title={t.library.workingHint}><span className="spinner" /></div>}
+        {prep && item.thumb && (
+          <div className="media-prep" title={t.library.workingHint}>
+            <div className="media-prep-text"><span>{prep.text}</span>{prep.eta && <span>{prep.eta}</span>}</div>
+            <div className="progress"><div style={{ width: `${prep.percent}%` }} /></div>
+          </div>
+        )}
         {item.status === 'error' && <div className="media-status error">{t.library.error}: {item.error}</div>}
       </div>
       <div className="media-name">{item.name}</div>

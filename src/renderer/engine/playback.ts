@@ -199,6 +199,8 @@ export class PlaybackEngine {
 
   // ---------- intern ----------
 
+  private lastRenderAt = 0;
+
   private tick = (): void => {
     if (!this.playing) return;
     const dur = projectDuration(this.project);
@@ -220,6 +222,11 @@ export class PlaybackEngine {
     } else {
       this.current = t;
     }
+    // Nur so oft zeichnen, wie das Projekt Bilder hat (z. B. 30×/s statt 60–120×/s) – spart Akku und Rechenzeit
+    const nowR = performance.now();
+    const frameMs = 1000 / Math.max(10, Math.min(120, this.project.settings.fps || 30));
+    if (nowR - this.lastRenderAt < frameMs - 4) { this.raf = requestAnimationFrame(this.tick); return; }
+    this.lastRenderAt = nowR;
     this.render(this.current);
     const now = performance.now();
     if (now - this.lastEmit > 33) {
@@ -325,11 +332,11 @@ export class PlaybackEngine {
     const target = this.fileTime(clip, media, t, reversedFile, unclamped);
     const needsSeekMode = (clip.reverse && !reversedFile) || clip.speed < RATE_MIN || clip.speed > RATE_MAX;
 
-    if (clip.reverse && !media.proxyReversed && media.proxy && !this.requestedReversed.has(media.id)) {
+    if (clip.reverse && !media.proxyReversed && (media.proxy || media.status === 'ready') && !this.requestedReversed.has(media.id)) {
       this.requestedReversed.add(media.id);
       this.onNeedReversed(media);
     }
-    if (clip.stabilize?.enabled && !media.proxyStabilized && media.proxy && !this.requestedStabilized.has(media.id)) {
+    if (clip.stabilize?.enabled && !media.proxyStabilized && (media.proxy || media.status === 'ready') && !this.requestedStabilized.has(media.id)) {
       this.requestedStabilized.add(media.id);
       this.onNeedStabilized(media, clip.stabilize.strength);
     }

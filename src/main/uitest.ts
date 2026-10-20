@@ -31,33 +31,44 @@ export async function runUiTest(win: BrowserWindow): Promise<number> {
     const video = path.join(dir, 'a_video.mp4');
     const pano = path.join(dir, 'b_pano360.mp4');
     const image = path.join(dir, 'c_bild.png');
+    const uhd = path.join(dir, 'd_4k_hevc.mp4');
     await runFfmpeg(['-f', 'lavfi', '-i', 'testsrc2=duration=4:size=1920x1080:rate=30', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=4',
       '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', video]);
     await runFfmpeg(['-f', 'lavfi', '-i', 'testsrc2=duration=3:size=2048x1024:rate=30', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', pano]);
     await runFfmpeg(['-f', 'lavfi', '-i', 'testsrc2=size=1280x720', '-frames:v', '1', image]);
+    await runFfmpeg(['-f', 'lavfi', '-i', 'testsrc2=duration=8:size=3840x2160:rate=30', '-c:v', 'libx265', '-preset', 'ultrafast', '-tag:v', 'hvc1', '-pix_fmt', 'yuv420p', uhd]);
 
     await win.webContents.executeJavaScript('new Promise((r) => { const w = () => window.__pcTest ? r(true) : setTimeout(w, 100); w(); })');
     const t0 = Date.now();
     const imported = await win.webContents.executeJavaScript(`(async () => {
       const T = window.__pcTest;
       const t0 = performance.now();
-      await T.importFiles(${JSON.stringify([video, pano, image])});
+      await T.importFiles(${JSON.stringify([video, pano, image, uhd])});
       const importMs = Math.round(performance.now() - t0);
       let firstThumbMs = 0;
-      for (let i = 0; i < 1200; i++) {
+      const seen = new Set();
+      let indicator = '';
+      for (let i = 0; i < 2400; i++) {
         const ms = Object.values(T.useProject.getState().project.media);
-        if (!firstThumbMs && ms.length && ms.every((m) => m.thumb || m.status === 'error')) firstThumbMs = Math.round(performance.now() - t0);
-        if (ms.length === 3 && ms.every((m) => m.status === 'ready' || m.status === 'error')) break;
-        await new Promise((r) => setTimeout(r, 250));
+        for (const m of ms) if (m.prep && m.prep.percent > 0 && m.prep.percent < 100) seen.add(m.name + ':' + m.prep.stage);
+        const ind = document.querySelector('.prep-indicator'); if (ind && !indicator) indicator = ind.textContent;
+        if (!firstThumbMs && ms.length === 4 && ms.every((m) => m.thumb || m.status === 'error')) firstThumbMs = Math.round(performance.now() - t0);
+        if (ms.length === 4 && ms.every((m) => m.status === 'ready' || m.status === 'error')) break;
+        await new Promise((r) => setTimeout(r, 100));
       }
       const media = Object.values(T.useProject.getState().project.media).sort((a, b) => a.name.localeCompare(b.name));
       let at = 0;
       for (const m of media) { T.addMediaToTimeline(m, at); at += m.type === 'image' ? 5 : m.info.duration; }
-      return { importMs, firstThumbMs, readyMs: Math.round(performance.now() - t0), media: media.map((m) => ({ name: m.name, status: m.status, error: m.error, proxy: !!m.proxy, thumb: !!m.thumb, is360: m.info.is360 })) };
+      return { importMs, firstThumbMs, progressSeen: [...seen], indicator, readyMs: Math.round(performance.now() - t0), media: media.map((m) => ({ name: m.name, status: m.status, error: m.error, proxy: !!m.proxy, thumb: !!m.thumb, is360: m.info.is360 })) };
     })()`);
     out('Import:', JSON.stringify(imported), `(${Date.now() - t0} ms)`);
     for (const m of imported.media) if (m.status !== 'ready') failures.push(`${m.name}: ${m.status} ${m.error ?? ''}`);
     if (imported.importMs > 5000) failures.push(`Import dauert zu lange (${imported.importMs} ms)`);
+    const byName = (n: string) => imported.media.find((m: { name: string }) => m.name.startsWith(n));
+    if (byName('a_video')?.proxy) failures.push('Full-HD-H.264 bekam unnötig eine Vorschau-Datei');
+    if (!byName('d_4k')?.proxy) failures.push('4K-HEVC bekam keine Vorschau-Datei');
+    if (!imported.progressSeen.some((x: string) => x.startsWith('d_4k'))) failures.push('Kein Fortschritt für die 4K-Vorschau-Datei sichtbar');
+    if (!imported.indicator) failures.push('Keine Fortschrittsanzeige oben');
 
     // Vorschau an mehreren Stellen prüfen: normales Video, 360°-Video, Bild
     for (const [label, t] of [['Video', 1.2], ['360°', 5.5], ['Bild', 8.5]] as const) {

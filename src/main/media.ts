@@ -79,6 +79,7 @@ export async function probeMedia(file: string): Promise<MediaItem> {
       hasVideo: !!v && type !== 'audio',
       hasAudio: !!a,
       videoCodec: v?.codec_name,
+      pixFmt: v?.pix_fmt,
       audioCodec: a?.codec_name,
       rotation,
       is360: !!stitch,
@@ -111,6 +112,7 @@ export interface PrepareOptions {
   stabilized?: number;
   /** 'quick' = nur Vorschaubild, Streifen, Wellenform; 'heavy' = nur Proxy & Varianten; Standard: alles */
   stage?: 'quick' | 'heavy' | 'all';
+  proxyMode?: 'auto' | 'always';
 }
 
 export async function prepareMedia(item: MediaItem, update: MediaUpdateFn, proxyHeight = 540, options: PrepareOptions = {}): Promise<void> {
@@ -121,6 +123,19 @@ export async function prepareMedia(item: MediaItem, update: MediaUpdateFn, proxy
   const work: MediaItem = { ...item };
   const emit = () => update({ ...work });
   const dur = work.info.duration;
+  // Fortschritt melden (höchstens 3× pro Sekunde), mit geschätzter Restzeit
+  let lastReport = 0;
+  const report = (stage: NonNullable<MediaItem['prep']>['stage'], percent: number, force = false) => {
+    const now = Date.now();
+    if (!force && now - lastReport < 300) return;
+    lastReport = now;
+    const prev = work.prep;
+    const startedAt = prev && prev.stage === stage && prev.startedAt ? prev.startedAt : now;
+    const elapsed = (now - startedAt) / 1000;
+    const etaSec = percent > 2 && elapsed > 1.5 ? Math.round((elapsed * (100 - percent)) / percent) : undefined;
+    work.prep = { stage, percent: Math.max(0, Math.min(100, Math.round(percent))), etaSec, startedAt };
+    emit();
+  };
 
   try {
     if (work.type === 'image') {
@@ -150,6 +165,8 @@ export async function prepareMedia(item: MediaItem, update: MediaUpdateFn, proxy
     }
 
     // ---- Video ----
+    // Braucht die Datei eine eigene Vorschau-Datei? Normale Full-HD-H.264-Videos (Handy, Kamera) spielen direkt flüssig.
+    const willProxy = needsProxy(work, options.proxyMode ?? 'auto');
     // 360°-Rohvideos: zuerst den gestitchten Proxy erzeugen; Vorschaubilder kommen dann daraus.
     const stitched = needsStitching(work.stitch);
     let visualSource = work.path;
@@ -166,7 +183,8 @@ export async function prepareMedia(item: MediaItem, update: MediaUpdateFn, proxy
         emit();
         return;
       }
-      const proxy = await buildProxy(work, dir, Math.max(proxyHeight, PANO_PROXY_HEIGHT), emit);
+      report('stitch', 0, true);
+      const proxy = await buildProxy(work, dir, Math.max(proxyHeight, PANO_PROXY_HEIGHT), (pc) => report('stitch', pc));
       work.proxy = proxy;
       visualSource = proxy;
       emit();
@@ -204,12 +222,12 @@ export async function prepareMedia(item: MediaItem, update: MediaUpdateFn, proxy
     work.sprite = { path: sprite, frames, frameWidth: SPRITE_WIDTH, frameHeight: sh || 90 };
     emit();
 
-    if (work.info.hasAudio) {
+    if (work.info.hasAudio && (!willProxy || fileExists(path.join(dir, 'wave.png')))) {
       const wave = path.join(dir, 'wave.png');
       if (!fileExists(wave)) {
         try {
           await runFfmpeg([
-            '-i', work.path,
+            '-vn', '-i', work.path,
             '-filter_complex', 'aformat=channel_layouts=mono,compand=gain=-2,showwavespic=s=2000x80:colors=#5eead4:scale=sqrt',
             '-frames:v', '1', wave,
           ], { lowPriority: true });
@@ -224,7 +242,20 @@ export async function prepareMedia(item: MediaItem, update: MediaUpdateFn, proxy
     if (!heavy) return;
 
     // Proxy: kleine, schnell spulbare Vorschau-Datei
-    if (!stitched) work.proxy = await buildProxy(work, dir, proxyHeight, emit);
+    if (!stitched && willProxy) {
+      report('proxy', 0, true);
+      work.proxy = await buildProxy(work, dir, proxyHeight, (pc) => report('proxy', pc));
+    }
+    // Tonwelle aus der kleinen Vorschau-Datei (viel schneller als aus dem Original)
+    const wave = path.join(dir, 'wave.png');
+    if (work.info.hasAudio && !fileExists(wave) && work.proxy) {
+      report('wave', 100, true);
+      try {
+        await runFfmpeg(['-vn', '-i', work.proxy, '-filter_complex', 'aformat=channel_layouts=mono,compand=gain=-2,showwavespic=s=2000x80:colors=#5eead4:scale=sqrt', '-frames:v', '1', wave], { lowPriority: true });
+        work.waveform = wave;
+      } catch (e) { log.warn('Wellenform fehlgeschlagen', e); }
+    } else if (fileExists(wave)) work.waveform = wave;
+    work.prep = undefined;
     work.status = 'ready';
     emit();
 
@@ -244,22 +275,24 @@ export async function prepareMedia(item: MediaItem, update: MediaUpdateFn, proxy
 
 /** Erzeugt eine rückwärts laufende Variante des Proxys (für die Vorschau von Rückwärts-Clips). */
 export async function ensureReversedProxy(item: MediaItem, update: MediaUpdateFn): Promise<void> {
-  if (!item.proxy || !fileExists(item.proxy)) return;
-  const rev = item.proxy.replace(/\.mp4$/, '_rev.mp4');
+  const src = item.proxy && fileExists(item.proxy) ? item.proxy : item.path;
+  const rev = path.join(mediaCacheDir(item.path), item.proxy ? `${path.basename(item.proxy, '.mp4')}_rev.mp4` : 'orig_rev.mp4');
   if (!fileExists(rev)) {
     const h = Math.min(540, item.info.height || 540);
     const w = Math.round((h * (item.info.width || 960)) / Math.max(1, item.info.height || 540));
-    await reverseVideo(item.proxy, rev, { hasAudio: item.info.hasAudio, width: w, height: h, fps: 30, crf: 23 });
+    await reverseVideo(src, rev, { hasAudio: item.info.hasAudio, width: w, height: h, fps: 30, crf: 23 });
   }
   update({ ...item, proxyReversed: rev });
 }
 
 /** Erzeugt die Vorschau-Datei (Proxy); 360°-Rohvideos werden dabei zusammengesetzt. */
-async function buildProxy(work: MediaItem, dir: string, height: number, emit: () => void): Promise<string> {
+async function buildProxy(work: MediaItem, dir: string, height: number, onPercent: (p: number) => void): Promise<string> {
   const stitched = needsStitching(work.stitch);
   const key = stitched && work.stitch ? `${height}_s${Math.round(work.stitch.fov * 10)}_${Math.round(work.stitch.yaw * 10)}_${Math.round(work.stitch.pitch * 10)}_${Math.round(work.stitch.roll * 10)}` : `${height}`;
   const proxy = path.join(dir, `proxy_${key}.mp4`);
   if (fileExists(proxy)) return proxy;
+  // Erst in eine Zwischendatei schreiben – ein abgebrochener Lauf hinterlässt so keine kaputte Vorschau-Datei
+  const part = path.join(dir, `proxy_${key}.part.mp4`);
   const h = stitched ? height : Math.min(height, work.info.height || height);
   const args = ['-i', work.path];
   if (stitched && work.stitch) {
@@ -272,39 +305,54 @@ async function buildProxy(work: MediaItem, dir: string, height: number, emit: ()
     args.push('-map', '0:v:0', '-vf', `scale=-2:${h}`);
   }
   if (work.info.hasAudio) args.push('-map', '0:a:0?');
-  const tail = ['-c:a', 'aac', '-b:a', '128k', '-ac', '2', '-movflags', '+faststart', proxy];
+  const tail = ['-c:a', 'aac', '-b:a', '128k', '-ac', '2', '-movflags', '+faststart', part];
   const software = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-g', '15', '-pix_fmt', 'yuv420p', '-threads', '0'];
-  void emit;
+  const dur = Math.max(0.1, work.info.duration);
+  const onProgress = (p: { outTime: number }) => onPercent((p.outTime / dur) * 100);
+  const finish = () => { fs.renameSync(part, proxy); return proxy; };
   // Mac: Grafikchip dekodiert und kodiert (spart Akku und ist mehrfach schneller); bei Problemen normal weiter
-  if (process.platform === 'darwin' && !stitched) {
-    const bitrate = `${Math.max(1, Math.round((h / 540) * 3.5))}M`;
+  if (process.platform === 'darwin') {
+    const bitrate = `${Math.max(1, Math.round((h / 540) * (stitched ? 5 : 3.5)))}M`;
     try {
-      await runFfmpeg(['-hwaccel', 'videotoolbox', ...args, '-c:v', 'h264_videotoolbox', '-b:v', bitrate, '-g', '15', '-pix_fmt', 'yuv420p', '-allow_sw', '1', ...tail], { lowPriority: true });
-      return proxy;
+      await runFfmpeg(['-hwaccel', 'videotoolbox', ...args, '-c:v', 'h264_videotoolbox', '-b:v', bitrate, '-g', '15', '-pix_fmt', 'yuv420p', '-allow_sw', '1', ...tail], { lowPriority: true, onProgress });
+      return finish();
     } catch (e) {
       log.warn('Proxy per Grafikchip fehlgeschlagen, nehme Software', (e as Error).message);
-      try { fs.rmSync(proxy, { force: true }); } catch { /* egal */ }
+      try { fs.rmSync(part, { force: true }); } catch { /* egal */ }
     }
   }
-  await runFfmpeg([...args, ...software, ...tail], { lowPriority: true });
-  return proxy;
+  await runFfmpeg([...args, ...software, ...tail], { lowPriority: true, onProgress });
+  return finish();
+}
+
+/** Braucht diese Datei eine eigene Vorschau-Datei? (Full-HD-H.264 in 8 Bit spielt direkt flüssig.) */
+export function needsProxy(item: MediaItem, mode: 'auto' | 'always'): boolean {
+  if (item.type !== 'video') return false;
+  if (mode === 'always' || needsStitching(item.stitch)) return true;
+  const i = item.info;
+  const ext = path.extname(item.path).toLowerCase();
+  const easy = i.videoCodec === 'h264' && (!i.pixFmt || /^yuvj?420p$/.test(i.pixFmt))
+    && Math.min(i.width, i.height) <= 1088 && Math.max(i.width, i.height) <= 1928 && (i.fps || 30) <= 61
+    && ['.mp4', '.mov', '.m4v'].includes(ext) && !i.is360;
+  return !easy;
 }
 
 /** Erzeugt eine stabilisierte Variante des Proxys (vidstab in zwei Durchgängen, sonst deshake). */
 export async function ensureStabilizedProxy(item: MediaItem, update: MediaUpdateFn, strength = 5): Promise<void> {
-  if (!item.proxy || !fileExists(item.proxy)) return;
-  const stab = item.proxy.replace(/\.mp4$/, '_stab.mp4');
+  const src = item.proxy && fileExists(item.proxy) ? item.proxy : item.path;
+  const stab = path.join(mediaCacheDir(item.path), item.proxy ? `${path.basename(item.proxy, '.mp4')}_stab.mp4` : 'orig_stab.mp4');
   if (!fileExists(stab)) {
     const filters = await availableFilters();
-    const common = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-g', '15', '-pix_fmt', 'yuv420p', '-c:a', 'copy', '-movflags', '+faststart'];
+    const common = ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '23', '-g', '15', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-b:a', '128k', '-movflags', '+faststart'];
+    const small = src === item.path ? 'scale=-2:540,' : '';
     if (filters.has('vidstabdetect')) {
       const trf = stab + '.trf';
       const shak = Math.max(1, Math.min(10, Math.round(strength)));
-      await runFfmpeg(['-i', item.proxy, '-vf', `vidstabdetect=shakiness=${shak}:accuracy=15:result='${escapeFilterPath(trf)}'`, '-f', 'null', '-'], { lowPriority: true });
-      await runFfmpeg(['-i', item.proxy, '-vf', `vidstabtransform=input='${escapeFilterPath(trf)}':smoothing=${Math.round(5 + strength * 3)}:optzoom=1:interpol=bicubic,unsharp=5:5:0.6:3:3:0`, ...common, stab], { lowPriority: true });
+      await runFfmpeg(['-i', src, '-vf', `${small}vidstabdetect=shakiness=${shak}:accuracy=15:result='${escapeFilterPath(trf)}'`, '-f', 'null', '-'], { lowPriority: true });
+      await runFfmpeg(['-i', src, '-vf', `${small}vidstabtransform=input='${escapeFilterPath(trf)}':smoothing=${Math.round(5 + strength * 3)}:optzoom=1:interpol=bicubic,unsharp=5:5:0.6:3:3:0`, ...common, stab], { lowPriority: true });
       try { fs.rmSync(trf, { force: true }); } catch { /* ignorieren */ }
     } else if (filters.has('deshake')) {
-      await runFfmpeg(['-i', item.proxy, '-vf', `deshake=rx=${Math.round(16 + strength * 2)}:ry=${Math.round(16 + strength * 2)}:edge=mirror`, ...common, stab], { lowPriority: true });
+      await runFfmpeg(['-i', src, '-vf', `${small}deshake=rx=${Math.round(16 + strength * 2)}:ry=${Math.round(16 + strength * 2)}:edge=mirror`, ...common, stab], { lowPriority: true });
     } else {
       return;
     }

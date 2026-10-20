@@ -236,21 +236,26 @@ ipcMain.handle(IPC.importMedia, async (_e, paths: string[]) => {
 // Vorbereitung in zwei Warteschlangen: zuerst für alle Dateien die schnellen Vorschaubilder/Wellenformen,
 // danach nacheinander die Proxys – so erscheinen beim Import vieler Dateien sofort alle Vorschaubilder.
 let quickQueue: Promise<void> = Promise.resolve();
-let heavyQueue: Promise<void> = Promise.resolve();
-ipcMain.handle(IPC.prepareMedia, (_e, item: MediaItem, options?: { reversed?: boolean; stabilized?: number }) => {
+// Vorschau-Dateien: auf dem Mac (Grafikchip) zwei gleichzeitig, sonst eine nach der anderen
+const HEAVY_SLOTS = process.platform === 'darwin' ? 2 : 1;
+let heavyRunning = 0;
+const heavyWaiting: Array<() => void> = [];
+async function heavySlot<T>(fn: () => Promise<T>): Promise<T> {
+  if (heavyRunning >= HEAVY_SLOTS) await new Promise<void>((r) => heavyWaiting.push(r));
+  heavyRunning++;
+  try { return await fn(); } finally { heavyRunning--; heavyWaiting.shift()?.(); }
+}
+ipcMain.handle(IPC.prepareMedia, async (_e, item: MediaItem, options?: { reversed?: boolean; stabilized?: number }) => {
   const settings = loadSettings();
+  const proxyMode = settings.proxyMode ?? 'auto';
   let latest = item;
   const send = (updated: MediaItem) => { latest = updated; sendToWindow(IPC.mediaUpdate, updated); };
-  const quick = async () => { await prepareMedia(item, send, settings.proxyHeight, { ...options, stage: 'quick' }); };
+  const quick = async () => { await prepareMedia(item, send, settings.proxyHeight, { ...options, stage: 'quick', proxyMode }); };
   quickQueue = quickQueue.then(quick, quick);
-  const myQuick = quickQueue;
-  const heavy = async () => {
-    await myQuick.catch(() => undefined);
-    if (latest.status === 'error') return;
-    await prepareMedia(latest, send, settings.proxyHeight, { ...options, stage: 'heavy' });
-  };
-  heavyQueue = heavyQueue.then(heavy, heavy);
-  return heavyQueue;
+  await quickQueue.catch(() => undefined);
+  if (latest.status === 'error' || latest.type === 'image' || latest.type === 'audio') return;
+  if (latest.type === 'video' && latest.status !== 'ready') send({ ...latest, prep: { stage: 'waiting', percent: 0 } });
+  await heavySlot(() => prepareMedia(latest, send, settings.proxyHeight, { ...options, stage: 'heavy', proxyMode }));
 });
 
 // ---- Untertitel ----

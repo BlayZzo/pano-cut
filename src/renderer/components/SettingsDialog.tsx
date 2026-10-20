@@ -64,6 +64,11 @@ export function SettingsDialog(): React.ReactElement {
             </select>
             <label />
             <div className="hint">{t.settings.proxyHint}</div>
+            <label>{t.settings.proxyMode}</label>
+            <select value={settings.proxyMode ?? 'auto'} onChange={(e) => void patch({ proxyMode: e.target.value as 'auto' | 'always' })}>
+              <option value="auto">{t.settings.proxyAuto}</option>
+              <option value="always">{t.settings.proxyAlways}</option>
+            </select>
             <label />
             <label className="toggle"><input type="checkbox" checked={settings.hardwareAccel} onChange={(e) => void patch({ hardwareAccel: e.target.checked })} /> {t.settings.hardware}</label>
             <label />

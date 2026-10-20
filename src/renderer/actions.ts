@@ -30,7 +30,10 @@ export async function importFiles(paths: string[]): Promise<void> {
     paths = paths.filter((p) => !modelFormat(p));
     if (paths.length === 0) return;
   }
-  const items = await api().importMedia(paths);
+  const ui0 = useUi.getState();
+  ui0.setImporting(ui0.importing + paths.length);
+  let items: MediaItem[] = [];
+  try { items = await api().importMedia(paths); } finally { const u = useUi.getState(); u.setImporting(u.importing - paths.length); }
   const skipped = paths.length - items.length;
   if (items.length) {
     untracked(() => useProject.getState().addMedia(items));

@@ -25,6 +25,8 @@ export interface UiState {
   selection: string[];
   playhead: number;
   playing: boolean;
+  importing: number;      // Dateien, die gerade eingelesen werden
+  setImporting(n: number): void;
   loop: boolean;
   zoom: number;           // Pixel pro Sekunde
   scrollX: number;
@@ -96,6 +98,8 @@ export const useUi = create<UiState>()((set, get) => ({
   selection: [],
   playhead: 0,
   playing: false,
+  importing: 0,
+  setImporting: (importing) => set({ importing: Math.max(0, importing) }),
   loop: false,
   zoom: 60,
   scrollX: 0,
