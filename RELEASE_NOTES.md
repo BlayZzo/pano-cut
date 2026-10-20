@@ -1,3 +1,13 @@
+## PanoCut 0.8.3 – Kleine Korrektur
+
+**Installieren**
+- Mac mit Apple-Chip (M1–M4): `PanoCut-0.8.3-mac-arm64.dmg`
+- Mac mit Intel: `PanoCut-0.8.3-mac-x64.dmg`
+- Windows 10/11: `PanoCut-0.8.3-win-x64.exe`
+
+**Behoben**
+- „🔍 Original“: Kann ein Original nicht direkt abgespielt werden (z. B. H.265/HEVC unter Windows ohne Zusatz), bleibt die Vorschau nicht mehr schwarz – PanoCut zeigt dann einen Hinweis und weiter die Vorschau-Datei.
+
 ## PanoCut 0.8.2 – Ganze Ordner importieren, Kamera-Vorschau sofort bereit
 
 **Installieren**

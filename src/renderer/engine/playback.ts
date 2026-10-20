@@ -392,11 +392,19 @@ export class PlaybackEngine {
       m.addEventListener('seeked', () => { if (!this.playing) this.render(this.current); });
       m.addEventListener('loadeddata', () => { if (!this.playing) this.render(this.current); });
       if (isVideo && this.showOriginal && media.proxy && src === window.panocut.toMediaUrl(media.path)) {
-        m.addEventListener('error', () => {
+        // Nicht abspielbar (Fehler, nur Ton ohne Bild – z. B. HEVC unter Windows/Linux – oder lädt nicht): zurück zur Vorschau-Datei
+        let settled = false;
+        const fail = () => {
+          if (settled) return;
+          settled = true;
           this.originalFailed.add(media.id);
           this.onNotice(media.name);
           this.redraw();
-        });
+        };
+        m.addEventListener('error', fail);
+        m.addEventListener('loadedmetadata', () => { if ((m as HTMLVideoElement).videoWidth === 0) fail(); });
+        m.addEventListener('loadeddata', () => { if ((m as HTMLVideoElement).videoWidth === 0) fail(); else settled = true; });
+        window.setTimeout(() => { if (!settled && m.readyState < 2 && this.slots.get(clip.id)?.el === m) fail(); }, 6000);
       }
     }
     // Medien als „freigegeben“ laden, damit WebGL (Farbe, 360°) und KI sie lesen dürfen
