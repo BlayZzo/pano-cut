@@ -67,12 +67,15 @@ export async function runUiTest(win: BrowserWindow): Promise<number> {
     if (imported.importMs > 5000) failures.push(`Import dauert zu lange (${imported.importMs} ms)`);
     const byName = (n: string) => imported.media.find((m: { name: string }) => m.name.startsWith(n));
     if (byName('a_video')?.proxy) failures.push('Full-HD-H.264 bekam unnötig eine Vorschau-Datei');
-    if (!byName('d_4k')?.proxy) failures.push('4K-HEVC bekam keine Vorschau-Datei');
-    if (!imported.progressSeen.some((x: string) => x.startsWith('d_4k'))) failures.push('Kein Fortschritt für die 4K-Vorschau-Datei sichtbar');
+    // Mac: 4K-HEVC spielt der Grafikchip direkt (Sofort-Modus) – anderswo braucht es eine Vorschau-Datei
+    if (process.platform !== 'darwin') {
+      if (!byName('d_4k')?.proxy) failures.push('4K-HEVC bekam keine Vorschau-Datei');
+      if (!imported.progressSeen.some((x: string) => x.startsWith('d_4k'))) failures.push('Kein Fortschritt für die 4K-Vorschau-Datei sichtbar');
+    } else if (byName('d_4k')?.proxy) failures.push('Mac: 4K-HEVC bekam unnötig eine Vorschau-Datei');
     if (!imported.indicator) failures.push('Keine Fortschrittsanzeige oben');
 
     // Vorschau an mehreren Stellen prüfen: normales Video, 360°-Video, Bild
-    for (const [label, t] of [['Video', 1.2], ['360°', 5.5], ['Bild', 8.5]] as const) {
+    for (const [label, t] of [['Video', 1.2], ['360°', 5.5], ['Bild', 8.5], ['4K-HEVC', 15]] as const) {
       const res = await win.webContents.executeJavaScript(`(async () => {
         const T = window.__pcTest;
         T.useUi.getState().setPlayhead(${t});
