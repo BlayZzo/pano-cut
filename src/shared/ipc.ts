@@ -1,5 +1,5 @@
 import type { BeatInfo } from './beats';
-import type { AiDetectModel, AiProgress, AiSegmentModel, AppInfo, CloudSettings, Detection, ExportOptions, ExportProgress, MediaItem, Model3DSpec, Project, ProjectFile, Settings, SubtitleSegment, UpdateStatus, VfxSpec, WhisperModel, WhisperProgress } from './types';
+import type { AiDetectModel, AiProgress, AiSegmentModel, AppInfo, CloudSettings, Detection, ExportOptions, ExportProgress, MediaItem, Model3DSpec, Project, ProjectFile, Settings, StitchSettings, SubtitleSegment, UpdateStatus, VfxSpec, WhisperModel, WhisperProgress } from './types';
 
 export interface FramePayload { data: Uint8Array; width: number; height: number }
 export interface MaskPayload { width: number; height: number; alpha: Uint8Array }
@@ -27,6 +27,8 @@ export interface PanoCutApi {
   importMedia(paths: string[]): Promise<MediaItem[]>;
   /** Ordner durch die darin enthaltenen Medien-Dateien ersetzen (Kamera-Vorschaudateien mit Hauptvideo fallen weg). */
   expandMediaPaths(paths: string[]): Promise<string[]>;
+  /** 360°: Naht automatisch ausrichten (Kameradaten + Bildvergleich). */
+  stitchAutoAlign(item: MediaItem): Promise<{ stitch: StitchSettings; before: number; after: number; camera: boolean }>;
   prepareMedia(item: MediaItem, options?: { reversed?: boolean; stabilized?: number }): Promise<void>;
   onMediaUpdate(cb: (item: MediaItem) => void): () => void;
   /** Vorbereitungs-Warteschlange: Reihenfolge ändern, überspringen, beobachten */
@@ -125,6 +127,7 @@ export const IPC = {
   selectMediaFiles: 'media:select',
   importMedia: 'media:import',
   expandMediaPaths: 'media:expand',
+  stitchAutoAlign: 'media:stitchAuto',
   prepareMedia: 'media:prepare',
   mediaUpdate: 'media:update',
   prepQueue: 'media:prepQueue',

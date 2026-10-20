@@ -1,6 +1,7 @@
 // WebGL-Renderer für 360°-Videos: Equirectangular → flache Ansicht / gedrehtes Panorama / Little Planet.
 // Die Mathematik entspricht FFmpegs v360-Filter, damit Vorschau und Export übereinstimmen.
-import type { PanoMode } from '@shared/types';
+import type { PanoMode, StitchSettings } from '@shared/types';
+import { blendWidth, coverHalf, lensModel } from '@shared/stitchModel';
 import { panoMatrix, verticalFov } from '@shared/pano';
 import type { PanoView } from '@shared/pano';
 
@@ -18,12 +19,29 @@ uniform sampler2D uTex;
 uniform mat3 uRot;
 uniform vec2 uRange;
 uniform int uMode;
-uniform int uInput;     // 0 = Equirectangular, 1 = zwei Fischaugen nebeneinander (Rohvideo, wie v360 input=dfisheye)
-uniform mat3 uStitch;   // Ausrichtung beim Zusammensetzen
-uniform vec2 uFish;     // ih_fov/360, iv_fov/360
-uniform int uSwap;      // Linsen vertauscht (Kamera-Vorschaudatei)
+uniform int uInput;     // 0 = Equirectangular, 1 = zwei Fischaugen nebeneinander (Rohvideo) – Mathematik: shared/stitchModel.ts
+uniform mat3 uL0;       // Linse 0 (hinten): Blickrichtung → Linsen-Koordinaten
+uniform mat3 uL1;       // Linse 1 (vorne)
+uniform mat3 uG;        // Grund-Ausrichtung (für die Naht)
+uniform vec4 uRect0;    // Bildbereich der Linse in der Textur (x, y, w, h)
+uniform vec4 uRect1;
+uniform float uK0;      // 180 / ih_fov
+uniform float uK1;
+uniform vec3 uGain0;
+uniform vec3 uGain1;
+uniform float uBlend;   // Breite der weichen Naht (Grad)
+uniform float uCover;   // Linse wird bis zu diesem Längengrad benutzt (Grad)
 varying vec2 vUv;
 const float PI = 3.141592653589793;
+// Fischauge (wie v360 input=fisheye): a = 0, wenn die Richtung außerhalb des Bildkreises liegt
+vec4 fish(vec3 d, vec4 rect, float k) {
+  float h = length(d.xy);
+  float lh = h > 0.0 ? h : 1.0;
+  float phi = atan(h, d.z) / PI;
+  vec2 f = d.xy / lh * phi * k;
+  if (abs(f.x) >= 0.5 || abs(f.y) >= 0.5) return vec4(0.0);
+  return vec4(texture2D(uTex, rect.xy + (f + 0.5) * rect.zw).rgb, 1.0);
+}
 void main() {
   vec2 p = vUv * 2.0 - 1.0;
   vec3 v;
@@ -44,17 +62,22 @@ void main() {
   v = normalize(v);
   v = uRot * v;
   if (uInput == 1) {
-    v = uStitch * v;
-    float h = length(v.xy);
-    float lh = h > 0.0 ? h : 1.0;
-    float th = acos(clamp(abs(v.z), 0.0, 1.0)) / PI;
-    float uf = 0.5 * (th * (v.x / lh) / uFish.x) + 0.5;
-    float vf = 0.5 * (th * (v.y / lh) / uFish.y) + 0.5;
-    bool front = v.z >= 0.0;
-    if (!front) uf = 1.0 - uf;
-    if (uSwap == 1) front = !front;
-    float u = front ? 0.5 + clamp(uf, 0.0, 1.0) * 0.5 : clamp(uf, 0.0, 1.0) * 0.5;
-    gl_FragColor = texture2D(uTex, vec2(u, clamp(vf, 0.0, 1.0)));
+    vec4 c0 = fish(uL0 * v, uRect0, uK0);
+    vec4 c1 = fish(uL1 * v, uRect1, uK1);
+    vec3 gu = uG * v;
+    float uz = gu.z;
+    float lonu = abs(degrees(atan(gu.x, gu.z)));
+    float w;
+    if (lonu > uCover) w = 0.0;
+    else if (lonu < 180.0 - uCover) w = 1.0;
+    else if (uBlend <= 0.0) w = uz >= 0.0 ? 1.0 : 0.0;
+    else {
+      float x = clamp((degrees(asin(clamp(uz, -1.0, 1.0))) + uBlend * 0.5) / uBlend, 0.0, 1.0);
+      w = x * x * (3.0 - 2.0 * x);
+    }
+    if (c1.a < 0.5) w = 0.0;
+    if (c0.a < 0.5) w = 1.0;
+    gl_FragColor = vec4(mix(c0.rgb * uGain0, c1.rgb * uGain1, w), 1.0);
     return;
   }
   float lon = atan(v.x, v.z) / PI;
@@ -63,8 +86,8 @@ void main() {
   gl_FragColor = texture2D(uTex, uv);
 }`;
 
-/** Rohvideo mit zwei Fischaugen nebeneinander: Linsen-Sichtfeld und Ausrichtung (wie StitchSettings). */
-export interface FisheyeInput { fov: number; yaw: number; pitch: number; roll: number; swap?: boolean }
+/** Rohvideo mit zwei Fischaugen nebeneinander: Zusammensetz-Einstellungen; `swap` = Bildhälften andersherum. */
+export interface FisheyeInput { stitch: StitchSettings; swap?: boolean }
 
 export class PanoGL {
   readonly canvas: HTMLCanvasElement;
@@ -74,10 +97,7 @@ export class PanoGL {
   private uRot: WebGLUniformLocation | null = null;
   private uRange: WebGLUniformLocation | null = null;
   private uMode: WebGLUniformLocation | null = null;
-  private uInput: WebGLUniformLocation | null = null;
-  private uStitch: WebGLUniformLocation | null = null;
-  private uFish: WebGLUniformLocation | null = null;
-  private uSwap: WebGLUniformLocation | null = null;
+  private u: Record<string, WebGLUniformLocation | null> = {};
   private lastSource: unknown = null;
   private lastSourceTime = -1;
 
@@ -128,10 +148,7 @@ export class PanoGL {
     this.uRot = gl.getUniformLocation(prog, 'uRot');
     this.uRange = gl.getUniformLocation(prog, 'uRange');
     this.uMode = gl.getUniformLocation(prog, 'uMode');
-    this.uInput = gl.getUniformLocation(prog, 'uInput');
-    this.uStitch = gl.getUniformLocation(prog, 'uStitch');
-    this.uFish = gl.getUniformLocation(prog, 'uFish');
-    this.uSwap = gl.getUniformLocation(prog, 'uSwap');
+    for (const n of ['uInput', 'uL0', 'uL1', 'uG', 'uRect0', 'uRect1', 'uK0', 'uK1', 'uGain0', 'uGain1', 'uBlend', 'uCover']) this.u[n] = gl.getUniformLocation(prog, n);
     gl.uniform1i(gl.getUniformLocation(prog, 'uTex'), 0);
     this.program = prog;
   }
@@ -174,12 +191,22 @@ export class PanoGL {
       gl.uniform2f(this.uRange, rx, rx * (outH / outW));
       gl.uniform1i(this.uMode, 2);
     }
-    gl.uniform1i(this.uInput, fisheye ? 1 : 0);
+    gl.uniform1i(this.u.uInput, fisheye ? 1 : 0);
     if (fisheye) {
-      const s = panoMatrix(fisheye.yaw, fisheye.pitch, fisheye.roll);
-      gl.uniformMatrix3fv(this.uStitch, false, new Float32Array([s[0], s[3], s[6], s[1], s[4], s[7], s[2], s[5], s[8]]));
-      gl.uniform2f(this.uFish, fisheye.fov / 360, fisheye.fov / 360);
-      gl.uniform1i(this.uSwap, fisheye.swap ? 1 : 0);
+      const st = fisheye.stitch;
+      const col = (m: number[]) => new Float32Array([m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]]);
+      for (const i of [0, 1] as const) {
+        const lm = lensModel(st, i);
+        // Welche Bildhälfte gehört zu dieser Linse? (Kamera-Vorschaudatei evtl. andersherum)
+        const half = (fisheye.swap ? 1 - i : i) * 0.5;
+        gl.uniformMatrix3fv(this.u[`uL${i}`], false, col(lm.matrix));
+        gl.uniform4f(this.u[`uRect${i}`], half + lm.crop.x * 0.5, lm.crop.y, lm.crop.w * 0.5, lm.crop.h);
+        gl.uniform1f(this.u[`uK${i}`], 180 / lm.ihFov);
+        gl.uniform3f(this.u[`uGain${i}`], lm.gain[0], lm.gain[1], lm.gain[2]);
+      }
+      gl.uniformMatrix3fv(this.u.uG, false, col(panoMatrix(st.yaw, st.pitch, st.roll)));
+      gl.uniform1f(this.u.uBlend, blendWidth(st));
+      gl.uniform1f(this.u.uCover, coverHalf(st));
     }
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     return this.canvas;

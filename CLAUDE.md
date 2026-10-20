@@ -111,4 +111,10 @@ Insta360 LRV_) → `attachCompanion` setzt `MediaItem.companion` = `proxy` (nich
 0.8.4: `panogl` kann Dual-Fisheye direkt (`FisheyeInput`, Formel = v360 `xyz_to_dfisheye`, Stitch-Rotation nach View-Rotation) → Rohvideo ohne Proxy
 richtig; 2-Streams-Rohvideo ohne Proxy = nicht zeichnen. 360° mit LRV: Proxy aus der LRV (`buildProxy` `comp`), Linsentausch per Bildvergleich
 (`lensesSwapped` → `companionSwap`, Vorschau `uSwap`, Proxy crop+hstack).
+0.8.5: Stitching-Modell `shared/stitchModel.ts` (je Linse dx/dy/r/Drehung/Gain, `lensModel`, weiche Naht `blendWidth`, `coverHalf`,
+`autoAlign` = Koordinatensuche fov + Drehung vordere Linse auf Naht-Fehler, `matchGains`, `parseInstaOffset` aus dem Insta360-Anhang).
+Export `stitch.ts lensStitchChain`: pro Linse v360 input=fisheye (ohne Grund-Drehung nur Teil-Equirect `h_fov`, hintere Linse um 180° gedreht
+und an die Ränder gelegt), Maske EIN Bild per geq (maskedmerge wiederholt es; kein `shortest`!), alles in yuv420p (Helligkeit per lutyuv).
+Vorschau `panogl` gleiche Formeln (uL0/uL1/uG/uRect/uK/uGain/uBlend/uCover). Veraltete Proxy (`proxyStitchKey` ≠ `stitchKey`) → live aus
+LRV/Rohvideo. IPC `stitchAutoAlign` (`main/stitchAuto.ts`). Linse 0 = links/erster Strom = hinten; LRV der X5 hat die Linsen vertauscht.
 Ansicht/Layout: `ViewSettings` (`settings.view`, `useView`/`updateView`), `Splitter.tsx`, `Popover.tsx`.

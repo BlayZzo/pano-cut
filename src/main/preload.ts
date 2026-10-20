@@ -32,6 +32,7 @@ const api: PanoCutApi = {
   selectMediaFiles: () => ipcRenderer.invoke(IPC.selectMediaFiles),
   importMedia: (paths) => ipcRenderer.invoke(IPC.importMedia, paths),
   expandMediaPaths: (paths) => ipcRenderer.invoke(IPC.expandMediaPaths, paths),
+  stitchAutoAlign: (item) => ipcRenderer.invoke(IPC.stitchAutoAlign, item),
   prepareMedia: (item, options) => ipcRenderer.invoke(IPC.prepareMedia, item, options),
   onMediaUpdate: subscribe(IPC.mediaUpdate),
   prepReorder: (ids) => ipcRenderer.invoke(IPC.prepReorder, ids),

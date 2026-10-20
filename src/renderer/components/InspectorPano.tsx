@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import type { Clip, MediaItem, PanoMode, PanoSettings } from '@shared/types';
+import type { Clip, LensCalSettings, MediaItem, PanoMode, PanoSettings } from '@shared/types';
+import { lensCal } from '@shared/stitchModel';
 import { applyCameraMove, CAMERA_MOVES, type CameraMove } from '@shared/cameraMoves';
 import { clipDuration, formatTime } from '@shared/timeline';
 import { defaultPano, defaultStitch, keyframeAt, panoViewAt, removeKeyframe, upsertKeyframe } from '@shared/pano';
@@ -69,7 +70,30 @@ export function InspectorPano({ clip, media }: { clip: Clip; media: MediaItem })
   const stitch = media.stitch ?? defaultStitch('equirect');
   const restitch = () => {
     const m = useProject.getState().project.media[media.id];
-    if (m) void window.panocut.prepareMedia({ ...m, proxy: undefined, proxyReversed: undefined, proxyStabilized: undefined, status: 'processing' });
+    // Alte Vorschau-Datei bleibt bis zum Ende sichtbar (bzw. die Vorschau setzt live aus dem Rohvideo zusammen)
+    if (m) void window.panocut.prepareMedia({ ...m, proxyReversed: undefined, proxyStabilized: undefined, status: 'processing' });
+  };
+  const [aligning, setAligning] = useState(false);
+  const autoAlign = async () => {
+    const m = useProject.getState().project.media[media.id];
+    if (!m) return;
+    setAligning(true);
+    try {
+      const r = await window.panocut.stitchAutoAlign(m);
+      beginTransaction(); updateMediaStitch(media.id, r.stitch); endTransaction();
+      const better = r.before > 0 ? Math.max(0, Math.round((1 - r.after / r.before) * 100)) : 0;
+      useUi.getState().toast(fmt(r.camera ? t.pano.alignDoneCamera : t.pano.alignDone, { p: better }), 'success');
+      restitch();
+    } catch (e) {
+      useUi.getState().toast(`${t.pano.alignFailed}: ${(e as Error).message}`, 'error');
+    } finally { setAligning(false); }
+  };
+  const front = lensCal(stitch, 1);
+  const setFront = (p: Partial<LensCalSettings>) => updateMediaStitch(media.id, { lens: [lensCal(stitch, 0), { ...front, ...p }] });
+  const balance = Math.round((lensCal(stitch, 1).gain[1] / Math.max(0.01, lensCal(stitch, 0).gain[1]) - 1) * 100);
+  const setBalance = (pc: number) => {
+    const g = Math.sqrt(1 + pc / 100);
+    updateMediaStitch(media.id, { lens: [{ ...lensCal(stitch, 0), gain: [1 / g, 1 / g, 1 / g] }, { ...front, gain: [g, g, g] }] });
   };
 
   return (
@@ -105,13 +129,21 @@ export function InspectorPano({ clip, media }: { clip: Clip; media: MediaItem })
       </Section>
       {media.stitch && media.stitch.mode !== 'equirect' && (
         <Section title={t.pano.stitch} defaultOpen={false}>
-          <Slider label={t.pano.stitchFov} value={stitch.fov} min={170} max={220} step={0.5} unit="°" onChange={(v) => updateMediaStitch(media.id, { fov: v })} />
+          <button className="btn sm primary" style={{ width: '100%' }} disabled={aligning} onClick={() => void autoAlign()}>{aligning ? t.pano.aligning : `✦ ${t.pano.align}`}</button>
+          <div className="hint">{stitch.calibrated ? (stitch.calibrated === 'auto' ? t.pano.alignedAuto : t.pano.alignedCamera) : t.pano.alignHint}</div>
+          <Slider label={t.pano.stitchBlend} value={stitch.blend ?? 0} min={0} max={Math.max(0, stitch.fov - 184)} step={0.5} unit="°" onChange={(v) => updateMediaStitch(media.id, { blend: v })} />
+          <Slider label={t.pano.stitchFov} value={stitch.fov} min={170} max={225} step={0.25} unit="°" onChange={(v) => updateMediaStitch(media.id, { fov: v })} />
           <Slider label={t.pano.stitchYaw} value={stitch.yaw} min={-180} max={180} step={1} unit="°" onChange={(v) => updateMediaStitch(media.id, { yaw: v })} />
           <Slider label={t.pano.stitchPitch} value={stitch.pitch} min={-90} max={90} step={1} unit="°" onChange={(v) => updateMediaStitch(media.id, { pitch: v })} />
           <Slider label={t.pano.stitchRoll} value={stitch.roll} min={-180} max={180} step={1} unit="°" onChange={(v) => updateMediaStitch(media.id, { roll: v })} />
+          <div className="sub-title">{t.pano.frontLens}</div>
+          <Slider label={t.pano.lensYaw} value={front.yaw} min={-6} max={6} step={0.05} unit="°" onChange={(v) => setFront({ yaw: v })} />
+          <Slider label={t.pano.lensPitch} value={front.pitch} min={-6} max={6} step={0.05} unit="°" onChange={(v) => setFront({ pitch: v })} />
+          <Slider label={t.pano.lensRoll} value={front.roll} min={-6} max={6} step={0.05} unit="°" onChange={(v) => setFront({ roll: v })} />
+          <Slider label={t.pano.lensBalance} value={balance} min={-30} max={30} step={1} unit=" %" onChange={setBalance} />
           <div className="field-row">
             <button className="btn sm primary" onClick={restitch}>{t.pano.restitch}</button>
-            <button className="btn sm ghost" onClick={() => { beginTransaction(); updateMediaStitch(media.id, { fov: 195, yaw: 0, pitch: 0, roll: 0 }); endTransaction(); }}>{t.pano.reset}</button>
+            <button className="btn sm ghost" onClick={() => { beginTransaction(); updateMediaStitch(media.id, { fov: 195, yaw: 0, pitch: 0, roll: 0, blend: 8, lens: undefined, calibrated: undefined }); endTransaction(); }}>{t.pano.reset}</button>
           </div>
           <div className="hint">{t.pano.restitchHint}</div>
         </Section>

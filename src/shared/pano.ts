@@ -8,7 +8,8 @@ export function defaultPano(mode: PanoMode = 'flat'): PanoSettings {
 }
 
 export function defaultStitch(mode: StitchSettings['mode']): StitchSettings {
-  return { mode, fov: 195, yaw: 0, pitch: 0, roll: 0 };
+  // Zwei Fischaugen: weiche Naht (8°) als Standard
+  return mode === 'equirect' ? { mode, fov: 195, yaw: 0, pitch: 0, roll: 0 } : { mode, fov: 195, yaw: 0, pitch: 0, roll: 0, blend: 8 };
 }
 
 function smoothstep(x: number): number {

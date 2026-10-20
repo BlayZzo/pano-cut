@@ -4,6 +4,7 @@ import { panoViewAt } from '@shared/pano';
 import { maskAt, trackBoxAt } from '@shared/ai';
 import type { Attachment } from '@shared/types';
 import { sharedPanoGL, type FisheyeInput } from './panogl';
+import { stitchKey } from '@shared/stitchModel';
 import { sharedChromaGL } from './chromagl';
 import { sharedColorGL } from './colorgl';
 import { motionAt } from '@shared/effects';
@@ -361,6 +362,11 @@ export class PlaybackEngine {
     if (clip.reverse && media.proxyReversed) return { src: url(media.proxyReversed), reversedFile: true };
     if (clip.stabilize?.enabled && media.proxyStabilized && !clip.reverse) return { src: url(media.proxyStabilized), reversedFile: false };
     const st = media.stitch;
+    // 360°-Zusammensetzen wurde verändert, Vorschau-Datei ist noch die alte: aus dem Rohvideo live zusammensetzen
+    if (st && st.mode !== 'equirect' && media.proxy && media.proxy !== media.companion && media.proxyStitchKey && media.proxyStitchKey !== stitchKey(st)) {
+      if (media.companion) return { src: url(media.companion), reversedFile: false };
+      if (st.mode === 'dualfisheye-sbs') return { src: url(media.path), reversedFile: false };
+    }
     const flat = !st || st.mode === 'dualfisheye-sbs' || (st.mode === 'equirect' && Math.abs(st.yaw) + Math.abs(st.pitch) + Math.abs(st.roll) < 1e-6);
     if (this.showOriginal && media.type === 'video' && flat && !this.originalFailed.has(media.id)) return { src: url(media.path), reversedFile: false };
     if (media.proxy) return { src: url(media.proxy), reversedFile: false };
@@ -376,7 +382,7 @@ export class PlaybackEngine {
     const fromRaw = slot.src === url(media.path);
     if (!fromCompanion && !fromRaw) return null;               // fertig zusammengesetzte Vorschau-Datei
     if (fromRaw && st.mode === 'dualfisheye-2streams') return 'skip'; // zwei getrennte Bildspuren kann der Browser nicht zeigen
-    return { fov: st.fov, yaw: st.yaw, pitch: st.pitch, roll: st.roll, swap: fromCompanion && !!media.companionSwap };
+    return { stitch: st, swap: fromCompanion && !!media.companionSwap };
   }
 
   setShowOriginal(on: boolean): void {

@@ -36,6 +36,16 @@ export interface StitchSettings {
   yaw: number;        // Grund-Ausrichtung des Panoramas (Grad)
   pitch: number;
   roll: number;
+  /** Weiche Naht (Grad, 0 = hart). Fehlt = hart (ältere Projekte). */
+  blend?: number;
+  /** Je Linse: Bildkreis, Drehkorrektur, Farbe (siehe shared/stitchModel.ts). [0] = hinten/links, [1] = vorne/rechts */
+  lens?: [Partial<LensCalSettings>, Partial<LensCalSettings>];
+  /** Aus den Kameradaten übernommen (Anzeige) */
+  calibrated?: 'camera' | 'auto' | 'camera+auto';
+}
+
+export interface LensCalSettings {
+  dx: number; dy: number; r: number; yaw: number; pitch: number; roll: number; gain: [number, number, number];
 }
 
 export interface MediaItem {
@@ -50,7 +60,8 @@ export interface MediaItem {
   sprite?: SpriteInfo;     // Hover-Vorschau (Bildstreifen)
   proxy?: string;          // kleine Vorschau-Datei (Video)
   companion?: string;      // Kamera-Vorschaudatei (DJI .LRF, GoPro/Insta360 .LRV), dient als Vorschau-Datei
-  companionSwap?: boolean; // 360°: Linsen in der Kamera-Vorschaudatei andersherum als im Original
+  companionSwap?: boolean;
+  proxyStitchKey?: string; // 360°: mit welchen Zusammensetz-Einstellungen die Vorschau-Datei erstellt wurde // 360°: Linsen in der Kamera-Vorschaudatei andersherum als im Original
   proxyReversed?: string;  // rückwärts laufende Vorschau-Datei
   waveform?: string;       // Wellenform-Bild (Audio)
   stitch?: StitchSettings; // nur 360°-Videos

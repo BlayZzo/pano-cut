@@ -1,3 +1,17 @@
+## PanoCut 0.8.5 – Besseres 360°-Zusammensetzen (Stitching)
+
+**Installieren**
+- Mac mit Apple-Chip (M1–M4): `PanoCut-0.8.5-mac-arm64.dmg`
+- Mac mit Intel: `PanoCut-0.8.5-mac-x64.dmg`
+- Windows 10/11: `PanoCut-0.8.5-win-x64.exe`
+
+**Neu beim 360°-Zusammensetzen** (Clip auswählen → Inspektor → 360° → „Zusammensetzen“)
+- **Weiche Naht**: Die beiden Linsen werden an der Naht weich ineinander überblendet statt hart aneinandergesetzt (Standard 8°, Regler „Weiche Naht“).
+- **✦ Naht automatisch ausrichten** (Knopf): liest die Linsen-Daten aus der Insta360-Datei (Mittelpunkt und Größe jedes Bildkreises), vergleicht beide Linsen an der Naht und stellt Sichtfeld, Ausrichtung der vorderen Linse und Helligkeit so ein, dass die Naht möglichst verschwindet. Danach wird die Vorschau-Datei neu erstellt.
+- **Feinjustierung** der vorderen Linse (seitlich, hoch/runter, kippen) und **Helligkeit vorne ↔ hinten** – mit Kamera-Vorschaudatei bzw. Rohvideo siehst du jede Änderung sofort in der Vorschau.
+- Vorschau und Export rechnen exakt gleich; der Export nutzt immer die volle Auflösung.
+- Insta360-LRV-Dateien mit vertauschten Linsen werden richtig erkannt.
+
 ## PanoCut 0.8.4 – 360°-Rohvideos sofort richtig in der Vorschau
 
 **Installieren**

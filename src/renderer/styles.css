@@ -449,3 +449,4 @@ textarea:focus { border-color: var(--accent); }
 /* Kamera-Vorschaudatei (.LRF/.LRV) gebündelt */
 .media-badge.companion { left: auto; right: 4px; top: 4px; background: rgba(250, 204, 21, 0.9); color: #1a1a1a; }
 .preview-source-badge { position: absolute; left: 8px; top: 8px; z-index: 4; pointer-events: none; font-size: 11px; padding: 2px 7px; border-radius: 4px; background: rgba(250, 204, 21, 0.92); color: #1a1a1a; font-weight: 600; }
+.sub-title { font-size: 11px; font-weight: 700; color: var(--text-dim); margin: 8px 0 2px; text-transform: none; }

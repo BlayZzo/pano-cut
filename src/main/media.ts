@@ -12,6 +12,7 @@ import { escapeFilterPath } from './fonts';
 import { defaultStitch } from '@shared/pano';
 import type { StitchSettings } from '@shared/types';
 import { dropCompanions, isCompanionFor, isCompanionName } from '@shared/companion';
+import { stitchKey } from '@shared/stitchModel';
 import os from 'node:os';
 
 const VIDEO_EXT = new Set(['.mp4', '.mov', '.m4v', '.mkv', '.avi', '.webm', '.mts', '.m2ts', '.ts', '.mxf', '.insv', '.360', '.wmv', '.flv', '.3gp', '.lrv']);
@@ -193,6 +194,7 @@ export async function prepareMedia(item: MediaItem, update: MediaUpdateFn, proxy
       report('stitch', 0, true);
       const proxy = await buildProxy(work, dir, Math.max(proxyHeight, PANO_PROXY_HEIGHT), (pc) => report('stitch', pc));
       work.proxy = proxy;
+      work.proxyStitchKey = stitchKey(work.stitch);
       visualSource = proxy;
       emit();
     }
@@ -399,8 +401,10 @@ export async function listMediaInFolder(dir: string, recursive: boolean): Promis
     for (const e of entries) {
       if (e.name.startsWith('.') || e.name.startsWith('._')) continue;
       const p = path.join(d, e.name);
-      if (e.isDirectory()) { if (recursive && depth < 8) await walk(p, depth + 1); }
-      else if (e.isFile() && mediaTypeFor(p)) out.push(p);
+      let dir = e.isDirectory(), file = e.isFile();
+      if (e.isSymbolicLink()) { try { const st = await fs.promises.stat(p); dir = st.isDirectory(); file = st.isFile(); } catch { continue; } }
+      if (dir) { if (recursive && depth < 8) await walk(p, depth + 1); }
+      else if (file && mediaTypeFor(p)) out.push(p);
     }
   };
   await walk(dir, 0);
@@ -424,7 +428,7 @@ async function buildProxy(work: MediaItem, dir: string, height: number, onPercen
   const stitched = needsStitching(work.stitch);
   // 360°: Ist eine Kamera-Vorschaudatei (.LRV) da, wird aus ihr zusammengesetzt – viel kleiner, daher viel schneller
   const comp = stitched && work.companion && fileExists(work.companion) ? work.companion : undefined;
-  const key = (stitched && work.stitch ? `${height}_s${Math.round(work.stitch.fov * 10)}_${Math.round(work.stitch.yaw * 10)}_${Math.round(work.stitch.pitch * 10)}_${Math.round(work.stitch.roll * 10)}` : `${height}`) + (comp ? (work.companionSwap ? '_cs' : '_c') : '');
+  const key = (stitched && work.stitch ? `${height}_s${stitchKey(work.stitch)}` : `${height}`) + (comp ? (work.companionSwap ? '_cs' : '_c') : '');
   const proxy = path.join(dir, `proxy_${key}.mp4`);
   if (fileExists(proxy)) return proxy;
   // Erst in eine Zwischendatei schreiben – ein abgebrochener Lauf hinterlässt so keine kaputte Vorschau-Datei

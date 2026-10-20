@@ -243,7 +243,7 @@ export class ExportJob {
             if (hasVideo) {
               const fit = `scale=w=${this.options.width * (stitched ? 2 : 1)}:h=${this.options.height * (stitched ? 2 : 1)}:force_original_aspect_ratio=decrease:force_divisible_by=2`;
               videoFilter = stitched && media.stitch
-                ? stitchChain(media.stitch, ['', ''], media.info.width, media.info.height) + ',' + fit
+                ? stitchChain(media.stitch, ['', ''], media.info.width, media.info.height, /1[02]/.test(media.info.pixFmt ?? '')) + ',' + fit
                 : fit;
             }
             await reverseVideo(media.path, out, {
@@ -392,7 +392,7 @@ export class ExportJob {
     const chain: string[] = [];
     // 360°-Rohvideo zuerst zusammensetzen (bei zwei Streams muss hstack ganz vorn stehen)
     const stitched = needsStitching(media.stitch) && !seg.reversedFile;
-    if (stitched && media.stitch) chain.push(stitchChain(media.stitch, ['', ''], media.info.width, media.info.height));
+    if (stitched && media.stitch) chain.push(stitchChain(media.stitch, ['', ''], media.info.width, media.info.height, /1[02]/.test(media.info.pixFmt ?? '')));
     chain.push('setpts=PTS-STARTPTS');
     if (!seg.isImage && Math.abs(c.speed - 1) > 1e-6) chain.push(`setpts=PTS/${fnum(c.speed)}`);
     chain.push(`fps=${fps}`);
