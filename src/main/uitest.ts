@@ -32,8 +32,9 @@ export async function runUiTest(win: BrowserWindow): Promise<number> {
     const pano = path.join(dir, 'b_pano360.mp4');
     const image = path.join(dir, 'c_bild.png');
     const uhd = path.join(dir, 'd_4k_hevc.mp4');
-    await runFfmpeg(['-f', 'lavfi', '-i', 'testsrc2=duration=4:size=1920x1080:rate=30', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=4',
-      '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', video]);
+    // wie ein Handy-Video: Full HD, 60 Bilder/s, lange Abstände zwischen Schlüsselbildern, hohe Datenrate (keine Vorschau-Datei)
+    await runFfmpeg(['-f', 'lavfi', '-i', 'testsrc2=duration=4:size=1920x1080:rate=60', '-f', 'lavfi', '-i', 'sine=frequency=440:duration=4',
+      '-c:v', 'libx264', '-preset', 'veryfast', '-crf', '14', '-g', '240', '-pix_fmt', 'yuv420p', '-c:a', 'aac', '-shortest', video]);
     await runFfmpeg(['-f', 'lavfi', '-i', 'testsrc2=duration=3:size=2048x1024:rate=30', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', pano]);
     await runFfmpeg(['-f', 'lavfi', '-i', 'testsrc2=size=1280x720', '-frames:v', '1', image]);
     await runFfmpeg(['-f', 'lavfi', '-i', 'testsrc2=duration=8:size=3840x2160:rate=30', '-c:v', 'libx265', '-preset', 'ultrafast', '-tag:v', 'hvc1', '-pix_fmt', 'yuv420p', uhd]);
@@ -51,7 +52,7 @@ export async function runUiTest(win: BrowserWindow): Promise<number> {
       for (let i = 0; i < 2400; i++) {
         const ms = Object.values(T.useProject.getState().project.media);
         for (const m of ms) if (m.prep && m.prep.percent > 0 && m.prep.percent < 100) seen.add(m.name + ':' + m.prep.stage);
-        const ind = document.querySelector('.prep-indicator'); if (ind && !indicator) indicator = ind.textContent;
+        const ind = document.querySelector('.prep-indicator-btn'); if (ind && !indicator) indicator = ind.textContent;
         if (!firstThumbMs && ms.length === 4 && ms.every((m) => m.thumb || m.status === 'error')) firstThumbMs = Math.round(performance.now() - t0);
         if (ms.length === 4 && ms.every((m) => m.status === 'ready' || m.status === 'error')) break;
         await new Promise((r) => setTimeout(r, 100));
