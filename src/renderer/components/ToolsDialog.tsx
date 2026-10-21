@@ -15,8 +15,10 @@ import { importFiles } from '../actions';
 import { describeFactor, ensureTimes, syncAngles } from '../tools/timesync';
 import { estimateTimelapse } from '@shared/timesync';
 import { NumInput } from './InspectorBits';
+import { SPEED_RAMPS, type SpeedRamp } from '@shared/cameraMoves';
+import { applyLook, carReel, rampOnAccents, rigLook, shakesOnAccents, textBehindCar, whipBetween } from '../tools/carporn';
 
-export type ToolPage = 'reframe' | 'hook' | 'cover' | 'rough' | 'time' | 'templates' | 'watch' | 'storage';
+export type ToolPage = 'reframe' | 'hook' | 'cover' | 'rough' | 'time' | 'carporn' | 'templates' | 'watch' | 'storage';
 
 const GROUPS: Array<{ name: string; pages: Array<{ id: ToolPage; icon: string; label: string }> }> = [
   { name: t.tools.groupSocial, pages: [
@@ -24,7 +26,7 @@ const GROUPS: Array<{ name: string; pages: Array<{ id: ToolPage; icon: string; l
     { id: 'hook', icon: '🎣', label: t.tools.hook },
     { id: 'cover', icon: '🖼️', label: t.tools.cover },
   ] },
-  { name: t.tools.groupEdit, pages: [{ id: 'rough', icon: '✂️', label: t.tools.rough }, { id: 'time', icon: '⏱', label: t.time.title }] },
+  { name: t.tools.groupEdit, pages: [{ id: 'rough', icon: '✂️', label: t.tools.rough }, { id: 'time', icon: '⏱', label: t.time.title }, { id: 'carporn', icon: '🏎', label: t.carporn.title }] },
   { name: t.tools.groupProject, pages: [{ id: 'templates', icon: '📋', label: t.tools.templates }] },
   { name: t.tools.groupFiles, pages: [
     { id: 'watch', icon: '👀', label: t.tools.watch },
@@ -59,6 +61,7 @@ export function ToolsDialog(): React.ReactElement {
             {page === 'cover' && <CoverTool />}
             {page === 'rough' && <RoughCutTool />}
           {page === 'time' && <TimeTool />}
+            {page === 'carporn' && <CarpornTool />}
             {page === 'templates' && <TemplatesTool />}
             {page === 'watch' && <WatchFolderSettings />}
             {page === 'storage' && <StorageSettings />}
@@ -456,6 +459,66 @@ export function WatchBanner(): React.ReactElement | null {
 }
 
 // ---------------------------------------------------------------- Zeit & Tempo
+
+function CarpornTool(): React.ReactElement {
+  const toast = useUi((s) => s.toast);
+  const letterbox = useProject((s) => s.project.settings.letterbox ?? 0);
+  const [ramp, setRamp] = useState<SpeedRamp>('passby');
+  const [strength, setStrength] = useState(1);
+  const [text, setText] = useState('PANOCUT');
+  const [busy, setBusy] = useState(false);
+  const run = (fn: () => number, msg: string) => { const n = fn(); if (n > 0) toast(fmt(msg, { n }), 'success'); };
+  return (
+    <div className="tool-page">
+      <h3>🏎 {t.carporn.title}</h3>
+      <div className="hint">{t.carporn.hint}</div>
+
+      <div className="panel-header" style={{ border: 'none' }}>🎬 {t.carporn.reelTitle}</div>
+      <div className="hint">{t.carporn.reelHint}</div>
+      <button className="btn primary" disabled={busy} onClick={() => { setBusy(true); void carReel().finally(() => setBusy(false)); }}>{busy ? '…' : t.carporn.reel}</button>
+
+      <div className="panel-header" style={{ border: 'none', marginTop: 12 }}>⏩ {t.carporn.rampTitle}</div>
+      <div className="form-grid compact">
+        <label>{t.carporn.ramp}</label>
+        <select value={ramp} onChange={(e) => setRamp(e.target.value as SpeedRamp)}>{SPEED_RAMPS.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</select>
+        <label>{t.carporn.strength}</label>
+        <div className="inline"><input type="range" min={0.3} max={2} step={0.05} value={strength} onChange={(e) => setStrength(parseFloat(e.target.value))} /><span>{Math.round(strength * 100)} %</span></div>
+      </div>
+      <div className="field-row" style={{ flexWrap: 'wrap', gap: 6 }}>
+        <button className="btn" onClick={() => run(() => rampOnAccents(ramp, strength), t.carporn.rampDone)}>⏩ {t.carporn.rampRun}</button>
+        <button className="btn" onClick={() => run(() => shakesOnAccents(strength), t.carporn.shakeDone)}>💥 {t.carporn.shakeRun}</button>
+        <button className="btn" onClick={() => run(() => whipBetween(), t.carporn.whipDone)}>↔️ {t.carporn.whipRun}</button>
+      </div>
+      <div className="hint">{t.carporn.rampHint}</div>
+
+      <div className="panel-header" style={{ border: 'none', marginTop: 12 }}>💨 {t.carporn.lookTitle}</div>
+      <div className="field-row" style={{ flexWrap: 'wrap', gap: 6 }}>
+        <button className="btn" onClick={() => run(() => rigLook(strength), t.carporn.rigDone)}>🚗 {t.carporn.rig}</button>
+        <button className="btn" onClick={() => run(() => applyLook('carshow', null), t.carporn.lookDone)}>✨ {t.carporn.lookShowroom}</button>
+        <button className="btn" onClick={() => run(() => applyLook('teal', null), t.carporn.lookDone)}>🎞 {t.carporn.lookTeal}</button>
+        <button className="btn" onClick={() => run(() => applyLook('night', null), t.carporn.lookDone)}>🌃 {t.carporn.lookNight}</button>
+      </div>
+      <div className="form-grid compact">
+        <label>{t.carporn.letterbox}</label>
+        <select value={String(letterbox)} onChange={(e) => { useProject.getState().updateSettings({ letterbox: parseFloat(e.target.value) }); }}>
+          <option value="0">{t.carporn.lbOff}</option>
+          <option value="2">2:1</option>
+          <option value="2.39">2,39:1 ({t.carporn.lbCinema})</option>
+          <option value="2.76">2,76:1 ({t.carporn.lbUltra})</option>
+        </select>
+      </div>
+      <div className="hint">{t.carporn.rigHint}</div>
+
+      <div className="panel-header" style={{ border: 'none', marginTop: 12 }}>✂️ {t.carporn.cutoutTitle}</div>
+      <div className="hint">{t.carporn.cutoutHint}</div>
+      <div className="form-grid compact">
+        <label>{t.carporn.text}</label>
+        <input value={text} onChange={(e) => setText(e.target.value)} />
+      </div>
+      <button className="btn" onClick={() => { if (textBehindCar(text)) toast(t.carporn.textDone, 'success'); }}>🔤 {t.carporn.textBehind}</button>
+    </div>
+  );
+}
 
 function TimeTool(): React.ReactElement {
   const selection = useUi((s) => s.selection);

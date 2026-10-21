@@ -8,7 +8,7 @@ import log from 'electron-log';
 import type { Attachment, Clip, ExportOptions, ExportProgress, MediaItem, Project, TitleStyle, Track, TransitionType } from '@shared/types';
 import { DEFAULT_TRANSLATION_COLOR, charsPerLine, subtitleChangeTimes, subtitleViewAt } from '@shared/subtitles';
 import { dynTransitionAt, isDynamicTransition, type DynamicTransition, type DynLayer } from '@shared/transitions';
-import { clipDuration, clipEnd, projectDuration, sourceTimeAt, videoTracksBottomUp } from '@shared/timeline';
+import { clipDuration, clipEnd, letterboxBar, projectDuration, sourceTimeAt, videoTracksBottomUp } from '@shared/timeline';
 import { fontDef, panoMatrix, panoViewAt, stereographicVfov, titleAnimationAt, verticalFov } from '@shared/pano';
 import { availableEncoders, availableFilters, FfmpegError, probeFile, runFfmpeg } from './ffmpeg';
 import { reverseVideo } from './reverse';
@@ -1248,6 +1248,12 @@ export class ExportJob {
         filters.push(`[${last}]${sf}[${outLabel2}]`);
         last = outLabel2;
       }
+    }
+    // Kino-Balken (Vorschau: engine render)
+    const bar = letterboxBar(W, H, this.project.settings.letterbox);
+    if (bar > 0) {
+      filters.push(`[${last}]drawbox=x=0:y=0:w=iw:h=${bar}:color=black:t=fill,drawbox=x=0:y=ih-${bar}:w=iw:h=${bar}:color=black:t=fill[lbx]`);
+      last = 'lbx';
     }
     const finalPix = o.codec === 'prores' ? 'yuv422p10le' : o.codec === 'jpeg' ? 'yuvj444p' : 'yuv420p';
     if (o.codec === 'gif') {

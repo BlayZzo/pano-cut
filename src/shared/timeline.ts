@@ -12,6 +12,13 @@ export function clipEnd(clip: Clip): number {
 }
 
 /** Quellzeit (Sekunden in der Originaldatei) für eine Timeline-Zeit innerhalb des Clips. */
+/** Höhe eines Kino-Balkens (oben und unten) in Pixeln – 0, wenn das Bild schon breiter ist. */
+export function letterboxBar(W: number, H: number, ratio?: number): number {
+  if (!ratio || ratio <= 0) return 0;
+  const visible = W / ratio;
+  return visible >= H ? 0 : Math.round((H - visible) / 2);
+}
+
 export function sourceTimeAt(clip: Clip, t: number): number {
   const local = Math.max(0, Math.min(clipDuration(clip), t - clip.start)) * clip.speed;
   return clip.reverse ? clip.out - local : clip.in + local;

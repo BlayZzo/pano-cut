@@ -1,5 +1,5 @@
 import type { Clip, MediaItem, Project, Track, TransitionType } from '@shared/types';
-import { clamp, clipAt, clipDuration, clipEnd, clipsOnTrack, defaultColor, projectDuration, sourceTimeAt, videoTracksBottomUp } from '@shared/timeline';
+import { clamp, clipAt, clipDuration, clipEnd, clipsOnTrack, defaultColor, letterboxBar, projectDuration, sourceTimeAt, videoTracksBottomUp } from '@shared/timeline';
 import { panoViewAt } from '@shared/pano';
 import { maskAt, trackBoxAt } from '@shared/ai';
 import type { Attachment } from '@shared/types';
@@ -1168,6 +1168,16 @@ export class PlaybackEngine {
         if (!slot.isImage) this.syncMedia(slot, clip, media, track, t);
         this.drawClip(ctx, slot, clip, media, W, H);
         this.drawSubtitles(ctx, clip, W, H, t);
+      }
+      // Kino-Balken (wie drawbox im Export)
+      const bar = letterboxBar(W, H, project.settings.letterbox);
+      if (bar > 0) {
+        ctx.save();
+        ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.filter = 'none';
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, W, bar);
+        ctx.fillRect(0, H - bar, W, bar);
+        ctx.restore();
       }
     } else {
       // Ohne Canvas trotzdem den Ton synchron halten

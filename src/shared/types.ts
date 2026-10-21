@@ -484,6 +484,7 @@ export interface ProjectSettings {
   width: number;
   height: number;
   fps: number;
+  letterbox?: number;   // Kino-Balken: Seitenverhältnis des sichtbaren Bilds (z. B. 2,39); 0/leer = aus
   background: string;
   is360?: boolean;   // Projekt als 360°-Panorama (Equirectangular) exportieren
 }
