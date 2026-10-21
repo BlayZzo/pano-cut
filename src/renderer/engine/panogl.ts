@@ -34,6 +34,8 @@ uniform float uBlend;   // Breite der weichen Naht (Grad)
 uniform float uCover;   // Linse wird bis zu diesem Längengrad benutzt (Grad)
 uniform sampler2D uDisp; // bewegte Naht: Versatz je Nahtstelle (SEAM_BINS × 1, Byte → ±SEAM_MAX°)
 uniform vec3 uSeam;       // an (1/0), t0, t1 (Grad)
+uniform sampler2D uMask;  // Maske im ganzen 360°-Bild (Equirect, Deckkraft = sichtbar)
+uniform vec2 uMaskOn;     // x: an, y: umkehren
 uniform vec2 uNadir;    // unten ausblenden: ab Breite x (Grad), weicher Rand y (Grad); x ≥ 90 = aus
 varying vec2 vUv;
 const float PI = 3.141592653589793;
@@ -112,15 +114,22 @@ void main() {
     float lonv = atan(v.x, v.z);
     vr = vec3(cos(rr) * sin(lonv), sin(rr), cos(rr) * cos(lonv));
   }
+  float alpha = 1.0;
+  if (uMaskOn.x > 0.5) {
+    float ml = atan(v.x, v.z) / PI;
+    float mt = asin(clamp(v.y, -1.0, 1.0)) / (PI * 0.5);
+    alpha = texture2D(uMask, vec2((ml + 1.0) * 0.5, (mt + 1.0) * 0.5)).a;
+    if (uMaskOn.y > 0.5) alpha = 1.0 - alpha;
+  }
   if (uInput == 1) {
     vec3 col = stitchAt(v);
     if (nw > 0.0) col = mix(col, stitchAt(vr), nw);
-    gl_FragColor = vec4(col, 1.0);
+    gl_FragColor = vec4(col, alpha);
     return;
   }
   vec3 ce = equiAt(v);
   if (nw > 0.0) ce = mix(ce, equiAt(vr), nw);
-  gl_FragColor = vec4(ce, 1.0);
+  gl_FragColor = vec4(ce, alpha);
 }`;
 
 /** Rohvideo mit zwei Fischaugen nebeneinander: Zusammensetz-Einstellungen; `swap` = Bildhälften andersherum. */
@@ -138,6 +147,8 @@ export class PanoGL {
   private lastSource: unknown = null;
   private lastSourceTime = -1;
   private dispTex: WebGLTexture | null = null;
+  private maskTex: WebGLTexture | null = null;
+  private lastMask: unknown = null;
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -186,9 +197,18 @@ export class PanoGL {
     this.uRot = gl.getUniformLocation(prog, 'uRot');
     this.uRange = gl.getUniformLocation(prog, 'uRange');
     this.uMode = gl.getUniformLocation(prog, 'uMode');
-    for (const n of ['uInput', 'uL0', 'uL1', 'uG', 'uRect0', 'uRect1', 'uK0', 'uK1', 'uGain0', 'uGain1', 'uBlend', 'uCover', 'uNadir', 'uSeam']) this.u[n] = gl.getUniformLocation(prog, n);
+    for (const n of ['uInput', 'uL0', 'uL1', 'uG', 'uRect0', 'uRect1', 'uK0', 'uK1', 'uGain0', 'uGain1', 'uBlend', 'uCover', 'uNadir', 'uSeam', 'uMaskOn']) this.u[n] = gl.getUniformLocation(prog, n);
     gl.uniform1i(gl.getUniformLocation(prog, 'uTex'), 0);
     gl.uniform1i(gl.getUniformLocation(prog, 'uDisp'), 1);
+    gl.uniform1i(gl.getUniformLocation(prog, 'uMask'), 2);
+    this.maskTex = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE2);
+    gl.bindTexture(gl.TEXTURE_2D, this.maskTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.activeTexture(gl.TEXTURE0);
     this.dispTex = gl.createTexture();
     gl.activeTexture(gl.TEXTURE1);
     gl.bindTexture(gl.TEXTURE_2D, this.dispTex);
@@ -206,7 +226,7 @@ export class PanoGL {
    * Rendert eine Ansicht. `source` ist das Equirectangular-Bild (Video/Bild), Ausgabe hat `outW`×`outH` Pixel.
    * Mit `fisheye` ist `source` ein Rohvideo mit zwei Fischaugen nebeneinander (wird direkt hier zusammengesetzt).
    */
-  render(source: TexImageSource, outW: number, outH: number, mode: PanoMode, view: PanoView, sourceTime: number, fisheye?: FisheyeInput, preRot?: number[], nadir?: { size: number; feather: number }): HTMLCanvasElement | null {
+  render(source: TexImageSource, outW: number, outH: number, mode: PanoMode, view: PanoView, sourceTime: number, fisheye?: FisheyeInput, preRot?: number[], nadir?: { size: number; feather: number }, mask?: TexImageSource | null): HTMLCanvasElement | null {
     const gl = this.gl;
     if (!gl || !this.program) return null;
     if (this.canvas.width !== outW || this.canvas.height !== outH) {
@@ -227,6 +247,17 @@ export class PanoGL {
     // Stabilisierung: Gegendrehung vor die Ansicht (Blick → stabilisierte Welt → Panorama)
     const m = preRot ? mul3(preRot, panoMatrix(view.yaw, view.pitch, view.roll)) : panoMatrix(view.yaw, view.pitch, view.roll);
     gl.uniform2f(this.u.uNadir, nadir ? 90 - nadir.size : 999, nadir ? Math.max(0.01, nadir.feather) : 1);
+    if (mask) {
+      if (mask !== this.lastMask) {
+        gl.activeTexture(gl.TEXTURE2);
+        gl.bindTexture(gl.TEXTURE_2D, this.maskTex);
+        try { gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, mask); } catch { /* ignorieren */ }
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, this.tex);
+        this.lastMask = mask;
+      }
+      gl.uniform2f(this.u.uMaskOn, 1, 0);
+    } else gl.uniform2f(this.u.uMaskOn, 0, 0);
     // GLSL erwartet spaltenweise; unsere Matrix ist zeilenweise → transponiert übergeben
     gl.uniformMatrix3fv(this.uRot, false, new Float32Array([m[0], m[3], m[6], m[1], m[4], m[7], m[2], m[5], m[8]]));
     const hfov = Math.max(1, Math.min(359, view.fov));

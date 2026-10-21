@@ -14,6 +14,7 @@ export function useKeyboard(): void {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const ui = useUi.getState();
+      if (ui.maskEditor) return;   // der Masken-Editor hat eigene Tasten
       if (ui.dialog !== 'none') {
         if (e.key === 'Escape') ui.openDialog('none');
         return;

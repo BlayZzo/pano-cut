@@ -351,13 +351,19 @@ export class ExportJob {
     return s.hasVideo && track?.masks?.length ? track : undefined;
   }
 
+  /** 360°-Maske im ganzen Rundum-Bild: wird vor der Ansicht eingerechnet (nicht erst nach der Farbe). */
+  private panoMask(s: Segment): boolean {
+    const tr = this.cutoutTrack(s);
+    return !!tr && tr.space === 'equirect' && !!s.media?.info.is360 && !s.reversedFile;
+  }
+
   /**
    * Freistellen: Bildgröße des Clips vor dem Einrechnen der Maske einmal messen (ein Bild rendern).
    * Damit lässt sich die Maske mit einem normalen `scale` anpassen – `scale2ref` bleibt in FFmpeg 7 hängen.
    */
   private async prepareCutoutSizes(segs: Segment[]): Promise<void> {
     for (const s of segs) {
-      if (!this.cutoutTrack(s)) continue;
+      if (!this.cutoutTrack(s) || this.panoMask(s)) continue;
       try {
         const parts = this.videoChainParts(s);
         const chain = [...parts.pre, ...parts.color, 'format=rgba'].join(',');
@@ -481,6 +487,15 @@ export class ExportJob {
       if (opts.pad.start > 0) chain.push(`tpad=start_mode=clone:start_duration=${fnum(opts.pad.start)}`);
       if (opts.pad.end > 0) chain.push(`tpad=stop_mode=clone:stop_duration=${fnum(opts.pad.end)}`);
     }
+    // 360°-Maske (Rundum-Bild): als Deckkraft einrechnen, bevor die Ansicht berechnet wird – v360/crop behalten sie
+    const panoMasked = seg.maskInput !== undefined && this.panoMask(seg) && !opts.forTransition && !opts.untilFit;
+    if (panoMasked) {
+      const cut = c.cutout!;
+      const eqW = stitched ? this.stitchWidth(seg) : media.info.width;
+      const eqH = stitched ? eqW / 2 : media.info.height;
+      const id = `pm${++this.labelSeq}`;
+      chain.push(`null[${id}v];[${seg.maskInput}:v]fps=${fps},${maskChain(cut.feather, cut.grow, cut.invert)},scale=${eqW}:${eqH},format=gray[${id}m];[${id}v][${id}m]alphamerge`);
+    }
     // 360°-Ansicht (Reframing)
     if (media.info.is360 && c.pano) {
       if (stabActive(c.stab360) && media.imu && !seg.reversedFile && fs.existsSync(media.imu.file)) {
@@ -506,6 +521,9 @@ export class ExportJob {
     const pre = chain;
     if (opts.untilFit) return { pre, color: [], post: [], fullCanvas: false };
     const color: string[] = [];
+    // Deckkraft der 360°-Maske an der Farbkorrektur vorbeiführen (manche Farbfilter verwerfen sie)
+    const keepAlpha = panoMasked ? `ka${++this.labelSeq}` : null;
+    if (keepAlpha) color.push(`format=yuva420p,split=2[${keepAlpha}a][${keepAlpha}b];[${keepAlpha}b]alphaextract[${keepAlpha}m];[${keepAlpha}a]null`);
     // Stabilisierung
     if (c.stabilize?.enabled && !opts.forTransition) {
       const st = c.stabilize;
@@ -575,6 +593,7 @@ export class ExportJob {
         color.push(`despill=type=${g >= b && g >= r ? 'green' : 'blue'}:mix=0.5:expand=0`);
       }
     }
+    if (keepAlpha) color.push(`null[${keepAlpha}c];[${keepAlpha}c][${keepAlpha}m]alphamerge`);
     const post: string[] = ['format=rgba'];
     const t = c.transform;
     const localOffset = opts.localOffset ?? seg.localOffset;
@@ -1151,7 +1170,7 @@ export class ExportJob {
       }
       const c = s.clip;
       const label = `v${vi}`;
-      if (s.maskInput !== undefined && c.cutout) {
+      if (s.maskInput !== undefined && c.cutout && !this.panoMask(s)) {
         // Freistellen: Maske zeitlich und in der Größe anpassen, dann als Alphakanal einrechnen
         const parts = this.videoChainParts(s);
         const cutColor = [...parts.pre, ...parts.color];

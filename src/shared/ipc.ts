@@ -34,6 +34,12 @@ export interface PanoCutApi {
   mediaTimes(path: string): Promise<{ recordedAt?: number; recordedEnd?: number; duration: number }>;
   imuBuild(item: MediaItem): Promise<{ file: string; rate: number; start: number; samples: number; score: number; model: string; offset: number }>;
   imuRead(file: string): Promise<Uint8Array>;
+  maskEditFrame(item: MediaItem, t: number): Promise<{ width: number; height: number; data: Uint8Array; space: 'source' | 'equirect' }>;
+  maskSegment(item: MediaItem, t: number, prompt: { points: Array<{ x: number; y: number; label: 0 | 1 }>; box?: { x0: number; y0: number; x1: number; y1: number } }): Promise<Uint8Array>;
+  maskTrack(req: { media: MediaItem; trackId: string; start: number; end: number; fps: number; mask: Uint8Array; mode: 'ai' | 'fast' }): Promise<Array<{ t: number; path: string; box: { x: number; y: number; w: number; h: number } | null }>>;
+  maskTrackCancel(): Promise<void>;
+  maskRead(file: string, w: number, h: number): Promise<Uint8Array>;
+  onMaskTrackProgress(cb: (p: { percent: number; t?: number }) => void): () => void;
   seamBuild(item: MediaItem): Promise<{ file: string; rate: number; start: number; frames: number; key: string }>;
   seamRead(file: string): Promise<Uint8Array>;
   onSeamProgress(cb: (p: { id: string; percent: number }) => void): () => void;
@@ -140,6 +146,12 @@ export const IPC = {
   stitchAutoAlign: 'media:stitchAuto',
   imuBuild: 'imu:build',
   imuRead: 'imu:read',
+  maskEditFrame: 'mask:frame',
+  maskSegment: 'mask:segment',
+  maskTrack: 'mask:track',
+  maskTrackCancel: 'mask:trackCancel',
+  maskRead: 'mask:read',
+  maskTrackProgress: 'mask:trackProgress',
   seamBuild: 'seam:build',
   seamRead: 'seam:read',
   seamProgress: 'seam:progress',

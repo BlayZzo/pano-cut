@@ -10,6 +10,8 @@ import { getCacheDir, getProjectsDir } from './paths';
 import { attachCompanion, listMediaInFolder, mediaTypeFor, prepareMedia, probeMedia, SUPPORTED_EXTENSIONS } from './media';
 import { dropCompanions } from '@shared/companion';
 import { autoAlignStitch } from './stitchAuto';
+import { maskFrame, maskSegment, maskSpace, readMaskPng, trackMask, type TrackRequest } from './maskTrack';
+import { ensureSam, type SamPrompt } from './sam';
 import { buildSeamTrack } from './seamFlow';
 import { buildImuTrack, readImuFile } from './imu';
 import { defaultProjectPath, loadSettings, PROJECT_EXT, readProject, rememberProject, saveSettings, writeProject } from './project';
@@ -357,6 +359,27 @@ ipcMain.handle(IPC.prepQueueGet, () => prepJobs.map((j) => ({ id: j.id, stage: j
 // ---- 360°: Bewegungsdaten einmessen (Stabilisierung) ----
 ipcMain.handle(IPC.imuBuild, (_e, item: MediaItem) => buildImuTrack(item, (p) => sendToWindow(IPC.imuProgress, { id: item.id, percent: p })));
 ipcMain.handle(IPC.imuRead, (_e, file: string) => readImuFile(file));
+// Masken-Editor
+let maskTrackController: AbortController | null = null;
+ipcMain.handle(IPC.maskEditFrame, async (_e, item: MediaItem, t: number) => {
+  const f = await maskFrame(item, t);
+  return { width: f.width, height: f.height, data: f.data, space: maskSpace(item) };
+});
+ipcMain.handle(IPC.maskSegment, async (_e, item: MediaItem, t: number, prompt: SamPrompt) => {
+  await ensureSam((p) => aiProgress(p));
+  return maskSegment(item, t, prompt);
+});
+ipcMain.handle(IPC.maskTrack, async (_e, req: TrackRequest) => {
+  if (req.mode === 'ai') await ensureSam((p) => aiProgress(p));
+  maskTrackController?.abort();
+  const ctl = new AbortController();
+  maskTrackController = ctl;
+  try {
+    return await trackMask({ ...req, mask: new Uint8Array(req.mask) }, (percent, info) => sendToWindow(IPC.maskTrackProgress, { percent, t: info?.t }), ctl.signal);
+  } finally { if (maskTrackController === ctl) maskTrackController = null; }
+});
+ipcMain.handle(IPC.maskTrackCancel, () => { maskTrackController?.abort(); });
+ipcMain.handle(IPC.maskRead, (_e, file: string, w: number, h: number) => readMaskPng(file, w, h));
 ipcMain.handle(IPC.seamBuild, (_e, item: MediaItem) => buildSeamTrack(item, (p) => sendToWindow(IPC.seamProgress, { id: item.id, percent: p })));
 ipcMain.handle(IPC.seamRead, (_e, file: string) => new Uint8Array(fs.readFileSync(file)));
 

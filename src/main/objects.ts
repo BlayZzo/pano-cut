@@ -17,9 +17,11 @@ export function objectsDir(projectId: string): string {
 export function writeMaskList(masks: Array<{ t: number; path: string }>, totalDuration: number, file: string, startAt = 0): void {
   const sorted = [...masks].sort((a, b) => a.t - b.t);
   const lines: string[] = [];
+  // Jede Maske gilt bis zur Mitte zur nächsten (wie maskAt in der Vorschau: nächstliegende Maske)
+  const mid = (i: number) => (sorted[i].t + sorted[i + 1].t) / 2;
   for (let i = 0; i < sorted.length; i++) {
-    const t0 = Math.max(startAt, sorted[i].t);
-    const t1 = i + 1 < sorted.length ? sorted[i + 1].t : Math.max(totalDuration, t0 + 0.04);
+    const t0 = i === 0 ? startAt : Math.max(startAt, mid(i - 1));
+    const t1 = i + 1 < sorted.length ? mid(i) : Math.max(totalDuration, t0 + 0.04);
     if (t1 <= startAt) continue;
     const dur = Math.max(0.01, t1 - t0);
     lines.push(`file '${sorted[i].path.replace(/'/g, "'\\''")}'`, `duration ${dur.toFixed(4)}`);

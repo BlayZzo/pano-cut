@@ -204,6 +204,9 @@ export interface ObjectTrack {
   boxes: TrackBox[];    // nach t sortiert
   masks?: Array<{ t: number; path: string }>;  // Masken-PNGs (Alpha) pro Abtastzeit
   maskModel?: AiSegmentModel;
+  space?: 'source' | 'equirect';   // Masken im Quellbild (Standard) oder im ganzen 360°-Bild (Equirect, vor der Ansicht)
+  keys?: Array<{ t: number; path: string }>;  // im Masken-Editor selbst bearbeitete Stellen (Clip-Zeit)
+  maskSize?: { w: number; h: number };        // Auflösung der Masken-PNGs
 }
 
 export interface Cutout {

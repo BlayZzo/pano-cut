@@ -170,9 +170,59 @@ export function maskCanvas(path: string, onLoad: () => void): HTMLCanvasElement 
     };
     img.src = window.panocut.toMediaUrl(path);
     maskImages.set(path, e);
+    // Speicher begrenzen (verfolgte Masken = ein Bild pro Videobild)
+    while (maskImages.size > 48) maskImages.delete(maskImages.keys().next().value as string);
     entry = e;
+  } else {
+    // zuletzt benutzt → ans Ende
+    maskImages.delete(path); maskImages.set(path, entry);
   }
   return entry.canvas;
+}
+
+let emptyMaskCanvas: HTMLCanvasElement | null = null;
+function emptyMask(): HTMLCanvasElement {
+  if (!emptyMaskCanvas) { emptyMaskCanvas = document.createElement('canvas'); emptyMaskCanvas.width = 4; emptyMaskCanvas.height = 2; }
+  return emptyMaskCanvas;
+}
+
+/** Maske weichgezeichnet / vergrößert / verkleinert (wie maskChain im Export: dilation/erosion je 1 Pixel, boxblur). */
+const shapedMasks = new Map<string, HTMLCanvasElement>();
+export function shapedMask(path: string, src: HTMLCanvasElement, grow: number, feather: number, invert: boolean): HTMLCanvasElement {
+  const g = Math.max(-10, Math.min(10, Math.round(grow)));
+  const key = `${path}|${g}|${feather}|${invert ? 1 : 0}`;
+  const hit = shapedMasks.get(key);
+  if (hit) return hit;
+  const W = src.width, H = src.height;
+  let cur = src;
+  if (g !== 0) {
+    // Dilatation = hellstes, Erosion = dunkelstes der 8 Nachbarn – auf der Deckkraft (Weiß mit Alpha)
+    for (let i = 0; i < Math.abs(g); i++) {
+      const n = document.createElement('canvas'); n.width = W; n.height = H;
+      const x = n.getContext('2d')!;
+      if (g > 0) {
+        x.drawImage(cur, 0, 0);
+        x.globalCompositeOperation = 'lighter';
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) x.drawImage(cur, dx, dy);
+        x.globalCompositeOperation = 'source-over';   // 'lighter' addiert die Deckkraft (bei 1 gekappt) ≈ Maximum
+      } else {
+        x.fillStyle = '#fff'; x.fillRect(0, 0, W, H);
+        x.globalCompositeOperation = 'destination-in';
+        for (const [dx, dy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]]) x.drawImage(cur, dx, dy);
+        x.globalCompositeOperation = 'source-over';
+      }
+      cur = n;
+    }
+  }
+  const out = document.createElement('canvas'); out.width = W; out.height = H;
+  const o = out.getContext('2d')!;
+  if (invert) { o.fillStyle = '#fff'; o.fillRect(0, 0, W, H); o.globalCompositeOperation = 'destination-out'; }
+  o.filter = feather > 0 ? `blur(${feather / 2}px)` : 'none';
+  o.drawImage(cur, 0, 0);
+  o.filter = 'none'; o.globalCompositeOperation = 'source-over';
+  shapedMasks.set(key, out);
+  while (shapedMasks.size > 24) shapedMasks.delete(shapedMasks.keys().next().value as string);
+  return out;
 }
 /** Nach dem Bearbeiten einer Maske den Zwischenspeicher leeren. */
 export function forgetMask(path: string): void { maskImages.delete(path); }
@@ -449,6 +499,23 @@ export class PlaybackEngine {
     return { src: url(media.path), fisheye: fish ? { stitch: st!, swap: false } : null };
   }
 
+  /** 360°-Maske (im ganzen Rundum-Bild) für die Ansicht – fertig weichgezeichnet/vergrößert/umgekehrt. */
+  private panoMaskFor(clip: Clip, localT: number): HTMLCanvasElement | null {
+    const cut = clip.cutout;
+    if (!cut?.enabled) return null;
+    const track = clip.objects?.find((tr) => tr.id === cut.trackId);
+    if (!track?.masks?.length || track.space !== 'equirect') return null;
+    const m = maskAt(track, localT);
+    if (!m) return null;
+    const img = maskCanvas(m.path, () => { if (!this.playing) this.render(this.current); });
+    // noch nicht geladen: letzte Maske dieses Clips weiter benutzen (sonst blitzt das ganze Bild auf)
+    if (!img) return this.lastPanoMask.get(clip.id) ?? emptyMask();
+    const out = shapedMask(m.path, img, cut.grow, cut.feather, cut.invert);
+    this.lastPanoMask.set(clip.id, out);
+    return out;
+  }
+  private lastPanoMask = new Map<string, HTMLCanvasElement>();
+
   // ---- Bewegte Naht (Versatz naher Dinge, shared/seamFlow.ts) ----
   private seamTracks = new Map<string, SeamTrack | 'loading'>();
   private seamBuf = new Uint8Array(SEAM_BINS);
@@ -698,7 +765,7 @@ export class PlaybackEngine {
         const stab = this.stabFor(clip, media, slot.isVideo ? (slot.el as HTMLVideoElement).currentTime : 0);
         const nadir = clip.nadir?.enabled ? { size: clip.nadir.size, feather: clip.nadir.feather } : undefined;
         const fishIn = fish ? { ...fish, disp: this.seamFor(media, srcTime) ?? undefined } : undefined;
-        const out = pgl.render(source as TexImageSource, outW, outH, mode, view, srcTime, fishIn, stab ?? undefined, nadir);
+        const out = pgl.render(source as TexImageSource, outW, outH, mode, view, srcTime, fishIn, stab ?? undefined, nadir, this.panoMaskFor(clip, localT));
         if (out) { source = out; vw = outW; vh = outH; }
       }
     }
@@ -740,10 +807,10 @@ export class PlaybackEngine {
       const r = temporalFx(slot, clip, source, vw, vh, localT, this.playing, this.project.settings.fps || 30, toFrame);
       source = r.source; vw = r.vw; vh = r.vh;
     }
-    // Freistellen anhand der Objektmaske
+    // Freistellen anhand der Objektmaske (360°-Masken im Rundum-Bild wirken schon in der 360°-Ansicht)
     const cut = clip.cutout;
     const track = cut?.enabled ? clip.objects?.find((tr) => tr.id === cut.trackId) : undefined;
-    if (cut && track?.masks?.length) {
+    if (cut && track?.masks?.length && track.space !== 'equirect') {
       const m = maskAt(track, localT);
       if (m) {
         const img = maskCanvas(m.path, () => { if (!this.playing) this.render(this.current); });

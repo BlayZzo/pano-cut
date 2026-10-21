@@ -9,7 +9,7 @@ import log from 'electron-log';
 import type { AiDetectModel, AiProgress, AiSegmentModel, Detection } from '@shared/types';
 import { COCO_LABELS_DE } from '@shared/ai';
 
-interface ModelDef { file: string; url: string; sizeMB: number; input: number }
+export interface ModelDef { file: string; url: string; sizeMB: number; input: number }
 
 export const DETECT_MODELS: Record<AiDetectModel, ModelDef> = {
   'yolox-nano': { file: 'yolox_nano.onnx', url: 'https://github.com/Megvii-BaseDetection/YOLOX/releases/download/0.1.1rc0/yolox_nano.onnx', sizeMB: 4, input: 416 },
@@ -26,7 +26,7 @@ export const SEGMENT_MODELS: Record<AiSegmentModel, ModelDef & { mean: number[];
 type OrtModule = typeof import('onnxruntime-node');
 let ortModule: OrtModule | null | undefined;
 
-function ort(): OrtModule {
+export function ort(): OrtModule {
   if (ortModule === undefined) {
     try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -57,7 +57,7 @@ export function aiModelStatus(): Record<string, boolean> {
   return out;
 }
 
-async function ensureModel(def: ModelDef, onProgress: (p: AiProgress) => void, signal?: AbortSignal): Promise<string> {
+export async function ensureModel(def: ModelDef, onProgress: (p: AiProgress) => void, signal?: AbortSignal): Promise<string> {
   const dest = path.join(modelsDir(), def.file);
   if (fs.existsSync(dest)) return dest;
   onProgress({ phase: 'download', percent: 0, message: `KI-Modell wird geladen (${def.sizeMB} MB) …` });
@@ -102,7 +102,7 @@ async function ensureModel(def: ModelDef, onProgress: (p: AiProgress) => void, s
 type Session = import('onnxruntime-node').InferenceSession;
 const sessions = new Map<string, Promise<Session>>();
 
-async function getSession(modelPath: string): Promise<Session> {
+export async function getSession(modelPath: string): Promise<Session> {
   let p = sessions.get(modelPath);
   if (!p) {
     p = (async () => {
@@ -132,7 +132,7 @@ export interface Frame {
 }
 
 /** Bilineare Skalierung eines RGBA-Bildes (einfach, ohne Abhängigkeiten). */
-function resizeRGBA(src: Frame, dw: number, dh: number): Uint8Array {
+export function resizeRGBA(src: Frame, dw: number, dh: number): Uint8Array {
   const out = new Uint8Array(dw * dh * 4);
   const sx = src.width / dw, sy = src.height / dh;
   for (let y = 0; y < dh; y++) {

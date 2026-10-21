@@ -513,3 +513,26 @@ textarea:focus { border-color: var(--accent); }
 .layer-icon { font-size: 14px; }
 .layer-name { flex: 1; min-width: 60px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .layer-objs { flex-basis: 100%; display: flex; gap: 4px; flex-wrap: wrap; padding-left: 34px; }
+
+/* Masken-Editor */
+.mask-editor { position: fixed; inset: 0; z-index: 200; background: #0f1115; display: flex; flex-direction: column; color: var(--text); }
+.me-top { display: flex; align-items: center; gap: 6px; padding: 8px 12px; border-bottom: 1px solid var(--border); background: var(--panel); flex-wrap: wrap; }
+.me-sub { color: var(--text-dim); font-size: 12px; }
+.me-body { flex: 1; min-height: 0; display: flex; }
+.me-stage { flex: 1; min-width: 0; position: relative; }
+.me-stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: crosshair; touch-action: none; }
+.me-stage canvas.tool-hand { cursor: grab; }
+.me-stage canvas.tool-brush, .me-stage canvas.tool-erase { cursor: none; }
+.me-loading { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.75); padding: 6px 12px; border-radius: 6px; font-size: 13px; pointer-events: none; }
+.me-side { width: 290px; overflow: auto; border-left: 1px solid var(--border); background: var(--panel); padding: 10px; display: flex; flex-direction: column; gap: 10px; }
+.me-group { display: flex; flex-direction: column; gap: 6px; padding-bottom: 10px; border-bottom: 1px solid var(--border); font-size: 12px; }
+.me-title { font-weight: 700; font-size: 13px; }
+.me-swatch { width: 22px; height: 22px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; }
+.me-swatch.active { border-color: #fff; }
+.me-time { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--border); background: var(--panel); }
+.me-tc { font-family: var(--mono); font-size: 12px; min-width: 64px; }
+.me-tc.dim { color: var(--text-dim); }
+.me-bar { flex: 1; position: relative; height: 26px; display: flex; align-items: center; }
+.me-bar input { width: 100%; position: relative; z-index: 2; }
+.me-covered { position: absolute; top: 2px; height: 6px; background: rgba(255, 45, 149, 0.45); border-radius: 3px; }
+.me-key { position: absolute; top: 0; width: 3px; height: 26px; margin-left: -1px; background: #a855f7; z-index: 3; cursor: pointer; }

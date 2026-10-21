@@ -119,6 +119,44 @@ export async function runUiTest(win: BrowserWindow): Promise<number> {
     out('Einzelbild für KI:', JSON.stringify(grab));
     if (!grab.ok || grab.mean < 20) failures.push(`Einzelbild für KI fehlgeschlagen: ${grab.msg ?? grab.mean}`);
 
+    // Masken-Editor: öffnen, Bild laden, einen Pinselstrich malen, übernehmen → Maske ist gespeichert und freigestellt
+    const mask = await win.webContents.executeJavaScript(`(async () => {
+      const T = window.__pcTest;
+      const p = T.useProject.getState().project;
+      const clip = Object.values(p.clips).filter((c) => p.media[c.mediaId]?.type === 'video' && !p.media[c.mediaId].info.is360).sort((a, b) => a.start - b.start)[0];
+      if (!clip) return { ok: false, msg: 'kein Clip' };
+      T.useUi.getState().setMaskEditor({ clipId: clip.id });
+      const wait = async (f, ms) => { const t0 = performance.now(); while (performance.now() - t0 < ms) { if (f()) return true; await new Promise((r) => setTimeout(r, 100)); } return false; };
+      if (!(await wait(() => document.querySelector('.mask-editor canvas') && !document.querySelector('.mask-editor .me-loading'), 15000))) return { ok: false, msg: 'Editor lädt nicht' };
+      await new Promise((r) => setTimeout(r, 300));
+      const cv = document.querySelector('.mask-editor canvas');
+      const r = cv.getBoundingClientRect();
+      const g = cv.getContext('2d');
+      const d = g.getImageData(Math.round(cv.width / 2) - 20, Math.round(cv.height / 2) - 20, 40, 40).data;
+      let s = 0; for (let i = 0; i < d.length; i += 4) s += d[i] + d[i + 1] + d[i + 2];
+      const shown = s / (d.length / 4) / 3;
+      [...document.querySelectorAll('.mask-editor button')].find((b) => b.textContent.includes('🖌')).click();
+      await new Promise((r2) => setTimeout(r2, 100));
+      const ev = (type, x, y) => cv.dispatchEvent(new PointerEvent(type, { clientX: r.left + r.width * x, clientY: r.top + r.height * y, button: 0, buttons: 1, pointerId: 7, bubbles: true }));
+      ev('pointerdown', 0.4, 0.5); for (let k = 1; k <= 10; k++) ev('pointermove', 0.4 + k * 0.02, 0.5); ev('pointerup', 0.6, 0.5);
+      await new Promise((r2) => setTimeout(r2, 200));
+      [...document.querySelectorAll('.mask-editor button')].find((b) => b.textContent.includes('✓')).click();
+      await wait(() => !document.querySelector('.mask-editor'), 8000);
+      const c2 = T.useProject.getState().project.clips[clip.id];
+      const tr = (c2.objects || []).find((o) => o.label === 'manual');
+      return { ok: true, shown: Math.round(shown), keys: tr ? (tr.keys || []).length : 0, masks: tr ? (tr.masks || []).length : 0, cut: !!(c2.cutout && c2.cutout.enabled && tr && c2.cutout.trackId === tr.id), closed: !document.querySelector('.mask-editor') };
+    })()`);
+    out('Masken-Editor:', JSON.stringify(mask));
+    if (!mask.ok) failures.push(`Masken-Editor: ${mask.msg}`);
+    else {
+      if (mask.shown < 15) failures.push('Masken-Editor zeigt kein Bild');
+      if (mask.keys < 1 || mask.masks < 1) failures.push('Masken-Editor: Maske wurde nicht gespeichert');
+      if (!mask.cut) failures.push('Masken-Editor: Clip wurde nicht freigestellt');
+      if (!mask.closed) failures.push('Masken-Editor schließt nicht');
+    }
+    // Freistellen wieder aus, damit die folgenden Prüfungen das volle Bild sehen
+    await win.webContents.executeJavaScript(`(() => { const T = window.__pcTest; const p = T.useProject.getState().project; for (const c of Object.values(p.clips)) if (c.cutout) T.useProject.getState().setCutout(c.id, { ...c.cutout, enabled: false }); })()`);
+
     // Wiedergabe: läuft das Bild gleichmäßig weiter (kein Zurückspringen, keine schwarzen Bilder, kaum Nachstellen)?
     const play = await win.webContents.executeJavaScript(`(async () => {
       const T = window.__pcTest;

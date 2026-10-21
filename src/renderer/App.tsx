@@ -13,6 +13,7 @@ import { UpdateBanner } from './components/UpdateBanner';
 import { useUi, useView } from './store/ui';
 import { Splitter } from './components/Splitter';
 import { ToolsDialog, WatchBanner } from './components/ToolsDialog';
+import { MaskEditor } from './components/MaskEditor';
 import { onDirtyChange, untracked, useProject, isDirty } from './store/project';
 import { useKeyboard } from './hooks/useKeyboard';
 import {
@@ -66,7 +67,7 @@ export function App(): React.ReactElement {
         case 'about': useUi.getState().openDialog('about'); break;
         case 'checkUpdates': void api.checkForUpdates(); break;
         case 'uninstall': void api.uninstall(); break;
-        case 'undo': if (inInput) document.execCommand('undo'); else doUndo(); break;
+        case 'undo': if (inInput) document.execCommand('undo'); else if (useUi.getState().maskEditor) window.dispatchEvent(new Event('pc-mask-undo')); else doUndo(); break;
         case 'redo': if (inInput) document.execCommand('redo'); else doRedo(); break;
         case 'selectAll': if (!inInput) selectAll(); break;
         case 'split': splitAtPlayhead(); break;
@@ -117,6 +118,7 @@ export function App(): React.ReactElement {
       <Splitter which="timelineHeight" />
       <Timeline zoomFitRef={zoomFitRef} />
       <UpdateBanner />
+      <MaskEditor />
       <Toasts />
       {dialog === 'export' && <ExportDialog />}
       {dialog === 'settings' && <SettingsDialog />}
