@@ -83,6 +83,9 @@ function MaskEditorInner({ clipId, initialTrack }: { clipId: string; initialTrac
   const close = () => useUi.getState().setMaskEditor(null);
 
   const [trackId, setTrackId] = useState<string | undefined>(initialTrack ?? clip?.objects?.find((o) => o.label === 'manual' || o.label === 'ai-mask')?.id);
+  // aktuelle Spur-ID auch für asynchrone Abläufe (Zustand wäre dort veraltet)
+  const tid = useRef<string | undefined>(trackId);
+  tid.current = trackId ?? tid.current;
   const track = clip?.objects?.find((o) => o.id === trackId);
   const dur = clip ? clipDuration(clip) : 0;
   const ui0 = useUi.getState();
@@ -118,6 +121,7 @@ function MaskEditorInner({ clipId, initialTrack }: { clipId: string; initialTrac
   const redo = useRef<Uint8Array[]>([]);
   const aiBase = useRef<Uint8Array | null>(null);
   const spaceDown = useRef(false);
+  const userView = useRef(false);   // selbst gezoomt/verschoben → beim Größe-Ändern nicht neu einpassen
   const redraw = useCallback(() => setTick((x) => x + 1), []);
 
   // ---------- Laden ----------
@@ -138,12 +142,14 @@ function MaskEditorInner({ clipId, initialTrack }: { clipId: string; initialTrac
 
   const fit = useCallback(() => {
     const el = viewRef.current;
-    if (!el || !W) return;
+    // Größe direkt vom geladenen Bild (der Zustand kann beim ersten Laden noch veraltet sein)
+    const iw = imgRef.current.width, ih = imgRef.current.height;
+    if (!el || !iw || !ih || !el.clientWidth) return;
     const cw = el.clientWidth, ch = el.clientHeight;
-    const s = Math.min(cw / W, ch / H) * 0.96;
-    tf.current = { s, ox: (cw - W * s) / 2, oy: (ch - H * s) / 2 };
+    const s = Math.min(cw / iw, ch / ih) * 0.96;
+    tf.current = { s, ox: (cw - iw * s) / 2, oy: (ch - ih * s) / 2 };
     redraw();
-  }, [W, H, redraw]);
+  }, [redraw]);
 
   const loadAt = useCallback(async (lt: number) => {
     if (!clip || !media) return;
@@ -161,7 +167,7 @@ function MaskEditorInner({ clipId, initialTrack }: { clipId: string; initialTrac
       m.width = f.width; m.height = f.height;
       setSpace(f.space);
       // Maske dieser Stelle: bearbeitete Stelle, sonst nächste verfolgte Maske
-      const tr = useProject.getState().project.clips[clipId]?.objects?.find((o) => o.id === trackId);
+      const tr = useProject.getState().project.clips[clipId]?.objects?.find((o) => o.id === tid.current);
       const cand = [...(tr?.keys ?? []), ...(tr?.masks ?? [])].filter((k) => Math.abs(k.t - lt) <= Math.max(half * 2.2, 0.05)).sort((a, b) => Math.abs(a.t - lt) - Math.abs(b.t - lt))[0];
       if (cand) putMask(m, await window.panocut.maskRead(cand.path, f.width, f.height));
       else m.getContext('2d')!.clearRect(0, 0, m.width, m.height);
@@ -189,21 +195,22 @@ function MaskEditorInner({ clipId, initialTrack }: { clipId: string; initialTrac
       if (!c) return;
       const dpr = window.devicePixelRatio || 1;
       c.width = Math.round(c.clientWidth * dpr); c.height = Math.round(c.clientHeight * dpr);
-      redraw();
+      if (!userView.current) fit(); else redraw();
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [redraw]);
+  }, [redraw, fit]);
 
   // ---------- Speichern ----------
   const ensureTrack = useCallback((): ObjectTrack => {
     const st = useProject.getState();
     const c = st.project.clips[clipId];
-    const existing = c?.objects?.find((o) => o.id === trackId);
+    const existing = c?.objects?.find((o) => o.id === tid.current);
     if (existing) return existing;
     const n = (c?.objects ?? []).filter((o) => o.label === 'manual').length + 1;
     const tr: ObjectTrack = { id: makeId('trk'), label: 'manual', labelDe: `${t.maskEd.trackName} ${n}`, color: '#ff2d95', boxes: [], masks: [], keys: [], space, maskSize: { w: W, h: H } };
     st.addObjectTrack(clipId, tr);
+    tid.current = tr.id;
     setTrackId(tr.id);
     return tr;
   }, [clipId, trackId, space, W, H]);
@@ -333,7 +340,7 @@ function MaskEditorInner({ clipId, initialTrack }: { clipId: string; initialTrac
   const finish = async () => {
     await saveHere();
     const cur = useProject.getState().project.clips[clipId];
-    const tr = cur?.objects?.find((o) => o.id === trackId);
+    const tr = cur?.objects?.find((o) => o.id === tid.current);
     if (cur && tr && tr.masks?.length) {
       // außerhalb des verfolgten Bereichs: keine Maske (leeres Bild), damit nichts „stehen bleibt“
       const masks = [...tr.masks].sort((a, b) => a.t - b.t);
@@ -417,6 +424,7 @@ function MaskEditorInner({ clipId, initialTrack }: { clipId: string; initialTrac
     const mx = e.clientX - r.left, my = e.clientY - r.top;
     const { s, ox, oy } = tf.current;
     if (e.altKey && (tool === 'brush' || tool === 'erase')) { setBrush((b) => ({ ...b, size: Math.max(1, Math.min(400, b.size * Math.exp(-e.deltaY * 0.002))) })); return; }
+    userView.current = true;
     const ns = Math.max(0.05, Math.min(40, s * Math.exp(-e.deltaY * 0.0015)));
     tf.current = { s: ns, ox: mx - ((mx - ox) / s) * ns, oy: my - ((my - oy) / s) * ns };
     redraw();
@@ -429,6 +437,7 @@ function MaskEditorInner({ clipId, initialTrack }: { clipId: string; initialTrac
     const p0 = toImage(e);
     const pan = tool === 'hand' || e.button === 1 || e.button === 2 || spaceDown.current;
     if (pan) {
+      userView.current = true;
       const start = { x: e.clientX, y: e.clientY, ox: tf.current.ox, oy: tf.current.oy };
       const move = (ev: PointerEvent) => { tf.current = { ...tf.current, ox: start.ox + ev.clientX - start.x, oy: start.oy + ev.clientY - start.y }; redraw(); };
       const up = () => { el.removeEventListener('pointermove', move); el.removeEventListener('pointerup', up); };
@@ -551,7 +560,7 @@ function MaskEditorInner({ clipId, initialTrack }: { clipId: string; initialTrac
           break;
         case 'ArrowLeft': void goTo(local - 1 / fps); break;
         case 'ArrowRight': void goTo(local + 1 / fps); break;
-        case 'f': case 'F': fit(); break;
+        case 'f': case 'F': userView.current = false; fit(); break;
         default: return;
       }
       e.preventDefault();
@@ -577,7 +586,7 @@ function MaskEditorInner({ clipId, initialTrack }: { clipId: string; initialTrac
   );
 
   return (
-    <div className="mask-editor">
+    <div className="mask-editor" data-tool={tool} data-dirty={dirty.current ? '1' : '0'}>
       <div className="me-top">
         <strong>✏️ {t.maskEd.title}</strong>
         <span className="me-sub">{clip.name}{wrap ? ` · ${t.maskEd.pano}` : ''}</span>
@@ -591,7 +600,7 @@ function MaskEditorInner({ clipId, initialTrack }: { clipId: string; initialTrac
         <div className="spacer" />
         <button className="btn sm" title="⌘Z" onClick={doUndo}>↶</button>
         <button className="btn sm" title="⇧⌘Z" onClick={doRedo}>↷</button>
-        <button className="btn sm" onClick={() => fit()} title="F">⤢ {t.maskEd.fit}</button>
+        <button className="btn sm" onClick={() => { userView.current = false; fit(); }} title="F">⤢ {t.maskEd.fit}</button>
         <button className="btn sm primary" onClick={() => void finish()}>✓ {t.maskEd.done}</button>
         <button className="btn icon ghost sm" onClick={() => void finish()}><IconClose /></button>
       </div>

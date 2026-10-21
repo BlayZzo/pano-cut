@@ -140,11 +140,13 @@ export async function runUiTest(win: BrowserWindow): Promise<number> {
       const ev = (type, x, y) => cv.dispatchEvent(new PointerEvent(type, { clientX: r.left + r.width * x, clientY: r.top + r.height * y, button: 0, buttons: 1, pointerId: 7, bubbles: true }));
       ev('pointerdown', 0.4, 0.5); for (let k = 1; k <= 10; k++) ev('pointermove', 0.4 + k * 0.02, 0.5); ev('pointerup', 0.6, 0.5);
       await new Promise((r2) => setTimeout(r2, 200));
+      const st = document.querySelector('.mask-editor');
+      const dbg = { tool: st && st.getAttribute('data-tool'), dirty: st && st.getAttribute('data-dirty') };
       [...document.querySelectorAll('.mask-editor button')].find((b) => b.textContent.includes('✓')).click();
       await wait(() => !document.querySelector('.mask-editor'), 8000);
       const c2 = T.useProject.getState().project.clips[clip.id];
       const tr = (c2.objects || []).find((o) => o.label === 'manual');
-      return { ok: true, shown: Math.round(shown), keys: tr ? (tr.keys || []).length : 0, masks: tr ? (tr.masks || []).length : 0, cut: !!(c2.cutout && c2.cutout.enabled && tr && c2.cutout.trackId === tr.id), closed: !document.querySelector('.mask-editor') };
+      return { ok: true, dbg, shown: Math.round(shown), keys: tr ? (tr.keys || []).length : 0, masks: tr ? (tr.masks || []).length : 0, cut: !!(c2.cutout && c2.cutout.enabled && tr && c2.cutout.trackId === tr.id), closed: !document.querySelector('.mask-editor') };
     })()`);
     out('Masken-Editor:', JSON.stringify(mask));
     if (!mask.ok) failures.push(`Masken-Editor: ${mask.msg}`);
