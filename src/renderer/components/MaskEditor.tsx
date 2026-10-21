@@ -89,7 +89,8 @@ function MaskEditorInner({ clipId, initialTrack }: { clipId: string; initialTrac
   const track = clip?.objects?.find((o) => o.id === trackId);
   const dur = clip ? clipDuration(clip) : 0;
   const ui0 = useUi.getState();
-  const [local, setLocal] = useState(() => (clip ? Math.max(0, Math.min(dur, ui0.playhead - clip.start)) : 0));
+  // Start an der Abspielkopf-Stelle (am Clip-Ende ein Bild davor – dort gibt es sonst kein Bild)
+  const [local, setLocal] = useState(() => (clip ? Math.max(0, Math.min(dur - 1 / fps, ui0.playhead - clip.start)) : 0));
   const [size, setSize] = useState<{ w: number; h: number } | null>(null);
   const [space, setSpace] = useState<'source' | 'equirect'>('source');
   const [loading, setLoading] = useState(true);

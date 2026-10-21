@@ -57,7 +57,13 @@ export async function maskFrame(media: MediaItem, t: number): Promise<Frame & { 
   if (hit) return { ...hit, key };
   const src = frameSource(media);
   let data: Uint8Array | null = null;
-  await streamFrames(['-ss', Math.max(0, t).toFixed(3), '-i', src.file, '-filter_complex', src.graph, '-map', '[o]', '-frames:v', '1', '-f', 'rawvideo', '-'], src.w * src.h * 4, (d) => { data = d; }, false);
+  // Am Dateiende gibt es kein Bild mehr → etwas früher nochmal versuchen
+  const dur = media.info.duration || 0;
+  const last = dur > 0 ? Math.max(0, dur - 1 / Math.max(1, media.info.fps || 30)) : t;
+  for (const at of [Math.min(t, last), Math.max(0, Math.min(t, last) - 0.5), 0]) {
+    await streamFrames(['-ss', Math.max(0, at).toFixed(3), '-i', src.file, '-filter_complex', src.graph, '-map', '[o]', '-frames:v', '1', '-f', 'rawvideo', '-'], src.w * src.h * 4, (d) => { data = d; }, false);
+    if (data) break;
+  }
   if (!data) throw new Error('Bild konnte nicht gelesen werden');
   const f: Frame = { data, width: src.w, height: src.h };
   frames.set(key, f);
