@@ -7,6 +7,7 @@ import { useUi, usePlayheadCoarse, useView, updateView, getView } from '../store
 import { Popover } from './Popover';
 import { FollowTool } from './FollowTool';
 import { PathOverlay } from './PathOverlay';
+import { addTrackedLight } from '../lightActions';
 import { LayersPanel } from './LayersPanel';
 import { engine, playPause } from '../engine/instance';
 import { goEnd, goStart, markCameraHere, stepFrames } from '../actions';
@@ -58,6 +59,7 @@ export function Preview(): React.ReactElement {
   const maskBrush = useUi((s) => s.maskBrush);
   const pathEdit = useUi((s) => s.pathEdit);
   const layersPanel = useUi((s) => s.layersPanel);
+  const lightPick = useUi((s) => s.lightPick);
   const setMaskBrush = useUi((s) => s.setMaskBrush);
   const updateClip = useProject((s) => s.updateClip);
   const updateObjectTrack = useProject((s) => s.updateObjectTrack);
@@ -222,6 +224,34 @@ export function Preview(): React.ReactElement {
         if (u >= 0 && u <= 1 && v >= 0 && v <= 1) pp.onPick(u, v);
         else useUi.getState().toast(t.cutout.outside, 'error');
       }
+      return;
+    }
+
+    // Lichter markieren: Klick = Licht, Ziehen = Größe
+    const lp = useUi.getState().lightPick;
+    if (lp) {
+      const clip = clips[lp.clipId];
+      const m = clip ? media[clip.mediaId] : undefined;
+      const box = clip && m ? clipBox(clip, m, canvas.width, canvas.height) : null;
+      if (!clip || !box) return;
+      const p0 = toCanvas(e.clientX, e.clientY);
+      const { u, v } = canvasToSource(box, clip, p0.x, p0.y);
+      if (u < 0 || u > 1 || v < 0 || v > 1) { toast(t.cutout.outside, 'error'); return; }
+      let r = lp.r;
+      canvas.setPointerCapture(e.pointerId);
+      const move = (ev: PointerEvent) => {
+        const p1 = toCanvas(ev.clientX, ev.clientY);
+        const q = canvasToSource(box, clip, p1.x, p1.y);
+        const d = Math.hypot((q.u - u) * box.vw, (q.v - v) * box.vh) / box.vh;
+        if (d > 0.01) { r = Math.min(0.3, d); useUi.getState().setLightPick({ ...lp, r }); }
+      };
+      const up = () => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup', up);
+        void addTrackedLight(clip.id, u, v, r).catch((err) => toast((err as Error).message, 'error'));
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup', up);
       return;
     }
 
@@ -468,6 +498,7 @@ export function Preview(): React.ReactElement {
           </svg>
         )}
         {pathEdit && selectedClip && selectedClip.id === pathEdit && canvasRef.current && <PathOverlay clip={selectedClip} canvas={canvasRef.current} />}
+        {lightPick && <div className="preview-badge">{t.lights.pickHint} <button className="btn sm" style={{ marginLeft: 8 }} onClick={() => useUi.getState().setLightPick(null)}>{t.path.done}</button></div>}
         {pathEdit && <div className="preview-badge">{t.path.badge} <button className="btn sm" style={{ marginLeft: 8 }} onClick={() => useUi.getState().setPathEdit(null)}>{t.path.done}</button></div>}
         {followOn && selectedClip && selectedMedia && canvasRef.current && <FollowTool clip={selectedClip} media={selectedMedia} canvas={canvasRef.current} onClose={() => setFollowOn(false)} />}
         {original && hasClips && <div className="preview-source-badge">{t.preview.originalBadge}</div>}

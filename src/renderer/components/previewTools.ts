@@ -13,8 +13,7 @@ export interface ClipBox {
 /** Wo liegt ein Clip im Vorschaubild (ohne Animation)? Gleiche Rechnung wie engine.drawClip. */
 export function clipBox(clip: Clip, media: MediaItem, W: number, H: number): ClipBox | null {
   let vw = media.info.width, vh = media.info.height;
-  if (!vw || !vh) return null;
-  if (Math.abs(media.info.rotation % 180) === 90) [vw, vh] = [vh, vw];
+  if (!vw || !vh) return null;   // info.width/height sind schon die Anzeige-Maße (nach Drehung)
   if (media.info.is360 && clip.pano) {
     if (clip.pano.mode === 'equirect') { vw = 2048; vh = 1024; } else { vw = W; vh = H; }
   }

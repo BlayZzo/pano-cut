@@ -1,9 +1,9 @@
 // Effekte erzeugen, neu rendern, an die Szene anpassen – und Objekte vor andere Ebenen holen.
-import type { Clip, MediaItem, VfxKind, VfxSpec } from '@shared/types';
+import type { Clip, MediaItem, Motion, MotionKeyframe, VfxKind, VfxSpec } from '@shared/types';
 import { clipAt, clipDuration, createClip, makeId } from '@shared/timeline';
 import { frameStats } from '@shared/color';
 import { defaultVfx, matchToScene, shakeKeyframes, vfxKind } from '@shared/vfx';
-import { combineKeyframes, entranceKeyframes, type EntranceStyle, type FrameBox } from '@shared/effects';
+import { combineKeyframes, entranceKeyframes, motionAt, type EntranceStyle, type FrameBox } from '@shared/effects';
 import { trackBoxAt } from '@shared/ai';
 import { beginTransaction, endTransaction, untracked, useProject } from '../store/project';
 import { useUi } from '../store/ui';
@@ -200,7 +200,7 @@ export function isEffectMedia(m: MediaItem | undefined): boolean {
 // ---------- Objekt ins Video fallen lassen (Auftritt + Aufprall) ----------
 
 export interface DropInOptions {
-  style: EntranceStyle; strength: number; dust: boolean; shake: boolean;
+  style: EntranceStyle; strength: number; dust: boolean; shake: boolean; shadow?: boolean;
   sound?: string;   // Sound-Effekt beim Aufprall bzw. Hereinrasen ('' = keiner)
 }
 
@@ -220,6 +220,60 @@ export function objectFrameBox(clip: Clip, media: MediaItem, W: number, H: numbe
   else { const s = (clip.fit === 'cover' ? Math.max(W / vw, H / vh) : Math.min(W / vw, H / vh)) * sc; dw = vw * s; dh = vh * s; }
   const cx = W / 2 + (clip.transform.x / 100) * W, cy = H / 2 + (clip.transform.y / 100) * H;
   return { x: (cx - dw / 2 + b.x * dw) / W, y: (cy - dh / 2 + b.y * dh) / H, w: (b.w * dw) / W, h: (b.h * dh) / H };
+}
+
+/** Weicher, dunkler Fleck (Schatten unter einem Objekt) als PNG. */
+async function shadowPng(): Promise<Uint8Array> {
+  const c = document.createElement('canvas');
+  c.width = 512; c.height = 128;
+  const g = c.getContext('2d')!;
+  g.translate(256, 64); g.scale(1, 0.25);
+  const grad = g.createRadialGradient(0, 0, 0, 0, 0, 250);
+  grad.addColorStop(0, 'rgba(0,0,0,0.95)'); grad.addColorStop(0.45, 'rgba(0,0,0,0.75)'); grad.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = grad; g.beginPath(); g.arc(0, 0, 250, 0, Math.PI * 2); g.fill();
+  const blob = await new Promise<Blob | null>((r) => c.toBlob(r, 'image/png'));
+  return new Uint8Array(await blob!.arrayBuffer());
+}
+
+/** Schatten-Clip unter das Objekt legen (eigene Spur direkt darunter), folgt der Fallbewegung. */
+async function addContactShadow(clip: Clip, box: FrameBox, kfs: MotionKeyframe[], style: EntranceStyle): Promise<void> {
+  const p = useProject.getState().project;
+  const media = p.media[clip.mediaId];
+  if (!media) return;
+  const file = await window.panocut.aiSaveMask(media.path, 'shadow', 'contact_shadow', await shadowPng());
+  let item = Object.values(p.media).find((m) => m.path === file);
+  if (!item) {
+    const [it] = await window.panocut.importMedia([file]);
+    if (!it) return;
+    untracked(() => useProject.getState().addMedia([it]));
+    void window.panocut.prepareMedia(it);
+    item = it;
+  }
+  const W = p.settings.width, H = p.settings.height;
+  const dur = clipDuration(clip);
+  const obj: Motion = { preset: 'custom', intensity: 1, smooth: false, keyframes: kfs };
+  // Schatten-Keyframes aus der Objekt-Bewegung: Höhe über dem Boden → Größe/Deckkraft
+  const times = Array.from(new Set(kfs.map((k) => Math.round(k.t * 1000) / 1000))).filter((x) => x <= dur);
+  const keys: MotionKeyframe[] = times.map((tt) => {
+    const m = motionAt(obj, tt);
+    const above = style === 'slam' ? Math.max(0, (m.scale - 1) * 40) : Math.max(0, -m.y);   // Prozent der Bildhöhe
+    const near = Math.exp(-above / 22);
+    return { t: tt, x: Math.round(m.x * 100) / 100, y: 0, scale: Math.round((0.45 + 0.55 * near) * 1000) / 1000, rotation: 0, opacity: Math.round(0.8 * near * 100) / 100 };
+  });
+  // Bildgröße: Bild 4:1 wird eingepasst; gewünschte Breite ≈ 1,15 × Objektbreite
+  const contain = Math.min(W / 512, H / 128);
+  const sc = Math.max(0.05, (box.w * 1.15 * W) / (512 * contain));
+  beginTransaction();
+  const track = useProject.getState().addVideoTrackBelow(clip.trackId, t.dropIn.shadowTrack);
+  const sh = createClip(item, track, clip.start);
+  sh.name = t.dropIn.shadowTrack;
+  sh.fit = 'contain';
+  sh.out = sh.in + dur;
+  sh.transform = { x: ((box.x + box.w / 2) - 0.5) * 100, y: (box.y + box.h - 0.5) * 100 - 0.5, scale: sc, rotation: 0 };
+  sh.motion = { preset: 'custom', intensity: 1, smooth: true, keyframes: keys };
+  sh.blend = 'multiply';
+  useProject.getState().insertClips([sh]);
+  endTransaction();
 }
 
 /** Erschütterung in einen Szenen-Clip einsetzen (wie bei der Explosion). */
@@ -253,6 +307,10 @@ export async function dropObjectIn(clipId: string, opts: DropInOptions, onProgre
   useProject.getState().updateClip(clip.id, { motion: { preset: opts.style, intensity: opts.strength, smooth: false, keyframes: kfs } });
   if (scene && opts.shake && impact !== null) shakeScene(scene, clip.start + impact + 0.02, shakeStrength);
   endTransaction();
+  // Kontaktschatten am Boden: wird dunkler und schärfer, je näher das Objekt kommt
+  if (impact !== null && opts.shadow !== false && (opts.style === 'dropin' || opts.style === 'slam')) {
+    await addContactShadow(useProject.getState().project.clips[clip.id] ?? clip, box, kfs, opts.style).catch((e) => console.warn('Schatten', e));
+  }
   if (opts.sound) {
     // Aufprall: Sound genau beim Aufschlag; Hereinrasen: Whoosh am Anfang
     const at = impact !== null ? clip.start + impact - 0.03 : clip.start;

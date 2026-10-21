@@ -6,7 +6,9 @@ import { LOOKS } from '@shared/color';
 import { MOTION_PRESETS, NEUTRAL_FX, createMotion, hasMotion, insertKeyframe } from '@shared/effects';
 import { beginTransaction, endTransaction, useProject } from '../store/project';
 import { useUi, usePlayheadCoarse } from '../store/ui';
-import { t } from '../i18n/de';
+import { fmt, t } from '../i18n/de';
+import { DEFAULT_TRAIL_THRESHOLD } from '@shared/lights';
+import { removeLight } from '../lightActions';
 import { Section, SelectField, Slider, Toggle } from './InspectorBits';
 import { autoEnhanceClips, saveClipAsEffect } from '../actions';
 
@@ -133,6 +135,9 @@ export function InspectorLightFx({ clip, ids }: { clip: Clip; ids: string[] }): 
   const glow = fx.glow ?? 0, trails = fx.trails ?? 0, mb = fx.motionBlur ?? 0;
   const active = glow > 0 || trails > 0 || mb > 0;
   const pct = (v: number) => `${Math.round(v * 100)} %`;
+  const lightPick = useUi((s) => s.lightPick);
+  const setLightPick = useUi((s) => s.setLightPick);
+  const is360 = useProject((s) => !!s.project.media[clip.mediaId]?.info.is360);
   const nightPreset = () => updateClips(ids, { fx: { ...fx, glow: 0.55, trails: 0.6 }, color: { ...clip.color, look: 'night', lookStrength: 1 } });
   return (
     <Section title={t.lightFx.section} defaultOpen={active} badge={active ? '•' : undefined} onReset={() => patchFx({ glow: 0, trails: 0, motionBlur: 0 })}>
@@ -143,6 +148,35 @@ export function InspectorLightFx({ clip, ids }: { clip: Clip; ids: string[] }): 
       </div>
       <Slider label={t.lightFx.glow} value={glow} min={0} max={1} step={0.01} display={pct} onChange={(v) => patchFx({ glow: v })} />
       <Slider label={t.lightFx.trails} value={trails} min={0} max={1} step={0.01} display={pct} onChange={(v) => patchFx({ trails: v })} />
+      {trails > 0.01 && (
+        <>
+          <SelectField label={t.lights.mode} value={fx.trailsMode ?? 'all'} onChange={(v) => patchFx({ trailsMode: v as ImageFx['trailsMode'] })} options={[
+            { value: 'all', label: t.lights.modeAll },
+            { value: 'lights', label: t.lights.modeLights },
+            ...(is360 ? [] : [{ value: 'marked', label: t.lights.modeMarked }]),
+          ]} />
+          {(fx.trailsMode ?? 'all') !== 'all' && (
+            <Slider label={t.lights.threshold} value={fx.trailsThreshold ?? DEFAULT_TRAIL_THRESHOLD} min={0.3} max={0.95} step={0.01} display={pct} onChange={(v) => patchFx({ trailsThreshold: v })} />
+          )}
+          {fx.trailsMode === 'marked' && (
+            <div className="music-auto">
+              <div className="hint">{t.lights.markHint}</div>
+              <button className={`btn sm${lightPick?.clipId === clip.id ? ' active' : ' primary'}`} onClick={() => {
+                if (lightPick?.clipId === clip.id) { setLightPick(null); return; }
+                useUi.getState().select([clip.id]);
+                setLightPick({ clipId: clip.id, r: 0.04 });
+              }}>{lightPick?.clipId === clip.id ? t.path.done : t.lights.mark}</button>
+              {(fx.lights ?? []).map((l, i) => (
+                <div key={l.id} className="field-row">
+                  <span className="num-label">💡 {fmt(t.lights.item, { n: i + 1, s: l.keys.length > 1 ? (l.keys[l.keys.length - 1].t - l.keys[0].t).toFixed(1) : '0' })}</span>
+                  <div className="spacer" />
+                  <button className="btn sm ghost" onClick={() => removeLight(clip.id, l.id)}>{t.common.delete}</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
       <Slider label={t.lightFx.motionBlur} value={mb} min={0} max={1} step={0.01} display={pct} onChange={(v) => patchFx({ motionBlur: v })} />
       <div className="hint">{t.lightFx.hint}</div>
     </Section>

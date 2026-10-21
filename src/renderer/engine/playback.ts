@@ -8,6 +8,7 @@ import { stitchKey } from '@shared/stitchModel';
 import { hasReframe, reframeAt, reframeRect } from '@shared/reframe';
 import { stabActive, stabMatrixAt, targetTrack, type ImuTrack } from '@shared/stabilize';
 import { SEAM_BINS, seamAt, type SeamTrack } from '@shared/seamFlow';
+import { circleMask, lightKey, lightKeyParams, lightsAt } from '@shared/lights';
 import { sharedChromaGL } from './chromagl';
 import { sharedColorGL } from './colorgl';
 import { motionAt } from '@shared/effects';
@@ -28,17 +29,17 @@ interface Slot {
   work?: HTMLCanvasElement;   // Zwischen-Canvas für Freistellen
   hold?: HTMLCanvasElement;   // letztes Bild – wird gezeigt, solange das Video nach einem Sprung noch lädt (kein Schwarz-Flackern)
   holdAt?: number;
-  fx?: { cur: HTMLCanvasElement; mb: HTMLCanvasElement; tr: HTMLCanvasElement; gl: HTMLCanvasElement; small: HTMLCanvasElement; t: number };
+  fx?: { cur: HTMLCanvasElement; mb: HTMLCanvasElement; tr: HTMLCanvasElement; gl: HTMLCanvasElement; small: HTMLCanvasElement; key: HTMLCanvasElement; mix: HTMLCanvasElement; t: number };
 }
 
 /** Bewegungsunschärfe, Leuchtspuren und Glühen – Vorschau-Gegenstück zu FFmpeg tmix / lagfun / Bloom. */
-function temporalFx(slot: Slot, clip: Clip, source: CanvasImageSource, vw: number, vh: number, localT: number, playing: boolean, fps: number): { source: CanvasImageSource; vw: number; vh: number } {
+function temporalFx(slot: Slot, clip: Clip, source: CanvasImageSource, vw: number, vh: number, localT: number, playing: boolean, fps: number, toFrame?: (x: number, y: number) => [number, number]): { source: CanvasImageSource; vw: number; vh: number } {
   const fx = clip.fx;
   const mb = fx?.motionBlur ?? 0, tr = fx?.trails ?? 0, gl = fx?.glow ?? 0;
   if (mb < 0.01 && tr < 0.01 && gl < 0.01) { slot.fx = undefined; return { source, vw, vh }; }
   const w = Math.max(2, Math.min(vw, 1280)), h = Math.max(2, Math.round((w * vh) / vw));
   const mk = () => { const c = document.createElement('canvas'); c.width = w; c.height = h; return c; };
-  if (!slot.fx || slot.fx.cur.width !== w || slot.fx.cur.height !== h) slot.fx = { cur: mk(), mb: mk(), tr: mk(), gl: mk(), small: document.createElement('canvas'), t: -1 };
+  if (!slot.fx || slot.fx.cur.width !== w || slot.fx.cur.height !== h) slot.fx = { cur: mk(), mb: mk(), tr: mk(), gl: mk(), small: document.createElement('canvas'), key: mk(), mix: mk(), t: -1 };
   const st = slot.fx;
   // Zusammenhängende Wiedergabe? Sonst (Springen, Standbild) neu beginnen
   const dt = localT - st.t;
@@ -60,6 +61,39 @@ function temporalFx(slot: Slot, clip: Clip, source: CanvasImageSource, vw: numbe
   }
   if (tr >= 0.01) {
     const decay = 0.86 + 0.12 * tr;
+    const mode = fx?.trailsMode ?? 'all';
+    // Nur Lichter: Helligkeits-Schlüssel (wie lutrgb im Export), bei „markiert“ zusätzlich mit der Kreis-Maske
+    let trailIn: HTMLCanvasElement = out;
+    if (mode !== 'all') {
+      const kx = st.key.getContext('2d', { willReadFrequently: true })!;
+      kx.globalCompositeOperation = 'copy';
+      kx.globalAlpha = 1;
+      kx.drawImage(out, 0, 0);
+      const img = kx.getImageData(0, 0, w, h);
+      const d = img.data;
+      const { T, S } = lightKeyParams(fx?.trailsThreshold);
+      let mask: Uint8Array | null = null;
+      if (mode === 'marked') {
+        mask = new Uint8Array(w * h);
+        const srcT = sourceTimeAt(clip, clip.start + localT);
+        for (const c of lightsAt(fx?.lights, srcT)) {
+          const [fx0, fy0] = toFrame ? toFrame(c.x, c.y) : [c.x, c.y];
+          const cx = fx0 * w, cy = fy0 * h, r = c.r * h * (toFrame ? Math.abs(toFrame(c.x, c.y + c.r)[1] - fy0) / Math.max(1e-6, c.r) : 1);
+          const x0 = Math.max(0, Math.floor(cx - r)), x1 = Math.min(w - 1, Math.ceil(cx + r));
+          const y0 = Math.max(0, Math.floor(cy - r)), y1 = Math.min(h - 1, Math.ceil(cy + r));
+          for (let yy = y0; yy <= y1; yy++) for (let xx = x0; xx <= x1; xx++) {
+            const v = Math.round(255 * circleMask(Math.hypot(xx + 0.5 - cx, yy + 0.5 - cy), r));
+            if (v > mask[yy * w + xx]) mask[yy * w + xx] = v;
+          }
+        }
+      }
+      for (let i = 0, p = 0; i < d.length; i += 4, p++) {
+        const m = mask ? mask[p] / 255 : 1;
+        d[i] = lightKey(d[i], T, S) * m; d[i + 1] = lightKey(d[i + 1], T, S) * m; d[i + 2] = lightKey(d[i + 2], T, S) * m;
+      }
+      kx.putImageData(img, 0, 0);
+      trailIn = st.key;
+    }
     const x = st.tr.getContext('2d')!;
     if (cont) {
       // alt × Abklingen …
@@ -74,8 +108,16 @@ function temporalFx(slot: Slot, clip: Clip, source: CanvasImageSource, vw: numbe
       x.globalAlpha = 1;
       x.globalCompositeOperation = 'copy';
     }
-    x.drawImage(out, 0, 0);
-    out = st.tr;
+    x.drawImage(trailIn, 0, 0);
+    if (mode !== 'all') {
+      // Spuren über das unveränderte Bild legen (das Hellere gewinnt – wie blend=lighten)
+      const mx = st.mix.getContext('2d')!;
+      mx.globalCompositeOperation = 'copy'; mx.globalAlpha = 1;
+      mx.drawImage(out, 0, 0);
+      mx.globalCompositeOperation = 'lighten';
+      mx.drawImage(st.tr, 0, 0);
+      out = st.mix;
+    } else out = st.tr;
   }
   if (gl >= 0.01) {
     // Helle Stellen herausfiltern (klein gerechnet), weichzeichnen und aufhellend darüberlegen
@@ -687,7 +729,14 @@ export class PlaybackEngine {
     }
     // Bewegungsunschärfe, Leuchtspuren, Glühen
     if (clip.fx && ((clip.fx.motionBlur ?? 0) > 0.01 || (clip.fx.trails ?? 0) > 0.01 || (clip.fx.glow ?? 0) > 0.01)) {
-      const r = temporalFx(slot, clip, source, vw, vh, localT, this.playing, this.project.settings.fps || 30);
+      // Quell-Koordinaten (0..1) → Bild nach Zuschnitt/Spiegeln (für markierte Lichter)
+      const toFrame = (x: number, y: number): [number, number] => {
+        let u = crop ? (x - crop.x) / crop.w : x, v = crop ? (y - crop.y) / crop.h : y;
+        if (clip.fx?.mirror) u = 1 - u;
+        if (clip.fx?.flip) v = 1 - v;
+        return [u, v];
+      };
+      const r = temporalFx(slot, clip, source, vw, vh, localT, this.playing, this.project.settings.fps || 30, toFrame);
       source = r.source; vw = r.vw; vh = r.vh;
     }
     // Freistellen anhand der Objektmaske

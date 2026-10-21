@@ -320,10 +320,16 @@ export interface ImageFx {
   grain: number;      // 0..1
   glow?: number;        // 0..1 Glühen um helle Stellen (Bloom)
   trails?: number;      // 0..1 Leuchtspuren: helle Stellen ziehen Spuren (FFmpeg lagfun)
+  trailsMode?: 'all' | 'lights' | 'marked';  // alles / nur helle Lichter / nur markierte (verfolgte) Lichter
+  trailsThreshold?: number;  // 0..1 ab welcher Helligkeit etwas als Licht zählt (Standard 0,6)
+  lights?: LightTrack[];     // markierte Lichter (Quell-Koordinaten 0..1, Quellzeit in Sekunden)
   motionBlur?: number;  // 0..1 Bewegungsunschärfe (mehrere Bilder gemittelt, FFmpeg tmix)
   mirror: boolean;    // horizontal spiegeln
   flip: boolean;      // vertikal spiegeln
 }
+
+/** Ein markiertes Licht, über das Video verfolgt: Mittelpunkt/Radius relativ zum Quellbild (r relativ zur Höhe). */
+export interface LightTrack { id: string; keys: Array<{ t: number; x: number; y: number; r: number }> }
 
 /** Zuschnitt in Prozent je Rand (vor dem Einpassen). */
 export interface Crop { left: number; right: number; top: number; bottom: number }

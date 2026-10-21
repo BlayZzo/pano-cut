@@ -6,7 +6,7 @@ import { t } from '../i18n/de';
 import { Section, SelectField, Toggle } from './InspectorBits';
 import { dropObjectIn } from '../vfx/actions';
 
-let last = { style: 'dropin' as EntranceStyle, strength: 1, dust: true, shake: true, sound: '' };
+let last = { style: 'dropin' as EntranceStyle, strength: 1, dust: true, shake: true, shadow: true, sound: '' };
 
 /** Freigestelltes Objekt mit Effekt ins Video fallen lassen. */
 export function InspectorDropIn({ clip }: { clip: Clip }): React.ReactElement {
@@ -17,7 +17,7 @@ export function InspectorDropIn({ clip }: { clip: Clip }): React.ReactElement {
   const apply = async () => {
     setBusy(t.dropIn.working);
     try {
-      await dropObjectIn(clip.id, { ...o, dust: o.dust && hasImpact }, (pct) => setBusy(`${t.dropIn.working} ${pct} %`));
+      await dropObjectIn(clip.id, { ...o, dust: o.dust && hasImpact, shadow: o.shadow && hasImpact }, (pct) => setBusy(`${t.dropIn.working} ${pct} %`));
     } catch (e) {
       useUi.getState().toast((e as Error).message, 'error');
     } finally {
@@ -40,6 +40,7 @@ export function InspectorDropIn({ clip }: { clip: Clip }): React.ReactElement {
       </div>
       {hasImpact && <Toggle label={t.dropIn.dust} checked={o.dust} onChange={(v) => upd({ dust: v })} />}
       <Toggle label={t.dropIn.shake} checked={o.shake} onChange={(v) => upd({ shake: v })} />
+      {hasImpact && <Toggle label={t.dropIn.shadow} checked={o.shadow} onChange={(v) => upd({ shadow: v })} />}
       <SelectField label={t.dropIn.sound} value={o.sound} onChange={(v) => upd({ sound: v })} options={[
         { value: '', label: t.dropIn.soundNone },
         ...(hasImpact

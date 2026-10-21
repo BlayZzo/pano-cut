@@ -72,13 +72,20 @@ export function entranceKeyframes(style: EntranceStyle, strength: number, dur: n
   if (style === 'dropin') {
     const y0 = -(box.y + box.h) * 100 - 6;          // ganz oberhalb des Bildes
     const tf = Math.min(dur * 0.6, 0.62 / Math.sqrt(s));
-    for (let i = 0; i <= 8; i++) { const u = i / 8; add(tf * u, { y: y0 * (1 - u * u) }); }   // Fallen (beschleunigt)
+    // Fallen (Schwerkraft: Weg ∝ Zeit²) mit leichter Schräglage, die sich bis zum Aufprall aufrichtet
+    const tilt = 4 + 3 * s;
+    for (let i = 0; i <= 12; i++) { const u = i / 12; add(tf * u, { y: y0 * (1 - u * u), rotation: tilt * Math.pow(1 - u, 1.5) }); }
     impact = tf;
-    // Rückprall: zwei kleiner werdende Hüpfer
-    const h1 = Math.min(14, box.h * 100 * 0.22) * s, t1 = 0.16 + 0.1 * s;
+    // Aufprall wie ein schweres Fahrzeug: Federung drückt ein (kurz tiefer + breiter), dann zwei kleiner werdende Hüpfer,
+    // die Schräglage schwingt gegenläufig nach
+    const sink = Math.min(3, box.h * 100 * 0.05) * s;
+    add(tf + 0.05, { y: sink, scale: 1 + 0.02 * s, rotation: -0.25 * tilt });
+    const h1 = Math.min(12, box.h * 100 * 0.18) * s, t1 = 0.18 + 0.1 * s;
     const h2 = h1 * 0.3, t2 = t1 * 0.55;
-    for (let i = 1; i <= 6; i++) { const u = i / 6; add(tf + t1 * u, { y: -h1 * 4 * u * (1 - u), scale: i === 1 ? 1 + 0.03 * s : 1 }); }
-    for (let i = 1; i <= 4; i++) { const u = i / 4; add(tf + t1 + t2 * u, { y: -h2 * 4 * u * (1 - u) }); }
+    for (let i = 1; i <= 6; i++) { const u = i / 6; add(tf + 0.05 + t1 * u, { y: sink * (1 - u) - h1 * 4 * u * (1 - u), rotation: -0.25 * tilt * (1 - u) + 0.1 * tilt * Math.sin(Math.PI * u) }); }
+    for (let i = 1; i <= 4; i++) { const u = i / 4; add(tf + 0.05 + t1 + t2 * u, { y: -h2 * 4 * u * (1 - u), rotation: -0.05 * tilt * Math.sin(Math.PI * u) }); }
+    add(tf + 0.05 + t1 + t2 + 0.12, { y: sink * 0.25 });
+    add(tf + 0.05 + t1 + t2 + 0.3, {});
   } else if (style === 'slam') {
     const S0 = 1 + 1.6 * (0.5 + 0.5 * s);
     const ts = Math.min(dur * 0.6, 0.42 / Math.pow(s, 0.3));

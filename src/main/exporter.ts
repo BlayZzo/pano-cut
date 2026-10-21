@@ -14,6 +14,8 @@ import { availableEncoders, availableFilters, FfmpegError, probeFile, runFfmpeg 
 import { reverseVideo } from './reverse';
 import { nadirChain, needsStitching, stitchChain } from './stitch';
 import { readSeamTrack, seamUsable, writeSeamMaps } from './seamFlow';
+import { LIGHT_MASK_RATE, writeLightMask } from './lightMask';
+import { lightKeyParams } from '@shared/lights';
 import { escapeFilterPath, fontFamilyName, resolveFontFile } from './fonts';
 import { injectSphericalMetadata } from './spherical';
 import { maskChain, writeMaskList } from './objects';
@@ -46,6 +48,7 @@ interface Segment {
   maskList?: string;
   cutSize?: { w: number; h: number };  // Bildgröße des freigestellten Clips vor dem Einrechnen der Maske
   seamMap?: string;          // bewegte Naht: Verschiebungskarten (FFV1)
+  lightMask?: { file: string; w: number; h: number };  // markierte Lichter: Maskenfilm + Bildgröße nach dem Einpassen
 }
 
 interface TransitionSeg {
@@ -126,6 +129,7 @@ export class ExportJob {
       await this.prepareStabilization(segments);
       await this.prepareCutoutSizes(segments);
       await this.prepareSeams(segments);
+      await this.prepareLightMasks(segments);
 
       const encoders = await availableEncoders();
       let hardware = this.options.hardware;
@@ -384,6 +388,44 @@ export class ExportJob {
     return Math.max(256, Math.round(eqW / 8) * 8);
   }
 
+  /** Leuchtspuren nur an markierten Lichtern: Bildgröße nach dem Einpassen messen und Maskenfilm schreiben. */
+  private async prepareLightMasks(segs: Segment[]): Promise<void> {
+    for (const s of segs) {
+      const c = s.clip, m = s.media;
+      const fx = c.fx;
+      if (!m || s.isImage || s.reversedFile || m.info.is360 || hasReframe(c)) continue;
+      if (!fx || (fx.trails ?? 0) < 0.01 || fx.trailsMode !== 'marked' || !fx.lights?.length) continue;
+      try {
+        const parts = this.videoChainParts(s);
+        const out = this.tmpFile(`fitsize_${c.id}.png`);
+        await runFfmpeg(['-ss', fnum(s.srcIn), '-t', fnum(Math.max(0.1, s.srcDur)), '-i', s.file, '-filter_complex', `${this.inputLabel(s, 0)}${parts.pre.join(',')}[o]`, '-map', '[o]', '-frames:v', '1', out], { signal: this.controller.signal });
+        const v = (await probeFile(out)).streams.find((x) => x.codec_type === 'video');
+        if (!v?.width || !v?.height) continue;
+        // Quelle → eingepasstes Bild: Zuschnitt, Spiegeln, bei „Füllen“ der mittige Ausschnitt
+        const cr = c.crop;
+        const k = cr && cr.left + cr.right + cr.top + cr.bottom > 0.01
+          ? { x: cr.left / 100, y: cr.top / 100, w: Math.max(0.05, 1 - (cr.left + cr.right) / 100), h: Math.max(0.05, 1 - (cr.top + cr.bottom) / 100) }
+          : { x: 0, y: 0, w: 1, h: 1 };
+        const aSrc = (m.info.width * k.w) / Math.max(1, m.info.height * k.h), aOut = this.options.width / this.options.height;
+        const vis = c.fit === 'cover' ? (aSrc > aOut ? { w: aOut / aSrc, h: 1 } : { w: 1, h: aSrc / aOut }) : { w: 1, h: 1 };
+        const toFrame = (x: number, y: number): [number, number] => {
+          let u = (x - k.x) / k.w, w = (y - k.y) / k.h;
+          if (fx.mirror) u = 1 - u;
+          if (fx.flip) w = 1 - w;
+          return [(u - (1 - vis.w) / 2) / vis.w, (w - (1 - vis.h) / 2) / vis.h];
+        };
+        const mw = 320, mh = Math.max(16, Math.round((320 * v.height) / v.width / 2) * 2);
+        const frames = Math.ceil(s.tlDur * LIGHT_MASK_RATE) + 2;
+        const file = this.tmpFile(`lights_${c.id}.mkv`);
+        await writeLightMask(fx.lights, toFrame, 1 / (k.h * vis.h), (n) => s.srcIn + (n / LIGHT_MASK_RATE) * c.speed, frames, mw, mh, file);
+        s.lightMask = { file, w: v.width, h: v.height };
+      } catch (err) {
+        if (this.controller.signal.aborted) throw err;
+        log.warn('Lichter-Maske nicht erstellt – Leuchtspuren für alle hellen Stellen', (err as Error).message);
+      }
+    }
+  }
+
   /** Bewegte Naht: Verschiebungskarten je Abschnitt vorab schreiben. */
   private async prepareSeams(segs: Segment[]): Promise<void> {
     for (const s of segs) {
@@ -500,7 +542,23 @@ export class ExportJob {
       // Bewegungsunschärfe, Leuchtspuren, Glühen (Vorschau: engine temporalFx)
       const mb = fx.motionBlur ?? 0, tr = fx.trails ?? 0, gl = fx.glow ?? 0;
       if (mb > 0.01) color.push(`tmix=frames=${Math.round(2 + 6 * mb)}`);
-      if (tr > 0.01) color.push('format=gbrp', `lagfun=decay=${fnum(0.86 + 0.12 * tr)}`);
+      if (tr > 0.01) {
+        const mode = fx.trailsMode ?? 'all';
+        const decay = `lagfun=decay=${fnum(0.86 + 0.12 * tr)}`;
+        if (mode === 'all') color.push('format=gbrp', decay);
+        else {
+          // Nur Lichter: Helligkeits-Schlüssel je Kanal (lights.ts lightKey), bei „markiert“ × Maskenfilm, dann über das Bild (lighten)
+          const id = `lt${++this.labelSeq}`;
+          const { T, S } = lightKeyParams(fx.trailsThreshold);
+          const key = `'val*clip((val-${T})*${fnum(S)},0,1)'`;
+          const lm = mode === 'marked' && !opts.forTransition ? seg.lightMask : undefined;
+          const keyed = `[${id}l]lutrgb=r=${key}:g=${key}:b=${key}`;
+          const trail = lm
+            ? `${keyed}[${id}k];movie='${escapeFilterPath(lm.file)}',scale=${lm.w}:${lm.h}:flags=bilinear,format=gbrp[${id}m];[${id}k][${id}m]blend=all_mode=multiply,${decay}[${id}t]`
+            : `${keyed},${decay}[${id}t]`;
+          color.push(`format=gbrp,split=2[${id}o][${id}l];${trail};[${id}o][${id}t]blend=all_mode=lighten`);
+        }
+      }
       if (gl > 0.01) {
         const id = `gl${++this.labelSeq}`;
         const bright = "'clip((val-170)*3,0,255)'";
