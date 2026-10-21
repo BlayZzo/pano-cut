@@ -22,6 +22,11 @@ export function fontFamilyName(key: string): string {
     case 'impact': return 'Impact';
     case 'serif': return process.platform === 'win32' ? 'Georgia' : 'Georgia';
     case 'mono': return process.platform === 'darwin' ? 'Menlo' : 'Courier New';
+    case 'black': return 'Arial Black';
+    case 'condensed': return process.platform === 'win32' ? 'Arial Narrow' : 'Arial Narrow';
+    case 'rounded': return process.platform === 'win32' ? 'Arial Rounded MT Bold' : 'Arial Rounded MT Bold';
+    case 'script': return process.platform === 'win32' ? 'Segoe Script' : 'Brush Script MT';
+    case 'trebuchet': return 'Trebuchet MS';
     default: return process.platform === 'darwin' ? 'Helvetica' : 'Arial';
   }
 }

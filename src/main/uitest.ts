@@ -208,7 +208,7 @@ export async function runUiTest(win: BrowserWindow): Promise<number> {
       await new Promise((r) => setTimeout(r, 1500)); T.engine.seek(at + 1.5);
       await new Promise((r) => setTimeout(r, 400));
       const c = document.querySelector('.preview-stage canvas'); const r = c.getBoundingClientRect();
-      const btn = [...document.querySelectorAll('button')].find((b) => b.textContent.includes('Original'));
+      const btn = [...document.querySelectorAll('button')].find((b) => b.textContent.includes('UHD'));
       return { readyMs, added, lrfItems, status: m && m.status, companion: m && m.companion, proxy: m && m.proxy, at, hasBtn: !!btn,
         rect: { x: r.x + r.width * 0.1, y: r.y + r.height * 0.1, width: r.width * 0.8, height: r.height * 0.8 } };
     })()`);
@@ -220,17 +220,17 @@ export async function runUiTest(win: BrowserWindow): Promise<number> {
     if (folder.added !== 2) failures.push(`Ordner-Import: ${folder.added} statt 2 Dateien (Video + Foto im Unterordner)`);
     if (folder.readyMs > 8000) failures.push(`Ordner-Import mit LRF zu langsam (${folder.readyMs} ms)`);
     if (shownLrf < 25) failures.push('Vorschau aus der LRF-Datei ist schwarz');
-    if (!folder.hasBtn) failures.push('Knopf „Original“ fehlt');
+    if (!folder.hasBtn) failures.push('Knopf „UHD“ fehlt');
     // „Original“ einschalten: Vorschau muss weiter ein Bild zeigen (aus dem Original oder, wenn nicht abspielbar, aus der Vorschau-Datei)
     const orig = await win.webContents.executeJavaScript(`(async () => {
       const T = window.__pcTest;
-      [...document.querySelectorAll('button')].find((b) => b.textContent.includes('Original')).click();
+      [...document.querySelectorAll('button')].find((b) => b.textContent.includes('UHD')).click();
       await new Promise((r) => setTimeout(r, 2500)); T.engine.seek(${folder.at} + 1.5);
       await new Promise((r) => setTimeout(r, 800));
       return { badge: !!document.querySelector('.preview-source-badge') };
     })()`);
     const shownOrig = await meanOf(win, folder.rect);
-    await win.webContents.executeJavaScript(`[...document.querySelectorAll('button')].find((b) => b.textContent.includes('Original')).click()`);
+    await win.webContents.executeJavaScript(`[...document.querySelectorAll('button')].find((b) => b.textContent.includes('UHD')).click()`);
     out('Original-Ansicht:', JSON.stringify(orig), 'sichtbar', shownOrig.toFixed(0));
     if (!orig.badge) failures.push('Original-Ansicht: Hinweis fehlt');
     if (shownOrig < 25) failures.push('Original-Ansicht ist schwarz');

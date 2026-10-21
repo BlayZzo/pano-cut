@@ -10,12 +10,12 @@ export interface TextDrawOptions {
 
 export function drawStyledText(ctx: CanvasRenderingContext2D, style: Omit<TitleStyle, 'text'>, text: string, W: number, H: number, opts: TextDrawOptions, second?: { text: string; color: string }): void {
   if (!text) return;
-  const anim = opts.animate ? titleAnimationAt(style, opts.localT, opts.duration) : { alpha: 1, dy: 0, chars: null };
+  const anim = opts.animate ? titleAnimationAt(style, opts.localT, opts.duration) : { alpha: 1, dx: 0, dy: 0, scale: 1, chars: null };
   if (anim.alpha <= 0) return;
   let shown = text;
   if (anim.chars !== null) shown = Array.from(text).slice(0, anim.chars).join('');
   if (!shown) return;
-  const px = Math.max(4, (style.size / 100) * H);
+  const px = Math.max(1, Math.max(4, (style.size / 100) * H) * anim.scale);
   const def = fontDef(style.font);
   const weight = style.bold || def.key === 'sans-bold' ? 'bold ' : '';
   ctx.save();
@@ -29,7 +29,7 @@ export function drawStyledText(ctx: CanvasRenderingContext2D, style: Omit<TitleS
   const heights = lines.map((l) => l.px * 1.2);
   const blockH = heights.reduce((a, b) => a + b, 0);
   const blockW = Math.max(...widths, 1);
-  const cx = (style.x / 100) * W;
+  const cx = (style.x / 100) * W + (anim.dx / 100) * W;
   const cy = (style.y / 100) * H + (anim.dy / 100) * H;
   let left: number;
   if (style.align === 'left') left = cx;
@@ -62,9 +62,19 @@ export function drawStyledText(ctx: CanvasRenderingContext2D, style: Omit<TitleS
       ctx.shadowOffsetX = 0;
       ctx.shadowOffsetY = 0;
     }
+    if (style.glow) {
+      // Leuchten: breiter, halb durchsichtiger Rand in der Glüh-Farbe (Export: drawtext borderw), weich
+      ctx.save();
+      ctx.shadowColor = style.glow; ctx.shadowBlur = line.px * 0.35; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+      ctx.lineWidth = Math.max(1, line.px * 0.12) * 2;
+      ctx.strokeStyle = hexWithAlpha(style.glow, 0.55);
+      ctx.lineJoin = 'round';
+      ctx.strokeText(line.text, x, y);
+      ctx.restore();
+    }
     if (style.outline) {
       ctx.lineWidth = Math.max(1, line.px * 0.08) * 2;
-      ctx.strokeStyle = '#000';
+      ctx.strokeStyle = style.outlineColor || '#000';
       ctx.lineJoin = 'round';
       ctx.strokeText(line.text, x, y);
     }

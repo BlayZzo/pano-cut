@@ -1,6 +1,6 @@
 import React from 'react';
-import type { Clip, TitleAnimation, TitleStyle } from '@shared/types';
-import { FONTS, TITLE_TEMPLATES, defaultTitle } from '@shared/pano';
+import type { Clip, TitleAnimation, TitleStyle, TitleAnimationOut } from '@shared/types';
+import { FONTS, TITLE_TEMPLATES, defaultTitle, TITLE_ANIMATIONS, TITLE_ANIMATIONS_OUT } from '@shared/pano';
 import { beginTransaction, endTransaction, useProject } from '../store/project';
 import { t } from '../i18n/de';
 import { Section, SelectField, Slider, Toggle } from './InspectorBits';
@@ -33,9 +33,26 @@ export function TextStyleFields({ style, onChange, withAnimation }: { style: Omi
         <Toggle label={t.title.shadow} checked={style.shadow} onChange={(v) => onChange({ shadow: v })} />
         <Toggle label={t.title.outline} checked={style.outline} onChange={(v) => onChange({ outline: v })} />
       </div>
+      {style.outline && (
+        <div className="field">
+          <label>{t.title.outlineColor}</label>
+          <input type="color" value={style.outlineColor || '#000000'} onChange={(e) => onChange({ outlineColor: e.target.value })} onFocus={beginTransaction} onBlur={endTransaction} />
+        </div>
+      )}
+      <div className="field">
+        <label>{t.title.glow}</label>
+        <div className="field-row">
+          <input type="checkbox" checked={!!style.glow} onChange={(e) => onChange({ glow: e.target.checked ? '#22d3ee' : '' })} />
+          <input type="color" value={style.glow || '#22d3ee'} disabled={!style.glow} onChange={(e) => onChange({ glow: e.target.value })} onFocus={beginTransaction} onBlur={endTransaction} />
+        </div>
+      </div>
       {withAnimation && (
-        <SelectField label={t.title.animation} value={style.animation} onChange={(v) => onChange({ animation: v as TitleAnimation })}
-          options={[{ value: 'none', label: t.title.animNone }, { value: 'fade', label: t.title.animFade }, { value: 'slideup', label: t.title.animSlide }, { value: 'typewriter', label: t.title.animTypewriter }]} />
+        <>
+          <SelectField label={t.title.animation} value={style.animation} onChange={(v) => onChange({ animation: v as TitleAnimation })}
+            options={TITLE_ANIMATIONS.map((a) => ({ value: a.id, label: a.name }))} />
+          <SelectField label={t.title.animationOut} value={style.animationOut ?? 'auto'} onChange={(v) => onChange({ animationOut: v as TitleAnimationOut })}
+            options={TITLE_ANIMATIONS_OUT.map((a) => ({ value: a.id, label: a.name }))} />
+        </>
       )}
     </>
   );
@@ -54,7 +71,7 @@ export function InspectorTitle({ clip }: { clip: Clip }): React.ReactElement {
       </div>
       <div className="field">
         <label>{t.title.template}</label>
-        <select value="" onChange={(e) => { const tpl = TITLE_TEMPLATES.find((x) => x.id === e.target.value); if (tpl) patch({ ...tpl.style, text: title.text }); }} style={{ gridColumn: '2 / span 2' }}>
+        <select value="" onChange={(e) => { const tpl = TITLE_TEMPLATES.find((x) => x.id === e.target.value); if (tpl) patch({ glow: '', outlineColor: undefined, animationOut: 'auto', ...tpl.style, text: title.text }); }} style={{ gridColumn: '2 / span 2' }}>
           <option value="">…</option>
           {TITLE_TEMPLATES.map((tpl) => <option key={tpl.id} value={tpl.id}>{tpl.name}</option>)}
         </select>

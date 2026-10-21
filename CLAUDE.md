@@ -133,4 +133,15 @@ eval=frame mit `in`, danach scale W:H; Vorschau = crop an colorgl). `markCameraH
 100 Hz), `shared/stabilize.ts` (`targetTrack` follow/lock/horizon, `stabMatrixAt`; Vorschau = `preRot` in panogl, Export `stabPanoChain`:
 Gier per crop auf hstack, Nick per v360-Befehl, Rollen per rotate auf vergrößerter Ansicht). Nadir `clip.nadir` ↔ panogl `uNadir` / `stitch.ts nadirChain`
 (Ringzeile hochskaliert + maskedmerge). WICHTIG: v360 immer mit `reset_rot=1`, sonst addieren sich sendcmd-Drehungen.
+0.9.4: Shader-Fix (stitchAt/equiAt gehören in FRAG – lag in VERT, Vorschau leer; UI-Test prüft jetzt `panoGL()`).
+0.10.0: Bewegte Naht `shared/seamFlow.ts` (Versatz quer zur Naht je 64 Nahtstellen, ZNCC + DP, `shiftedDir`), Messung `main/seamFlow.ts`
+(LRV, 5/s, seam_<stitchKey>.bin, `MediaItem.seam`), Vorschau Textur uDisp (LUMINANCE 64×1, REPEAT), Export `displace` mit FFV1-Karten über
+`movie=` (yuv420p: Y = Versatz, U/V = halber Versatz). Linsen-Grenzen weich (`COVER_FADE`, frontWeight/geq/Shader gleich), geq-Maske in 1/4.
+`settings.autoStitch` (Ausrichten beim Import). Beat: `strength`/`hits` (`pickHits`), Modi hits/markers, `bestOffsets` (activityCurve),
+`project.markers` (Taste B, Timeline `MarkerFlags`, Einrasten). Bewegungspfad `PathOverlay.tsx` + `motion.curve` (Catmull-Rom auch in
+motionExpr). Ebenen `layers.ts`/`LayersPanel.tsx`, `addVideoTrackBelow`. Verschiebbare Fenster `utils/floatingPanels.ts` (alle `.ai-panel`).
+Carporn `renderer/tools/carporn.ts`, Kino-Balken `settings.letterbox` (Engine fillRect ↔ drawbox). Herabfallen: Schräglage/Federung,
+Kontaktschatten (PNG, multiply). Leuchtspuren `fx.trailsMode` all/lights/marked (`shared/lights.ts` lightKey, `trackLights`; Export lutrgb +
+blend lighten, markiert × Maskenfilm `main/lightMask.ts` in Bildkoordinaten, Größe per 1-Bild-Messung). Titel: `titleAnimationAt` ↔
+`titleAnimExpr` (drawtext fontsize/x/y/alpha-Ausdrücke), `animationOut`, `glow`, `outlineColor`, neue Schriften. UHD = Original + `previewQuality: 'uhd'`.
 Ansicht/Layout: `ViewSettings` (`settings.view`, `useView`/`updateView`), `Splitter.tsx`, `Popover.tsx`.

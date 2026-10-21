@@ -145,7 +145,8 @@ export interface Transition {
   intensity?: number; // Stärke 0..2 (dynamische Übergänge), Standard 1
 }
 
-export type TitleAnimation = 'none' | 'fade' | 'slideup' | 'typewriter';
+export type TitleAnimation = 'none' | 'fade' | 'slideup' | 'typewriter' | 'slidedown' | 'slideleft' | 'slideright' | 'pop' | 'zoom' | 'drop';
+export type TitleAnimationOut = 'auto' | 'none' | 'fade' | 'slideup' | 'slidedown' | 'slideleft' | 'slideright' | 'shrink' | 'zoom';
 
 export interface TitleStyle {
   text: string;
@@ -161,6 +162,9 @@ export interface TitleStyle {
   shadow: boolean;
   outline: boolean;
   animation: TitleAnimation;
+  animationOut?: TitleAnimationOut;  // Ausblenden (Standard: passend zum Einblenden)
+  outlineColor?: string;             // Randfarbe (Standard: Schwarz)
+  glow?: string;                     // Leuchten in dieser Farbe ('' = aus)
 }
 
 export interface Stabilization {
@@ -626,7 +630,7 @@ export interface ViewSettings {
   leftWidth: number;          // Mediathek (0 = ausgeblendet)
   rightWidth: number;         // Inspektor (0 = ausgeblendet)
   timelineHeight: number;
-  previewQuality: 'auto' | 'full' | 'half' | 'quarter';
+  previewQuality: 'auto' | 'full' | 'half' | 'quarter' | 'uhd';
   previewGuides: 'none' | 'thirds' | 'safe' | 'both';
   selectionFrame: 'always' | 'hover' | 'never';
   previewBackground: 'black' | 'checker';

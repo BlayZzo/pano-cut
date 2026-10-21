@@ -9,7 +9,7 @@ import type { Attachment, Clip, ExportOptions, ExportProgress, MediaItem, Projec
 import { DEFAULT_TRANSLATION_COLOR, charsPerLine, subtitleChangeTimes, subtitleViewAt } from '@shared/subtitles';
 import { dynTransitionAt, isDynamicTransition, type DynamicTransition, type DynLayer } from '@shared/transitions';
 import { clipDuration, clipEnd, letterboxBar, projectDuration, sourceTimeAt, videoTracksBottomUp } from '@shared/timeline';
-import { fontDef, panoMatrix, panoViewAt, stereographicVfov, titleAnimationAt, verticalFov } from '@shared/pano';
+import { fontDef, panoMatrix, panoViewAt, stereographicVfov, titleAnimationAt, titleAnimExpr, verticalFov } from '@shared/pano';
 import { availableEncoders, availableFilters, FfmpegError, probeFile, runFfmpeg } from './ffmpeg';
 import { reverseVideo } from './reverse';
 import { nadirChain, needsStitching, stitchChain } from './stitch';
@@ -915,10 +915,14 @@ export class ExportJob {
     const dur = end - start;
     const xBase = pos ? `(${pos.x})` : `w*${fnum(style.x / 100)}`;
     const xExpr = style.align === 'left' ? xBase : style.align === 'right' ? `${xBase}-text_w` : `${xBase}-text_w/2`;
-    const common: string[] = [fontOpt, `fontsize=${fontSize}`, `fontcolor=${ffColor(style.color, 1)}`, `x=${xExpr}`, 'line_spacing=4'];
+    // Animation (gleiche Formeln wie die Vorschau: pano.titleAnimExpr / titleAnimationAt)
+    const anim = animate && style.animation !== 'typewriter' ? titleAnimExpr(style, end - start, `(t-${fnum(start)})`) : { alpha: '1', dx: '0', dy: '0', scale: '1' };
+    const sizeExpr = anim.scale === '1' ? String(fontSize) : `'max(1,${fontSize}*(${anim.scale}))'`;
+    const xAnim = anim.dx === '0' ? xExpr : `${xExpr}+w*(${anim.dx})/100`;
+    const common: string[] = [fontOpt, `fontsize=${sizeExpr}`, `fontcolor=${ffColor(style.color, 1)}`, `x='${xAnim}'`, 'line_spacing=4'];
     if (style.background) common.push('box=1', `boxcolor=${ffColor(style.background, style.backgroundOpacity)}`, `boxborderw=${Math.round(fontSize * 0.35)}`);
     if (style.shadow) common.push('shadowcolor=0x000000@0.6', `shadowx=${Math.max(1, Math.round(fontSize * 0.04))}`, `shadowy=${Math.max(1, Math.round(fontSize * 0.04))}`);
-    if (style.outline) common.push(`borderw=${Math.max(1, Math.round(fontSize * 0.08))}`, 'bordercolor=0x000000@1');
+    if (style.outline) common.push(`borderw=${Math.max(1, Math.round(fontSize * 0.08))}`, `bordercolor=${ffColor(style.outlineColor || '#000000', 1)}`);
     const inD = Math.min(0.6, dur / 3), outD = Math.min(0.6, dur / 3);
     const relT = `(t-${fnum(start)})`;
     const alphaExpr = `if(lt(${relT},${fnum(inD)}),${relT}/${fnum(inD)},if(gt(${relT},${fnum(dur - outD)}),(${fnum(end)}-t)/${fnum(outD)},1))`;
@@ -941,15 +945,15 @@ export class ExportJob {
       }
       return filters;
     }
-    const parts = [...common, textFile(text), `enable='between(t,${fnum(start)},${fnum(end)})'`];
-    if (animate && (style.animation === 'fade' || style.animation === 'slideup')) {
-      parts.push(`alpha='${alphaExpr}'`);
-      if (style.animation === 'slideup') parts.push(`y=${yBase}+h*0.06*max(0\\,1-${relT}/${fnum(inD)})`);
-      else parts.push(`y=${yBase}`);
-    } else {
-      parts.push(`y=${yBase}`);
+    const tf = textFile(text);
+    const yAnim = anim.dy === '0' ? yBase : `${yBase}+h*(${anim.dy})/100`;
+    const timing = [`y='${yAnim}'`, `enable='between(t,${fnum(start)},${fnum(end)})'`, ...(anim.alpha === '1' ? [] : [`alpha='${anim.alpha}'`])];
+    if (style.glow) {
+      // Leuchten: breiter halbtransparenter Rand in der Glüh-Farbe unter dem Text
+      const g = common.filter((c) => !c.startsWith('borderw=') && !c.startsWith('bordercolor=') && !c.startsWith('box') && !c.startsWith('shadow'));
+      filters.push(`drawtext=${[...g, tf, `borderw=${Math.max(2, Math.round(fontSize * 0.12))}`, `bordercolor=${ffColor(style.glow, 0.55)}`, ...timing].join(':')}`);
     }
-    filters.push(`drawtext=${parts.join(':')}`);
+    filters.push(`drawtext=${[...common, tf, ...timing].join(':')}`);
     return filters;
   }
 
@@ -993,6 +997,13 @@ export class ExportJob {
       if (ev.from && ev.to) tag = `{\\move(${Math.round(ev.from.x)},${Math.round(ev.from.y)},${Math.round(ev.to.x)},${Math.round(ev.to.y)})${ev.animation === 'fade' ? `\\fad(${inMs},${outMs})` : ''}}`;
       else if (ev.animation === 'fade') tag = `{\\pos(${x},${y})\\fad(${inMs},${outMs})}`;
       else if (ev.animation === 'slideup') tag = `{\\move(${x},${Math.round(y + H * 0.06)},${x},${y},0,${inMs})\\fad(${inMs},${outMs})}`;
+      // Näherungen der weiteren Animationen (ASS nur unter Linux ohne drawtext)
+      else if (ev.animation === 'slidedown') tag = `{\\move(${x},${Math.round(y - H * 0.08)},${x},${y},0,${inMs})\\fad(${inMs},${outMs})}`;
+      else if (ev.animation === 'slideleft') tag = `{\\move(${Math.round(x + W * 0.12)},${y},${x},${y},0,${inMs})\\fad(${inMs},${outMs})}`;
+      else if (ev.animation === 'slideright') tag = `{\\move(${Math.round(x - W * 0.12)},${y},${x},${y},0,${inMs})\\fad(${inMs},${outMs})}`;
+      else if (ev.animation === 'drop') tag = `{\\move(${x},${Math.round(y - H * 0.25)},${x},${y},0,${inMs})\\fad(${Math.round(inMs / 3)},${outMs})}`;
+      else if (ev.animation === 'pop') tag = `{\\pos(${x},${y})\\fscx10\\fscy10\\t(0,${inMs},\\fscx100\\fscy100)\\fad(${Math.round(inMs / 3)},${outMs})}`;
+      else if (ev.animation === 'zoom') tag = `{\\pos(${x},${y})\\fscx250\\fscy250\\t(0,${inMs},\\fscx100\\fscy100)\\fad(${inMs},${outMs})}`;
       if (ev.animation === 'typewriter') {
         const chars = Array.from(ev.text);
         const n = Math.min(chars.length, 80);

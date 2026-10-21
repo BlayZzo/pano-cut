@@ -1,6 +1,6 @@
 // 360°-Mathematik, Übergangs- und Titel-Definitionen – gemeinsam für Vorschau (WebGL/Canvas) und Export (FFmpeg).
 import { ease, panoEase } from './reframe';
-import type { PanoKeyframe, PanoMode, PanoSettings, StitchSettings, TitleStyle, Transition, TransitionType } from './types';
+import type { TitleAnimation, TitleAnimationOut, PanoKeyframe, PanoMode, PanoSettings, StitchSettings, TitleStyle, Transition, TransitionType } from './types';
 
 export interface PanoView { yaw: number; pitch: number; roll: number; fov: number }
 
@@ -204,6 +204,11 @@ export const FONTS: FontDef[] = [
   { key: 'sans-bold', name: 'Fett (Helvetica/Arial Bold)', css: 'Helvetica, Arial, sans-serif', files: { darwin: ['/System/Library/Fonts/Helvetica.ttc', '/Library/Fonts/Arial Bold.ttf'], win32: ['C:/Windows/Fonts/arialbd.ttf'], linux: ['/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', '/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf'] } },
   { key: 'impact', name: 'Impact (Meme-Stil)', css: 'Impact, "Arial Black", sans-serif', files: { darwin: ['/System/Library/Fonts/Supplemental/Impact.ttf', '/Library/Fonts/Impact.ttf'], win32: ['C:/Windows/Fonts/impact.ttf'], linux: ['/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'] } },
   { key: 'serif', name: 'Serif (Times/Georgia)', css: 'Georgia, "Times New Roman", serif', files: { darwin: ['/System/Library/Fonts/Supplemental/Georgia.ttf', '/Library/Fonts/Georgia.ttf', '/System/Library/Fonts/Times.ttc'], win32: ['C:/Windows/Fonts/georgia.ttf', 'C:/Windows/Fonts/times.ttf'], linux: ['/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf', '/usr/share/fonts/truetype/liberation/LiberationSerif-Regular.ttf'] } },
+  { key: 'black', name: 'Extra fett (Arial Black)', css: '"Arial Black", "Arial Bold", sans-serif', files: { darwin: ['/System/Library/Fonts/Supplemental/Arial Black.ttf', '/Library/Fonts/Arial Black.ttf'], win32: ['C:/Windows/Fonts/ariblk.ttf', 'C:/Windows/Fonts/arialbd.ttf'], linux: ['/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'] } },
+  { key: 'condensed', name: 'Schmal (Arial Narrow)', css: '"Arial Narrow", "Bahnschrift Condensed", sans-serif', files: { darwin: ['/System/Library/Fonts/Supplemental/Arial Narrow Bold.ttf', '/System/Library/Fonts/Supplemental/Arial Narrow.ttf'], win32: ['C:/Windows/Fonts/ARIALNB.TTF', 'C:/Windows/Fonts/bahnschrift.ttf', 'C:/Windows/Fonts/arialbd.ttf'], linux: ['/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf'] } },
+  { key: 'rounded', name: 'Rund (Arial Rounded)', css: '"Arial Rounded MT Bold", "Segoe UI", sans-serif', files: { darwin: ['/System/Library/Fonts/Supplemental/Arial Rounded Bold.ttf', '/Library/Fonts/Arial Rounded Bold.ttf'], win32: ['C:/Windows/Fonts/ARLRDBD.TTF', 'C:/Windows/Fonts/segoeuib.ttf'], linux: ['/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'] } },
+  { key: 'script', name: 'Handschrift', css: '"Brush Script MT", "Segoe Script", cursive', files: { darwin: ['/System/Library/Fonts/Supplemental/Brush Script.ttf', '/Library/Fonts/Brush Script.ttf'], win32: ['C:/Windows/Fonts/segoesc.ttf', 'C:/Windows/Fonts/BRUSHSCI.TTF'], linux: ['/usr/share/fonts/truetype/dejavu/DejaVuSerif-Italic.ttf'] } },
+  { key: 'trebuchet', name: 'Modern (Trebuchet)', css: '"Trebuchet MS", sans-serif', files: { darwin: ['/System/Library/Fonts/Supplemental/Trebuchet MS Bold.ttf', '/Library/Fonts/Trebuchet MS Bold.ttf'], win32: ['C:/Windows/Fonts/trebucbd.ttf'], linux: ['/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'] } },
   { key: 'mono', name: 'Schreibmaschine (Courier/Menlo)', css: 'Menlo, "Courier New", monospace', files: { darwin: ['/System/Library/Fonts/Menlo.ttc', '/System/Library/Fonts/Supplemental/Courier New.ttf'], win32: ['C:/Windows/Fonts/cour.ttf'], linux: ['/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf'] } },
 ];
 
@@ -234,23 +239,115 @@ export const TITLE_TEMPLATES: TitleTemplate[] = [
   { id: 'meme', name: 'Meme', style: { text: 'TEXT OBEN', font: 'impact', size: 10, y: 12, color: '#ffffff', outline: true, shadow: false, animation: 'none' } },
   { id: 'social', name: 'Social-Media-Untertitel', style: { text: 'So sieht es aus', font: 'sans-bold', size: 6, y: 80, color: '#ffe066', background: '#000000', backgroundOpacity: 0.55, animation: 'none' } },
   { id: 'typewriter', name: 'Schreibmaschine', style: { text: 'Kapitel 1', font: 'mono', size: 7, animation: 'typewriter', background: '', shadow: true } },
+  { id: 'neon', name: '💡 Neon', style: { text: 'NEON', font: 'rounded', size: 11, color: '#e0fff4', glow: '#22d3ee', shadow: false, outline: false, background: '', animation: 'pop', animationOut: 'shrink' } },
+  { id: 'racing', name: '🏁 Racing', style: { text: 'FULL SPEED', font: 'black', size: 12, color: '#facc15', outline: true, outlineColor: '#000000', shadow: true, background: '', animation: 'slideright', animationOut: 'slideleft' } },
+  { id: 'cinema', name: '🎞 Kino', style: { text: 'D I E   R E I S E', font: 'serif', size: 6, color: '#f5f5f4', shadow: false, outline: false, background: '', animation: 'fade', animationOut: 'fade' } },
+  { id: 'impact', name: '💥 Wucht', style: { text: 'BOOM', font: 'impact', size: 18, color: '#ffffff', outline: true, outlineColor: '#dc2626', shadow: true, background: '', animation: 'zoom', animationOut: 'zoom' } },
+  { id: 'sport', name: '⚡ Sport', style: { text: 'TOP SPEED 280', font: 'condensed', size: 9, color: '#ffffff', background: '#dc2626', backgroundOpacity: 0.9, shadow: false, animation: 'slideleft', animationOut: 'slideright' } },
+  { id: 'script', name: '✍️ Handschrift', style: { text: 'Sommer 2026', font: 'script', size: 10, color: '#ffffff', shadow: true, background: '', animation: 'fade' } },
+  { id: 'drop', name: '🪂 Fallender Titel', style: { text: 'LANDUNG', font: 'black', size: 12, color: '#ffffff', outline: true, shadow: true, background: '', animation: 'drop', animationOut: 'slidedown' } },
 ];
 
-/** Deckkraft/Versatz einer Titel-Animation zu einer Clip-Zeit (für Vorschau und Export identisch). */
-export function titleAnimationAt(style: Pick<TitleStyle, 'animation'>, t: number, duration: number): { alpha: number; dy: number; chars: number | null } {
-  const inD = Math.min(0.6, duration / 3);
-  const outD = Math.min(0.6, duration / 3);
-  let alpha = 1, dy = 0;
-  let chars: number | null = null;
-  if (style.animation === 'fade' || style.animation === 'slideup') {
-    if (t < inD) alpha = Math.max(0, t / inD);
-    else if (t > duration - outD) alpha = Math.max(0, (duration - t) / outD);
-    if (style.animation === 'slideup' && t < inD) dy = (1 - t / inD) * 6; // Prozent der Höhe
-  } else if (style.animation === 'typewriter') {
-    chars = Math.floor(t / 0.06);
-    if (t > duration - outD) alpha = Math.max(0, (duration - t) / outD);
-  }
-  return { alpha, dy, chars };
+/** Zustand einer Titel-Animation: Deckkraft, Versatz (% der Breite/Höhe), Größe, sichtbare Zeichen. */
+export interface TitleAnimState { alpha: number; dx: number; dy: number; scale: number; chars: number | null }
+
+/** Ein- und Ausblend-Dauer (Sekunden). */
+export function titleAnimDurations(duration: number): { inD: number; outD: number } {
+  return { inD: Math.min(0.6, duration / 3), outD: Math.min(0.6, duration / 3) };
 }
+
+const easeOut = (u: number) => 1 - Math.pow(1 - u, 3);
+/** Überschwingen (größer als Ziel, dann zurück). */
+const backOut = (u: number) => 1 + 2.70158 * Math.pow(u - 1, 3) + 1.70158 * Math.pow(u - 1, 2);
+
+/** Ausblenden, wenn nichts gewählt ist: wie bisher Ausblenden der Deckkraft (außer bei „keine“). */
+export function titleOutOf(style: Pick<TitleStyle, 'animation' | 'animationOut'>): Exclude<TitleAnimationOut, 'auto'> {
+  const o = style.animationOut ?? 'auto';
+  if (o !== 'auto') return o;
+  return style.animation === 'none' ? 'none' : 'fade';
+}
+
+/** Deckkraft/Versatz/Größe einer Titel-Animation zu einer Clip-Zeit (Vorschau). Export: titleAnimExpr (gleiche Formeln). */
+export function titleAnimationAt(style: Pick<TitleStyle, 'animation' | 'animationOut'>, t: number, duration: number): TitleAnimState {
+  const { inD, outD } = titleAnimDurations(duration);
+  const s: TitleAnimState = { alpha: 1, dx: 0, dy: 0, scale: 1, chars: null };
+  const u = Math.max(0, Math.min(1, t / inD));
+  const e = easeOut(u);
+  switch (style.animation) {
+    case 'fade': s.alpha = u; break;
+    case 'slideup': s.alpha = u; s.dy = (1 - u) * 6; break;
+    case 'slidedown': s.alpha = u; s.dy = -(1 - e) * 8; break;
+    case 'slideleft': s.alpha = u; s.dx = (1 - e) * 12; break;
+    case 'slideright': s.alpha = u; s.dx = -(1 - e) * 12; break;
+    case 'pop': s.alpha = Math.min(1, u * 3); s.scale = Math.max(0.01, backOut(u)); break;
+    case 'zoom': s.alpha = u; s.scale = 1 + (1 - e) * 1.5; break;
+    case 'drop': s.alpha = Math.min(1, u * 3); s.dy = -25 * (1 - backOut(u)); break;
+    case 'typewriter': s.chars = Math.floor(t / 0.06); break;
+    default: break;
+  }
+  const out = titleOutOf(style);
+  if (out !== 'none' && t > duration - outD) {
+    const v = Math.max(0, Math.min(1, (duration - t) / outD));
+    const eo = easeOut(v);
+    s.alpha *= v;
+    if (out === 'slideup') s.dy += -(1 - eo) * 8;
+    else if (out === 'slidedown') s.dy += (1 - eo) * 8;
+    else if (out === 'slideleft') s.dx += -(1 - eo) * 12;
+    else if (out === 'slideright') s.dx += (1 - eo) * 12;
+    else if (out === 'shrink') s.scale *= Math.max(0.01, eo);
+    else if (out === 'zoom') s.scale *= 1 + (1 - eo) * 1.5;
+  }
+  return s;
+}
+
+/**
+ * Dieselbe Animation als FFmpeg-Ausdrücke (drawtext x/y/alpha/fontsize). `T` = Zeit seit Clip-Beginn (Ausdruck).
+ * Ergebnis: Ausdrücke für alpha, dx (%), dy (%), scale.
+ */
+export function titleAnimExpr(style: Pick<TitleStyle, 'animation' | 'animationOut'>, duration: number, T: string): { alpha: string; dx: string; dy: string; scale: string } {
+  const { inD, outD } = titleAnimDurations(duration);
+  const n = (x: number) => (Math.round(x * 1e5) / 1e5).toString();
+  const u = `clip(${T}/${n(inD)},0,1)`;
+  const e = `(1-pow(1-${u},3))`;
+  const back = `(1+2.70158*pow(${u}-1,3)+1.70158*pow(${u}-1,2))`;
+  let alpha = '1', dx = '0', dy = '0', scale = '1';
+  switch (style.animation) {
+    case 'fade': alpha = u; break;
+    case 'slideup': alpha = u; dy = `(1-${u})*6`; break;
+    case 'slidedown': alpha = u; dy = `-(1-${e})*8`; break;
+    case 'slideleft': alpha = u; dx = `(1-${e})*12`; break;
+    case 'slideright': alpha = u; dx = `-(1-${e})*12`; break;
+    case 'pop': alpha = `min(1,${u}*3)`; scale = `max(0.01,${back})`; break;
+    case 'zoom': alpha = u; scale = `(1+(1-${e})*1.5)`; break;
+    case 'drop': alpha = `min(1,${u}*3)`; dy = `(-25*(1-${back}))`; break;
+    default: break;
+  }
+  const out = titleOutOf(style);
+  if (out !== 'none') {
+    const v = `clip((${n(duration)}-${T})/${n(outD)},0,1)`;
+    const eo = `(1-pow(1-${v},3))`;
+    // v ist vor dem Ausblenden 1 → alle Terme neutral
+    alpha = `(${alpha})*${v}`;
+    if (out === 'slideup') dy = `(${dy})-(1-${eo})*8`;
+    else if (out === 'slidedown') dy = `(${dy})+(1-${eo})*8`;
+    else if (out === 'slideleft') dx = `(${dx})-(1-${eo})*12`;
+    else if (out === 'slideright') dx = `(${dx})+(1-${eo})*12`;
+    else if (out === 'shrink') scale = `(${scale})*max(0.01,${eo})`;
+    else if (out === 'zoom') scale = `(${scale})*(1+(1-${eo})*1.5)`;
+  }
+  return { alpha, dx, dy, scale };
+}
+
+export const TITLE_ANIMATIONS: Array<{ id: TitleAnimation; name: string }> = [
+  { id: 'none', name: 'Keine' }, { id: 'fade', name: '🌫️ Einblenden' }, { id: 'slideup', name: '⬆️ Von unten' },
+  { id: 'slidedown', name: '⬇️ Von oben' }, { id: 'slideleft', name: '⬅️ Von rechts' }, { id: 'slideright', name: '➡️ Von links' },
+  { id: 'pop', name: '💥 Aufploppen' }, { id: 'zoom', name: '🔍 Heranzoomen' }, { id: 'drop', name: '🪂 Herabfallen' },
+  { id: 'typewriter', name: '⌨️ Schreibmaschine' },
+];
+export const TITLE_ANIMATIONS_OUT: Array<{ id: TitleAnimationOut; name: string }> = [
+  { id: 'auto', name: 'Passend (Ausblenden)' }, { id: 'none', name: 'Keine' }, { id: 'fade', name: '🌫️ Ausblenden' },
+  { id: 'slideup', name: '⬆️ Nach oben' }, { id: 'slidedown', name: '⬇️ Nach unten' }, { id: 'slideleft', name: '⬅️ Nach links' },
+  { id: 'slideright', name: '➡️ Nach rechts' }, { id: 'shrink', name: '🫧 Schrumpfen' }, { id: 'zoom', name: '🔍 Wegzoomen' },
+];
 
 export const TITLE_IN_DURATION = 0.6;

@@ -32,7 +32,14 @@ export function Preview(): React.ReactElement {
   const playing = useUi((s) => s.playing);
   const [original, setOriginal] = useState(engine.showOriginal);
   useEffect(() => { engine.onNotice = (name) => useUi.getState().toast(fmt(t.preview.originalFailed, { n: name }), 'error'); }, []);
-  const toggleOriginal = () => { const on = !original; setOriginal(on); engine.setShowOriginal(on); };
+  // UHD-Modus: Original statt Vorschau-Datei UND volle Auflösung der Vorschau
+  const toggleOriginal = () => {
+    const on = !original;
+    setOriginal(on);
+    engine.setShowOriginal(on);
+    updateView({ previewQuality: on ? 'uhd' : 'auto' });
+    if (on) useUi.getState().toast(t.preview.uhdOn, 'info');
+  };
   const loop = useUi((s) => s.loop);
   const setLoop = useUi((s) => s.setLoop);
   const selection = useUi((s) => s.selection);
@@ -173,7 +180,9 @@ export function Preview(): React.ReactElement {
       const qk = q === 'half' ? 0.5 : q === 'quarter' ? 0.25 : 1;
       const shown = (q === 'full' ? 1920 : cssW ? cssW * dpr : 1920) * qk;
       const longSide = Math.max(settings.width, settings.height);
-      const targetLong = Math.max(q === 'quarter' ? 320 : q === 'half' ? 480 : 640, Math.min(1920, Math.ceil((shown * (longSide / settings.width)) / 160) * 160));
+      // UHD: volle Projekt-Auflösung (bis 4K), unabhängig von der Fenstergröße
+      const targetLong = q === 'uhd' ? Math.min(3840, longSide)
+        : Math.max(q === 'quarter' ? 320 : q === 'half' ? 480 : 640, Math.min(1920, Math.ceil((shown * (longSide / settings.width)) / 160) * 160));
       // Hilfslinien genau über das Bild legen
       const g = guidesRef.current;
       if (g && rect && cssW) { const cssH = cssW * settings.height / settings.width; g.style.left = `${(rect.width - cssW) / 2}px`; g.style.top = `${(rect.height - cssH) / 2}px`; g.style.width = `${cssW}px`; g.style.height = `${cssH}px`; }
@@ -541,12 +550,12 @@ export function Preview(): React.ReactElement {
           engine.pause(); useUi.getState().setPlaying(false); setFollowOn(!followOn);
         }}>🎯 {t.follow.button}</button>
         <button className="btn sm" title={t.tools.title} onClick={() => useUi.getState().openTools()} style={{ fontWeight: 700 }}>🧰 {t.tools.button}</button>
-        <button className={`btn sm${original ? ' active' : ''}`} title={t.preview.originalHint} onClick={toggleOriginal}>🔍 {t.preview.original}</button>
+        <button className={`btn sm${original ? ' active' : ''}`} title={t.preview.originalHint} onClick={toggleOriginal} style={{ fontWeight: 700 }}>🔍 {t.preview.original}</button>
         <Popover label={`⚙ ${t.view.button}`} title={t.view.previewTitle} align="right" up>
           <div className="form-grid compact">
             <label>{t.view.quality}</label>
             <select value={view.previewQuality} onChange={(e) => updateView({ previewQuality: e.target.value as 'auto' })}>
-              <option value="auto">{t.view.qualityAuto}</option><option value="full">{t.view.qualityFull}</option>
+              <option value="auto">{t.view.qualityAuto}</option><option value="full">{t.view.qualityFull}</option><option value="uhd">{t.view.qualityUhd}</option>
               <option value="half">{t.view.qualityHalf}</option><option value="quarter">{t.view.qualityQuarter}</option>
             </select>
             <label>{t.view.guides}</label>

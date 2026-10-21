@@ -1,3 +1,36 @@
+## PanoCut 0.10.0 – Naht wie Insta360 Studio, Beat-Marker, Bewegungspfade, Ebenen, Carporn, Lichtspuren
+
+**Installieren**
+- Mac mit Apple-Chip (M1–M4): `PanoCut-0.10.0-mac-arm64.dmg`
+- Mac mit Intel: `PanoCut-0.10.0-mac-x64.dmg`
+- Windows 10/11: `PanoCut-0.10.0-win-x64.exe`
+
+**🌐 Stitching**
+- 360°-Rohvideos werden beim Import automatisch nahtlos ausgerichtet (Linsen-Daten der Kamera + Bildvergleich, wenige Sekunden). Abschaltbar in den Einstellungen.
+- **✨ Bewegte Naht** (Inspektor → 360° → Zusammensetzen): Nahe Dinge an der Naht (Hand, Auto, Personen) werden Bild für Bild passend zusammengeschoben – wie das dynamische Stitching von Insta360 Studio. In Vorschau und Export.
+- Schnellerer Export-Start beim Zusammensetzen.
+
+**🎵 Beat-Schnitt**
+- Neu: „💥 Auf die Höhepunkte“ (Drops, starke Schläge) und „📍 An meinen Markern“.
+- „Beste Stellen der Videos nehmen“: PanoCut sucht in jedem Clip die bewegtesten Momente.
+- **Beat-Marker**: Taste **B** setzt einen Marker (auch beim Abspielen im Takt mittippen), Höhepunkte/Takte lassen sich als Marker übernehmen. Clips rasten beim Ziehen darauf ein. Marker ziehen = verschieben, Doppelklick = löschen.
+
+**🛤 Bewegungspfad** (Inspektor → Bewegung): In der Vorschau Start-, Zwischen- und Endpunkte setzen und verschieben, als weiche Kurve, mit gleichmäßigem Tempo.
+
+**🧅 Ebenen-Fenster** (Knopf unter der Vorschau): alles, was im Bild ist, vorne → hinten; umsortieren per ▲▼ oder Ziehen, freigestelltes Objekt als eigene Ebene nach vorne (z. B. Text hinter das Auto).
+
+**🏎 Carporn** (🧰 Werkzeuge → Schnitt): fertiger Zusammenschnitt auf die Musik, Tempo-Rampen auf die Höhepunkte, Kamera-Stöße auf die Beats, Wisch-Schwenks, Rig-Shot-Look, Showroom/Teal-Orange/Nacht-Looks, **Kino-Balken**, Text hinter das Auto.
+
+**🪂 Herabfallen** realistischer: Schräglage im Fall, Federung beim Aufprall, Schatten am Boden, der beim Näherkommen dunkler wird.
+
+**💡 Langzeitbelichtung**: Leuchtspuren für „alles“, „nur helle Lichter“ oder **nur markierte Lichter** – Licht anklicken, PanoCut verfolgt es durch den Clip.
+
+**🔤 Texte**: 7 neue Vorlagen (Neon, Racing, Kino, Wucht, Sport, Handschrift, Fallender Titel), 5 neue Schriften, Leuchten, Randfarbe, 9 Einblend- und 8 Ausblend-Animationen.
+
+**Bedienung**: Fenster über der Vorschau (Bild-Assistent, Effekte, KI, 3D, Ebenen) lassen sich an der Kopfleiste verschieben und per Doppelklick einklappen. **🔍 UHD**: Vorschau aus dem Original in voller Auflösung (bis 4K).
+
+**Behoben**: Masken/Punkte bei hochkant gefilmten Handy-Videos lagen an der falschen Stelle.
+
 ## PanoCut 0.9.4 – Fehlerbehebung 360°-Vorschau, bessere Naht
 
 **Installieren**
