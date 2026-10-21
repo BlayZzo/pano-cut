@@ -3,7 +3,8 @@ import { useProject } from './store/project';
 import { useUi } from './store/ui';
 import { engine } from './engine/instance';
 import { addMediaToTimeline, importFiles, insertSfx } from './actions';
+import { sharedPanoGL } from './engine/panogl';
 
 export function installTestHook(): void {
-  (window as unknown as { __pcTest: unknown }).__pcTest = { useProject, useUi, engine, importFiles, addMediaToTimeline, insertSfx };
+  (window as unknown as { __pcTest: unknown }).__pcTest = { useProject, useUi, engine, importFiles, addMediaToTimeline, insertSfx, panoGL: () => sharedPanoGL().available };
 }

@@ -7,7 +7,7 @@ function f(n: number): string {
 }
 
 /** Stückweise (linear oder weich) interpolierte Funktion als verschachtelter if()-Ausdruck. */
-function piecewise(kfs: MotionKeyframe[], key: keyof Omit<MotionKeyframe, 't'>, smooth: boolean, T: string): string {
+function piecewise(kfs: MotionKeyframe[], key: keyof Omit<MotionKeyframe, 't'>, smooth: boolean, T: string, curve = false): string {
   if (kfs.length === 0) return '0';
   const vals = kfs.map((k) => k[key]);
   if (vals.every((v) => Math.abs(v - vals[0]) < 1e-6)) return f(vals[0]);
@@ -17,6 +17,13 @@ function piecewise(kfs: MotionKeyframe[], key: keyof Omit<MotionKeyframe, 't'>, 
     const span = Math.max(1e-4, b.t - a.t);
     const u = `clip((${T}-${f(a.t)})/${f(span)},0,1)`;
     const e = smooth ? `(${u}*${u}*(3-2*${u}))` : u;
+    if (curve && kfs.length > 2) {
+      // Catmull-Rom wie effects.catmull: 0.5*(2p1 + (−p0+p2)e + (2p0−5p1+4p2−p3)e² + (−p0+3p1−3p2+p3)e³)
+      const p0 = kfs[Math.max(0, i - 1)][key], p1 = a[key], p2 = b[key], p3 = kfs[Math.min(kfs.length - 1, i + 2)][key];
+      const c1 = -p0 + p2, c2 = 2 * p0 - 5 * p1 + 4 * p2 - p3, c3 = -p0 + 3 * p1 - 3 * p2 + p3;
+      expr = `if(lt(${T},${f(b.t)}),${f(p1)}+0.5*${e}*(${f(c1)}+${e}*(${f(c2)}+${e}*${f(c3)})),${expr})`;
+      continue;
+    }
     expr = `if(lt(${T},${f(b.t)}),${f(a[key])}+(${f(b[key] - a[key])})*${e},${expr})`;
   }
   // vor dem ersten Keyframe: erster Wert
@@ -31,8 +38,8 @@ export function perspectiveCorners(m: Motion, base: Transform, W: number, H: num
   // `in` zählt im perspective-Filter ab 1 (erstes Bild = 1) → Bild k liegt bei (in−1)/fps
   const T = `((in-1)/${f(fps)}+${f(offset)})`;
   const kfs = m.keyframes.length ? m.keyframes : [{ t: 0, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }];
-  let X = `(${f(base.x)}+${piecewise(kfs, 'x', m.smooth, T)})`;
-  let Y = `(${f(base.y)}+${piecewise(kfs, 'y', m.smooth, T)})`;
+  let X = `(${f(base.x)}+${piecewise(kfs, 'x', m.smooth, T, m.curve)})`;
+  let Y = `(${f(base.y)}+${piecewise(kfs, 'y', m.smooth, T, m.curve)})`;
   let S = `(${f(base.scale)}*${piecewise(kfs, 'scale', m.smooth, T)})`;
   let R = `(${f(base.rotation)}+${piecewise(kfs, 'rotation', m.smooth, T)})`;
   const o = m.osc;

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { Clip, LensCalSettings, MediaItem, PanoMode, PanoSettings } from '@shared/types';
-import { lensCal } from '@shared/stitchModel';
+import { lensCal, stitchKey } from '@shared/stitchModel';
 import type { MoveEase } from '@shared/types';
 import { EASE_OPTIONS } from './InspectorReframe';
 import { applyCameraMove, CAMERA_MOVES, type CameraMove } from '@shared/cameraMoves';
@@ -90,6 +90,23 @@ export function InspectorPano({ clip, media }: { clip: Clip; media: MediaItem })
       useUi.getState().toast(`${t.pano.alignFailed}: ${(e as Error).message}`, 'error');
     } finally { setAligning(false); }
   };
+  // Bewegte Naht: Versatz naher Dinge über das ganze Video messen
+  const [seamBusy, setSeamBusy] = useState<number | null>(null);
+  React.useEffect(() => window.panocut.onSeamProgress((p) => { if (p.id === media.id) setSeamBusy(p.percent); }), [media.id]);
+  const measureSeam = async () => {
+    const m = useProject.getState().project.media[media.id];
+    if (!m) return;
+    setSeamBusy(0);
+    try {
+      const r = await window.panocut.seamBuild(m);
+      const cur = useProject.getState().project.media[media.id];
+      if (cur) useProject.getState().updateMedia({ ...cur, seam: { ...r, enabled: true } });
+      useUi.getState().toast(t.pano.seamDone, 'success');
+    } catch (e) {
+      useUi.getState().toast(`${t.pano.seamFailed}: ${(e as Error).message}`, 'error');
+    } finally { setSeamBusy(null); }
+  };
+  const seamFresh = !!media.seam && media.seam.key === stitchKey(stitch);
   const front = lensCal(stitch, 1);
   const setFront = (p: Partial<LensCalSettings>) => updateMediaStitch(media.id, { lens: [lensCal(stitch, 0), { ...front, ...p }] });
   const balance = Math.round((lensCal(stitch, 1).gain[1] / Math.max(0.01, lensCal(stitch, 0).gain[1]) - 1) * 100);
@@ -138,6 +155,12 @@ export function InspectorPano({ clip, media }: { clip: Clip; media: MediaItem })
           <Slider label={t.pano.stitchYaw} value={stitch.yaw} min={-180} max={180} step={1} unit="°" onChange={(v) => updateMediaStitch(media.id, { yaw: v })} />
           <Slider label={t.pano.stitchPitch} value={stitch.pitch} min={-90} max={90} step={1} unit="°" onChange={(v) => updateMediaStitch(media.id, { pitch: v })} />
           <Slider label={t.pano.stitchRoll} value={stitch.roll} min={-180} max={180} step={1} unit="°" onChange={(v) => updateMediaStitch(media.id, { roll: v })} />
+          <div className="sub-title">{t.pano.seamTitle}</div>
+          {seamFresh && <Toggle label={t.pano.seamOn} checked={!!media.seam?.enabled} onChange={(v) => { const cur = useProject.getState().project.media[media.id]; if (cur?.seam) useProject.getState().updateMedia({ ...cur, seam: { ...cur.seam, enabled: v } }); }} />}
+          <button className="btn sm primary" disabled={seamBusy !== null} onClick={() => void measureSeam()}>
+            {seamBusy !== null ? fmt(t.pano.seamBusy, { p: Math.round(seamBusy) }) : media.seam ? t.pano.seamRedo : t.pano.seamMeasure}
+          </button>
+          <div className="hint">{media.seam && !seamFresh ? t.pano.seamStale : t.pano.seamHint}</div>
           <div className="sub-title">{t.pano.frontLens}</div>
           <Slider label={t.pano.lensYaw} value={front.yaw} min={-6} max={6} step={0.05} unit="°" onChange={(v) => setFront({ yaw: v })} />
           <Slider label={t.pano.lensPitch} value={front.pitch} min={-6} max={6} step={0.05} unit="°" onChange={(v) => setFront({ pitch: v })} />

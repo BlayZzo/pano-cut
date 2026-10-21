@@ -1,6 +1,7 @@
 import path from 'node:path';
 import fs from 'node:fs';
 import log from 'electron-log';
+import { autoAlignStitch } from './stitchAuto';
 import type { MediaInfo, MediaItem, MediaType } from '@shared/types';
 import { makeId } from '@shared/timeline';
 import { probeFile, runFfmpeg } from './ffmpeg';
@@ -138,6 +139,7 @@ export interface PrepareOptions {
   stage?: 'quick' | 'heavy' | 'all';
   proxyMode?: 'auto' | 'always';
   skipProxy?: boolean;   // vom Nutzer übersprungen
+  autoStitch?: boolean;  // 360°-Rohvideo: Naht beim ersten Vorbereiten automatisch ausrichten
 }
 
 export async function prepareMedia(item: MediaItem, update: MediaUpdateFn, proxyHeight = 540, options: PrepareOptions = {}): Promise<void> {
@@ -192,6 +194,15 @@ export async function prepareMedia(item: MediaItem, update: MediaUpdateFn, proxy
     // ---- Video ----
     // Braucht die Datei eine eigene Vorschau-Datei? Normale Full-HD-H.264-Videos (Handy, Kamera) spielen direkt flüssig.
     // Kamera-Vorschaudatei (.LRF/.LRV) vorhanden? Dann ist sie die Vorschau-Datei – nichts muss umgerechnet werden.
+    // 360°-Rohvideo noch nie ausgerichtet: Linsen-Daten der Kamera + Bildvergleich (wenige Sekunden) – sonst sieht man die Naht
+    if (quick && options.autoStitch && work.stitch && work.stitch.mode !== 'equirect' && !work.stitch.calibrated) {
+      report('stitch', 0, true);
+      try {
+        const r = await autoAlignStitch(work);
+        work.stitch = r.stitch;
+        emit();
+      } catch (e) { log.warn('Automatisches Ausrichten fehlgeschlagen', (e as Error).message); }
+    }
     const companion = work.companion && fileExists(work.companion) ? work.companion : undefined;
     if (work.companion && !companion) { if (work.proxy === work.companion) work.proxy = undefined; work.companion = undefined; }
     if (companion) work.proxy = companion;

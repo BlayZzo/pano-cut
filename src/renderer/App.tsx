@@ -23,6 +23,7 @@ import {
 import { playPause } from './engine/instance';
 import { switchToAngle } from './multicamActions';
 import { isEditingText } from './utils/dom';
+import { installFloatingPanels } from './utils/floatingPanels';
 
 export function App(): React.ReactElement {
   const dialog = useUi((s) => s.dialog);
@@ -31,6 +32,8 @@ export function App(): React.ReactElement {
   const zoomFitRef = useRef<() => void>(() => {});
 
   useKeyboard();
+
+  useEffect(() => installFloatingPanels(), []);
 
   useEffect(() => {
     const api = window.panocut;

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { packTracks } from '@shared/edit';
 import { temporal } from 'zundo';
-import type { Clip, MediaItem, MulticamGroup, Project, ProjectSettings, Track, TrackKind } from '@shared/types';
+import type { Clip, MediaItem, MulticamGroup, Project, ProjectSettings, Track, TrackKind, Marker } from '@shared/types';
 import type { Attachment, ChromaKey, Cutout, ObjectTrack, PanoSettings, Stabilization, StitchSettings, SubtitleSegment, TitleStyle, Transition } from '@shared/types';
 import {
   clipDuration, clipEnd, createClip, createProject, createTitleClip, createTrack, makeId, MIN_CLIP_DURATION, nextFreeStart, overlaps, sourceLimit, sourceTimeAt,
@@ -45,8 +45,15 @@ export interface ProjectState {
   moveTrack(id: string, dir: -1 | 1): void;
   /** Neue Videospur ganz oben (vorderste Ebene) – optional direkt über einer bestimmten Spur. Gibt die ID zurück. */
   addVideoTrackAbove(aboveTrackId: string | null, name?: string): string;
+  /** Neue Videospur direkt unter einer Spur (dahinter). Gibt die ID zurück. */
+  addVideoTrackBelow(belowTrackId: string, name?: string): string;
   /** Fertige Clips einfügen (Effekte, Objekt-Kopien). */
   insertClips(clips: Clip[]): void;
+  /** Marker setzen/ersetzen (sortiert). */
+  setMarkers(markers: Marker[]): void;
+  addMarker(t: number, kind?: Marker['kind']): void;
+  moveMarker(id: string, t: number): void;
+  removeMarker(id: string): void;
   /** Neue Tonspur (unten) mit Namen. Gibt die ID zurück. */
   addAudioTrack(name?: string): string;
   /** Mehrkamera-Gruppe setzen (null = entfernen) und ihre Clips in einem Schritt ersetzen. */
@@ -322,6 +329,17 @@ export const useProject = create<ProjectState>()(
         set({ project: { ...s.project, tracks } });
         return track.id;
       },
+      addVideoTrackBelow: (belowTrackId, name) => {
+        const s = get();
+        const count = s.project.tracks.filter((t) => t.kind === 'video').length + 1;
+        const track = createTrack('video', count);
+        if (name) track.name = name;
+        const tracks = [...s.project.tracks];
+        const idx = tracks.findIndex((t) => t.id === belowTrackId);
+        tracks.splice(idx >= 0 ? idx + 1 : tracks.length, 0, track);
+        set({ project: { ...s.project, tracks } });
+        return track.id;
+      },
       addAudioTrack: (name) => {
         const s = get();
         const count = s.project.tracks.filter((t) => t.kind === 'audio').length + 1;
@@ -338,6 +356,14 @@ export const useProject = create<ProjectState>()(
         if (group) multicam[groupId] = group; else delete multicam[groupId];
         return { project: { ...s.project, clips, multicam } };
       }),
+      setMarkers: (markers) => set((s) => ({ project: { ...s.project, markers: [...markers].sort((a, b) => a.t - b.t) } })),
+      addMarker: (t, kind = 'user') => set((s) => {
+        const list = s.project.markers ?? [];
+        if (list.some((m) => Math.abs(m.t - t) < 0.02)) return {};
+        return { project: { ...s.project, markers: [...list, { id: makeId('mk'), t: Math.max(0, t), kind }].sort((a, b) => a.t - b.t) } };
+      }),
+      moveMarker: (id, t) => set((s) => ({ project: { ...s.project, markers: (s.project.markers ?? []).map((m) => (m.id === id ? { ...m, t: Math.max(0, t) } : m)).sort((a, b) => a.t - b.t) } })),
+      removeMarker: (id) => set((s) => ({ project: { ...s.project, markers: (s.project.markers ?? []).filter((m) => m.id !== id) } })),
       insertClips: (newClips) => set((s) => {
         const clips = { ...s.project.clips };
         for (const c of newClips) clips[c.id] = c;

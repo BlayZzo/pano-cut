@@ -18,6 +18,7 @@ import { InspectorLayer, InspectorVfx } from './InspectorLayer';
 import { InspectorMusic } from './InspectorMusic';
 import { SpeedRampFields } from './InspectorRamp';
 import { InspectorDropIn } from './InspectorDropIn';
+import { InspectorPath } from './InspectorPath';
 import { createMulticam, multicamCandidates } from '../multicamActions';
 
 export function Inspector(): React.ReactElement {
@@ -197,6 +198,7 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
         </Section>
       )}
       {!isAudioOnly && <InspectorMotion clip={clip} ids={ids} />}
+      {!isAudioOnly && !isTitle && count === 1 && <InspectorPath clip={clip} />}
       {!isTitle && count === 1 && media && !media.vfx && (media.hasAlpha || clip.cutout?.enabled) && <InspectorDropIn clip={clip} />}
       </>}
 

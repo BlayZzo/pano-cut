@@ -74,6 +74,11 @@ export async function runUiTest(win: BrowserWindow): Promise<number> {
     } else if (byName('d_4k')?.proxy) failures.push('Mac: 4K-HEVC bekam unnötig eine Vorschau-Datei');
     if (!imported.indicator) failures.push('Keine Fortschrittsanzeige oben');
 
+    // 360°-Darstellung (WebGL-Shader müssen sich übersetzen lassen – sonst fällt die Vorschau still auf Rohbild zurück)
+    const glOk = await win.webContents.executeJavaScript('window.__pcTest.panoGL()');
+    out(`360°-Shader: ${glOk ? 'ok' : 'FEHLER'}`);
+    if (!glOk) failures.push('360°-Shader lässt sich nicht übersetzen');
+
     // Vorschau an mehreren Stellen prüfen: normales Video, 360°-Video, Bild
     for (const [label, t] of [['Video', 1.2], ['360°', 5.5], ['Bild', 8.5], ['4K-HEVC', 15]] as const) {
       const res = await win.webContents.executeJavaScript(`(async () => {

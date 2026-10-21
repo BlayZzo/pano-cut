@@ -7,6 +7,7 @@ import { sharedPanoGL, type FisheyeInput } from './panogl';
 import { stitchKey } from '@shared/stitchModel';
 import { hasReframe, reframeAt, reframeRect } from '@shared/reframe';
 import { stabActive, stabMatrixAt, targetTrack, type ImuTrack } from '@shared/stabilize';
+import { SEAM_BINS, seamAt, type SeamTrack } from '@shared/seamFlow';
 import { sharedChromaGL } from './chromagl';
 import { sharedColorGL } from './colorgl';
 import { motionAt } from '@shared/effects';
@@ -406,6 +407,25 @@ export class PlaybackEngine {
     return { src: url(media.path), fisheye: fish ? { stitch: st!, swap: false } : null };
   }
 
+  // ---- Bewegte Naht (Versatz naher Dinge, shared/seamFlow.ts) ----
+  private seamTracks = new Map<string, SeamTrack | 'loading'>();
+  private seamBuf = new Uint8Array(SEAM_BINS);
+  private seamFor(media: MediaItem, fileT: number): Uint8Array | null {
+    const s = media.seam;
+    if (!s?.enabled || !media.stitch || s.key !== stitchKey(media.stitch)) return null;
+    const tr = this.seamTracks.get(s.file);
+    if (!tr) {
+      this.seamTracks.set(s.file, 'loading');
+      void window.panocut.seamRead(s.file).then((bytes) => {
+        this.seamTracks.set(s.file, { rate: s.rate, start: s.start, frames: Math.min(s.frames, Math.floor(bytes.length / SEAM_BINS)), data: new Uint8Array(bytes) });
+        this.redraw();
+      }).catch(() => this.seamTracks.delete(s.file));
+      return null;
+    }
+    if (tr === 'loading') return null;
+    return seamAt(tr, fileT, this.seamBuf);
+  }
+
   // ---- Stabilisierung (Bewegungsdaten) ----
   private imuTracks = new Map<string, ImuTrack | 'loading'>();
   private imuTargets = new Map<string, ImuTrack>();
@@ -634,7 +654,8 @@ export class PlaybackEngine {
         const srcTime = slot.isVideo ? (slot.el as HTMLVideoElement).currentTime : 0;
         const stab = this.stabFor(clip, media, slot.isVideo ? (slot.el as HTMLVideoElement).currentTime : 0);
         const nadir = clip.nadir?.enabled ? { size: clip.nadir.size, feather: clip.nadir.feather } : undefined;
-        const out = pgl.render(source as TexImageSource, outW, outH, mode, view, srcTime, fish ?? undefined, stab ?? undefined, nadir);
+        const fishIn = fish ? { ...fish, disp: this.seamFor(media, srcTime) ?? undefined } : undefined;
+        const out = pgl.render(source as TexImageSource, outW, outH, mode, view, srcTime, fishIn, stab ?? undefined, nadir);
         if (out) { source = out; vw = outW; vh = outH; }
       }
     }

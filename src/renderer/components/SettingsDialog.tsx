@@ -103,6 +103,10 @@ export function SettingsDialog(): React.ReactElement {
             <label />
             <div className="hint">{t.settings.useCompanionHint}</div>
             <label />
+            <label className="toggle"><input type="checkbox" checked={settings.autoStitch !== false} onChange={(e) => void patch({ autoStitch: e.target.checked })} /> {t.settings.autoStitch}</label>
+            <label />
+            <div className="hint">{t.settings.autoStitchHint}</div>
+            <label />
             <label className="toggle"><input type="checkbox" checked={settings.folderRecursive !== false} onChange={(e) => void patch({ folderRecursive: e.target.checked })} /> {t.settings.folderRecursive}</label>
             <label />
             <label className="toggle"><input type="checkbox" checked={settings.hardwareAccel} onChange={(e) => void patch({ hardwareAccel: e.target.checked })} /> {t.settings.hardware}</label>

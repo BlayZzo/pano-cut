@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { Clip, MediaItem, Project, Track } from '@shared/types';
+import type { Clip, Marker, MediaItem, Project, Track } from '@shared/types';
 import { clipDuration, clipEnd, DEFAULT_IMAGE_DURATION, DEFAULT_TITLE_DURATION, formatTime, MIN_CLIP_DURATION, overlaps, projectDuration, sourceLimit } from '@shared/timeline';
-import { useProject } from '../store/project';
+import { beginTransaction, endTransaction, setDirty, useProject } from '../store/project';
 import { useUi, useView, getView, updateView, ZOOM_MAX, ZOOM_MIN, type DragState } from '../store/ui';
 import { Popover } from './Popover';
-import { engine, stopPlayback } from '../engine/instance';
+import { engine, seekTo, stopPlayback } from '../engine/instance';
 import { addTitleToTimeline, applyEffectToClips, applyTransitionToClip, deleteSelection, duplicateSelection, splitAtPlayhead, zoomBy, zoomToFit } from '../actions';
 import type { TransitionType } from '@shared/types';
 import { TITLE_TEMPLATES } from '@shared/pano';
@@ -63,6 +63,8 @@ function snapTargets(project: Project, exclude: Set<string>, playhead: number): 
   }
   // Clips rasten auf den Schlägen der Musik ein
   if (useUi.getState().showBeats) pts.push(...collectBeats(project, exclude).beats);
+  // … und immer auf den Markern
+  for (const m of project.markers ?? []) pts.push(m.t);
   return pts;
 }
 
@@ -499,7 +501,9 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
           <div className="lanes-content" style={{ width: contentWidth, height: contentHeight }}>
             <Ruler zoom={zoom} width={contentWidth} fps={fps} onPointerDown={onRulerPointerDown} rangeIn={rangeIn} rangeOut={rangeOut}>
               {beatMarks && beatMarks.beats.length > 0 && <BeatMarks marks={beatMarks} zoom={zoom} part="ruler" />}
+              {project.markers && project.markers.length > 0 && <MarkerFlags markers={project.markers} zoom={zoom} />}
             </Ruler>
+            {project.markers && project.markers.length > 0 && <div className="marker-lines">{project.markers.map((m) => <div key={m.id} className={`marker-line ${m.kind ?? 'user'}`} style={{ left: m.t * zoom, height: contentHeight }} />)}</div>}
             {beatMarks && beatMarks.beats.length > 0 && <BeatMarks marks={beatMarks} zoom={zoom} part="lines" height={contentHeight} />}
             {offsets.map(({ track, height, top }, i) => (
               <React.Fragment key={track.id}>
@@ -566,6 +570,49 @@ function Ruler({ zoom, width, fps, onPointerDown, rangeIn, rangeOut, children }:
 }
 
 /** Taktmarken im Lineal und schwache Linien durch die Spuren. */
+/** Marker in der Zeitleiste: ziehen = verschieben (rastet auf Clips/Abspielkopf ein), Doppelklick = löschen. */
+function MarkerFlags({ markers, zoom }: { markers: Marker[]; zoom: number }): React.ReactElement {
+  const down = (e: React.PointerEvent, m: Marker) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const el = e.currentTarget as HTMLElement;
+    const ruler = el.parentElement!.getBoundingClientRect();
+    el.setPointerCapture(e.pointerId);
+    let moved = false;
+    beginTransaction();
+    const move = (ev: PointerEvent) => {
+      moved = true;
+      let t = Math.max(0, (ev.clientX - ruler.left) / zoom);
+      if (useUi.getState().snapping && !ev.altKey) {
+        const project = useProject.getState().project;
+        const pts = [0, useUi.getState().playhead];
+        for (const c of Object.values(project.clips)) pts.push(c.start, clipEnd(c));
+        if (useUi.getState().showBeats) pts.push(...collectBeats(project).beats);
+        t = snapValue(t, pts, SNAP_PX / zoom).value;
+      }
+      useProject.getState().moveMarker(m.id, t);
+    };
+    const up = () => {
+      el.removeEventListener('pointermove', move);
+      el.removeEventListener('pointerup', up);
+      endTransaction();
+      if (moved) setDirty(true);
+      else { useUi.getState().setPlayhead(m.t); seekTo(m.t); }
+    };
+    el.addEventListener('pointermove', move);
+    el.addEventListener('pointerup', up);
+  };
+  return (
+    <div className="marker-flags">
+      {markers.map((m) => (
+        <div key={m.id} className={`marker-flag ${m.kind ?? 'user'}`} style={{ left: m.t * zoom }} title={t.timeline.markerHint}
+          onPointerDown={(e) => down(e, m)}
+          onDoubleClick={(e) => { e.stopPropagation(); useProject.getState().removeMarker(m.id); setDirty(true); }} />
+      ))}
+    </div>
+  );
+}
+
 function BeatMarks({ marks, zoom, part, height = 0 }: { marks: { beats: number[]; downs: number[] }; zoom: number; part: 'ruler' | 'lines'; height?: number }): React.ReactElement | null {
   const downSet = new Set(marks.downs.map((d) => d.toFixed(3)));
   const spacing = marks.beats.length > 1 ? ((marks.beats[marks.beats.length - 1] - marks.beats[0]) / (marks.beats.length - 1)) * zoom : 99;

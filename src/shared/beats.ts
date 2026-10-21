@@ -6,6 +6,8 @@ export interface BeatInfo {
   beats: number[];       // Zeitpunkte der Schläge (Sekunden in der Datei)
   downbeats: number[];   // erster Schlag jedes Takts (4/4 angenommen)
   energy: number[];      // Lautstärke je Schlag 0..1 (für „Schnitte nach Energie“)
+  strength?: number[];   // Wucht je Schlag 0..1 (Onset-Spitze) – für „Höhepunkte“
+  hits?: number[];       // Höhepunkte: besonders starke Schläge/Einsätze (Drop, Snare-Wirbel-Ende, Bass-Schlag)
 }
 
 /** In-place-FFT (Radix 2). re/im Länge = Zweierpotenz. */
@@ -222,13 +224,52 @@ export function trackBeats(env: Float32Array, rms: Float32Array, hop: number, lo
     if (s > bestPhase + 1e-6) { bestPhase = s; phase = p; }
   }
   const downbeats = beats.filter((_, k) => k % 4 === phase);
-  return { bpm: Math.round((60 / (P * hop)) * 10) / 10, beats, downbeats, energy };
+  // Wucht je Schlag: Onset-Spitze (± 2 Rahmen) relativ zum lauten Bereich; Höhepunkte = deutlich über der Umgebung
+  const rawS = idx.map((i) => peak(env, i) + (low ? 0.5 * peak(low, i) : 0));
+  const sorted = [...rawS].sort((a, b) => a - b);
+  const ref = sorted[Math.floor(sorted.length * 0.95)] || 1;
+  const strength = rawS.map((v) => Math.round(Math.min(1, v / ref) * 1000) / 1000);
+  const hits = pickHits(beats, strength, energy, P * hop);
+  return { bpm: Math.round((60 / (P * hop)) * 10) / 10, beats, downbeats, energy, strength, hits };
+}
+
+/**
+ * Höhepunkte: Schläge, die deutlich stärker sind als ihre Nachbarn (± 2 Takte) oder an denen die Lautstärke
+ * sprunghaft steigt (Drop). Mindestabstand ein Schlag.
+ */
+export function pickHits(beats: number[], strength: number[], energy: number[], period: number): number[] {
+  const out: number[] = [];
+  const n = beats.length;
+  for (let k = 0; k < n; k++) {
+    let sum = 0, c = 0;
+    for (let j = Math.max(0, k - 8); j <= Math.min(n - 1, k + 8); j++) if (j !== k) { sum += strength[j]; c++; }
+    const local = c ? sum / c : 0;
+    const prevE = k >= 4 ? (energy[k - 1] + energy[k - 2] + energy[k - 3] + energy[k - 4]) / 4 : energy[k];
+    const drop = energy[k] - prevE > 0.25;
+    if ((strength[k] > 0.55 && strength[k] > local * 1.35) || drop) {
+      if (out.length && beats[k] - out[out.length - 1] < period * 0.9) continue;
+      out.push(beats[k]);
+    }
+  }
+  return out;
 }
 
 /** Schnittpunkte aus den Schlägen: alle n Schläge oder nach Energie (laut → schneller). */
-export function cutPoints(info: BeatInfo, start: number, end: number, mode: 'beat' | 'beat2' | 'bar' | 'energy'): number[] {
+export function cutPoints(info: BeatInfo, start: number, end: number, mode: 'beat' | 'beat2' | 'bar' | 'energy' | 'hits'): number[] {
   const inRange = info.beats.map((t, i) => ({ t, i })).filter((b) => b.t >= start - 1e-3 && b.t <= end + 1e-3);
   if (inRange.length === 0) return [];
+  if (mode === 'hits') {
+    const hits = (info.hits ?? []).filter((t) => t >= start - 1e-3 && t <= end + 1e-3);
+    // Lange Stellen ohne Höhepunkt: spätestens jeden 2. Takt schneiden, damit das Bild nicht steht
+    const bars = cutPoints(info, start, end, 'bar');
+    const out = [...hits];
+    const barLen = info.bpm > 0 ? (4 * 60) / info.bpm : 2;
+    for (const b of bars) {
+      const near = out.reduce((m, h) => Math.min(m, Math.abs(h - b)), Infinity);
+      if (near > barLen * 1.5) out.push(b);
+    }
+    return out.sort((a, b) => a - b);
+  }
   if (mode === 'bar') {
     const set = new Set(info.downbeats.map((x) => x.toFixed(4)));
     const pts = inRange.filter((b) => set.has(b.t.toFixed(4))).map((b) => b.t);
@@ -258,17 +299,18 @@ export function changeTempo(info: BeatInfo, factor: 2 | 0.5): BeatInfo {
     const beats = info.beats.filter((_, i) => i % 2 === pick);
     const energy = info.energy.filter((_, i) => i % 2 === pick);
     const downbeats = beats.filter((_, k) => k % 4 === 0);
-    return { bpm: Math.round(info.bpm * 5) / 10, beats, downbeats, energy };
+    const strength = info.strength?.filter((_, i) => i % 2 === pick);
+    return { bpm: Math.round(info.bpm * 5) / 10, beats, downbeats, energy, strength, hits: info.hits };
   }
-  const beats: number[] = [], energy: number[] = [];
+  const beats: number[] = [], energy: number[] = [], strength: number[] = [];
   for (let i = 0; i < info.beats.length; i++) {
-    beats.push(info.beats[i]); energy.push(info.energy[i] ?? 0.5);
-    if (i + 1 < info.beats.length) { beats.push((info.beats[i] + info.beats[i + 1]) / 2); energy.push(info.energy[i] ?? 0.5); }
+    beats.push(info.beats[i]); energy.push(info.energy[i] ?? 0.5); strength.push(info.strength?.[i] ?? 0.5);
+    if (i + 1 < info.beats.length) { beats.push((info.beats[i] + info.beats[i + 1]) / 2); energy.push(info.energy[i] ?? 0.5); strength.push((info.strength?.[i] ?? 0.5) * 0.4); }
   }
   const db = new Set(info.downbeats.map((x) => x.toFixed(4)));
   const first = Math.max(0, beats.findIndex((b) => db.has(b.toFixed(4))));
   const downbeats = beats.filter((_, k) => k >= first && (k - first) % 8 === 0);
-  return { bpm: Math.round(info.bpm * 20) / 10, beats, downbeats, energy };
+  return { bpm: Math.round(info.bpm * 20) / 10, beats, downbeats, energy, strength, hits: info.hits };
 }
 
 /** Taktmarken eines Clips in Timeline-Zeit (berücksichtigt In/Out, Tempo, Rückwärts). */

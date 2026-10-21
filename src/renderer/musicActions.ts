@@ -1,7 +1,7 @@
 // Auto-Musik-Schnitt: Takt erkennen und Video-Clips auf die Schläge schneiden.
 import type { Clip, Project } from '@shared/types';
-import { changeTempo } from '@shared/beats';
-import { planBeatCut, type BeatCutOptions } from '@shared/beatcut';
+import { beatsOnTimeline, changeTempo } from '@shared/beats';
+import { planBeatCut, type ActivityCurve, type BeatCutOptions } from '@shared/beatcut';
 import { clipEnd, makeId, videoTracksBottomUp } from '@shared/timeline';
 import { beginTransaction, endTransaction, setDirty, untracked, useProject } from './store/project';
 import { useUi } from './store/ui';
@@ -44,14 +44,51 @@ function isVisualClip(project: Project, c: Clip): boolean {
   return !!m && m.type !== 'audio' && !m.vfx;
 }
 
+/** Schläge/Höhepunkte eines Musik-Clips als Marker auf die Timeline legen (zum Anpassen und Einrasten). */
+export function beatsToMarkers(musicClipId: string, which: 'hits' | 'beats' | 'bars'): void {
+  const project = useProject.getState().project;
+  const music = project.clips[musicClipId];
+  const info = music ? project.media[music.mediaId]?.beats : undefined;
+  if (!music || !info) { useUi.getState().toast(t.music.needBeats, 'error'); return; }
+  const src = which === 'hits' ? (info.hits?.length ? info.hits : info.downbeats) : which === 'bars' ? info.downbeats : info.beats;
+  const times = beatsOnTimeline({ ...info, beats: src }, music, 'beats');
+  const keep = (project.markers ?? []).filter((m) => m.kind === 'user');
+  const kind = which === 'hits' ? 'hit' as const : 'beat' as const;
+  useProject.getState().setMarkers([...keep, ...times.map((t) => ({ id: makeId('mk'), t, kind }))]);
+  setDirty(true);
+  useUi.getState().toast(fmt(t.music.markersSet, { n: times.length }), 'success');
+}
+
+export function clearMarkers(): void {
+  useProject.getState().setMarkers([]);
+  setDirty(true);
+}
+
+/** Bewegung je Quelle messen (nur Schlüsselbilder – schnell), für „beste Stellen“. */
+async function measureActivity(project: Project, sources: Clip[]): Promise<Record<string, ActivityCurve>> {
+  const out: Record<string, ActivityCurve> = {};
+  for (const c of sources) {
+    const m = project.media[c.mediaId];
+    if (!m || m.type !== 'video') continue;
+    const file = m.proxy && m.proxy !== m.companion ? m.proxy : (m.companion ?? m.path);
+    try {
+      out[c.id] = await api().activityCurve(file, Math.max(0, c.in - 0.5), (c.out - c.in) + 1, 0);
+    } catch { /* ohne Messung: gleichmäßig verteilen */ }
+  }
+  return out;
+}
+
 /** Schneidet Video-Clips so, dass jeder Schnitt auf einem Schlag des Musik-Clips liegt. */
-export function autoCutToMusic(musicClipId: string, opts: BeatCutOptions): void {
+export async function autoCutToMusic(musicClipId: string, opts: BeatCutOptions): Promise<void> {
   const store = useProject.getState();
   const project = store.project;
   const music = project.clips[musicClipId];
   const media = music ? project.media[music.mediaId] : undefined;
   if (!music || !media) return;
-  if (!media.beats || media.beats.beats.length === 0) { useUi.getState().toast(t.music.needBeats, 'error'); return; }
+  if (opts.mode === 'markers' ? !(project.markers?.length) : (!media.beats || media.beats.beats.length === 0)) {
+    useUi.getState().toast(opts.mode === 'markers' ? t.music.needMarkers : t.music.needBeats, 'error'); return;
+  }
+  const beats = media.beats ?? { bpm: 0, beats: [], downbeats: [], energy: [] };
 
   // Quellen: ausgewählte Video-Clips, sonst alle Clips der untersten Videospur
   const order = new Map(project.tracks.map((tr, i) => [tr.id, i]));
@@ -65,7 +102,13 @@ export function autoCutToMusic(musicClipId: string, opts: BeatCutOptions): void 
   sources.sort((a, b) => a.start - b.start || (order.get(b.trackId) ?? 0) - (order.get(a.trackId) ?? 0));
   if (sources.length === 0) { useUi.getState().toast(t.music.needVideo, 'error'); return; }
 
-  const plan = planBeatCut(music, media.beats, sources, opts, () => makeId('clip'), (c) => project.media[c.mediaId]?.type === 'image');
+  let activity: Record<string, ActivityCurve> | undefined;
+  if (opts.best) {
+    useUi.getState().toast(t.music.measuring, 'info');
+    activity = await measureActivity(project, sources);
+  }
+  const plan = planBeatCut(music, beats, sources, opts, () => makeId('clip'), (c) => project.media[c.mediaId]?.type === 'image',
+    { markers: (project.markers ?? []).map((m) => m.t), activity });
   if (plan.clips.length === 0) { useUi.getState().toast(t.music.needBeats, 'error'); return; }
 
   beginTransaction();
@@ -84,5 +127,5 @@ export function autoCutToMusic(musicClipId: string, opts: BeatCutOptions): void 
     endTransaction();
   }
   setDirty(true);
-  useUi.getState().toast(fmt(t.music.done, { n: plan.cuts, bpm: media.beats.bpm }), 'success');
+  useUi.getState().toast(fmt(t.music.done, { n: plan.cuts, bpm: beats.bpm }), 'success');
 }

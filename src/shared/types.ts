@@ -349,6 +349,7 @@ export interface Motion {
   smooth: boolean;
   keyframes: MotionKeyframe[];
   osc?: { kind: 'shake' | 'pulse' | 'float'; amp: number };  // gleichmäßige Schwingung (wird zu den Keyframes addiert)
+  curve?: boolean;     // Bewegungspfad als weiche Kurve durch alle Punkte (Catmull-Rom) statt gerader Linien
 }
 
 export interface Ducking {
@@ -481,6 +482,9 @@ export interface ProjectSettings {
   is360?: boolean;   // Projekt als 360°-Panorama (Equirectangular) exportieren
 }
 
+/** Marker auf der Timeline (Zeit in Sekunden). `hit` = aus der Musik übernommener Höhepunkt. */
+export interface Marker { id: string; t: number; kind?: 'user' | 'beat' | 'hit' }
+
 export interface Project {
   version: 1;
   id: string;
@@ -491,6 +495,7 @@ export interface Project {
   tracks: Track[];
   clips: Record<string, Clip>;
   multicam?: Record<string, MulticamGroup>;   // Mehrkamera-Gruppen
+  markers?: Marker[];                         // Marker auf der Timeline (Beat-Marker zum Einrasten/Schneiden)
   createdAt: number;
   modifiedAt: number;
 }
@@ -675,6 +680,8 @@ export interface Settings {
   proxyMode?: 'auto' | 'always';
   /** Kamera-Vorschaudateien (.LRF/.LRV) als Vorschau nutzen (Standard: an) */
   useCompanion?: boolean;
+  /** 360°-Rohvideos beim Import automatisch nahtlos ausrichten (Standard: an) */
+  autoStitch?: boolean;
   /** Ordner-Import: Unterordner mit durchsuchen (Standard: an) */
   folderRecursive?: boolean;
   hardwareAccel: boolean;

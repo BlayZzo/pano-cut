@@ -4,6 +4,7 @@ import { isEditingText } from '../utils/dom';
 import { clearRange, deleteSelection, goEnd, goStart, setRangeIn, setRangeOut, splitAtPlayhead, stepFrames, zoomBy, zoomToFit, markCameraHere } from '../actions';
 import { playPause } from '../engine/instance';
 import { groupAt, switchToAngle } from '../multicamActions';
+import { setDirty, useProject } from '../store/project';
 
 /**
  * Globale Einzeltasten-Kürzel. Alles mit Cmd/Strg (Speichern, Rückgängig, …)
@@ -37,6 +38,7 @@ export function useKeyboard(): void {
         case 'x': case 'X': e.preventDefault(); clearRange(); break;
         case 'k': case 'K': e.preventDefault(); markCameraHere(); break;
         case 'm': case 'M': e.preventDefault(); ui.setMagnet(!ui.magnet); break;
+        case 'b': case 'B': e.preventDefault(); useProject.getState().addMarker(ui.playhead); setDirty(true); break;
         case '+': case '=': e.preventDefault(); zoomBy(1.4); break;
         case '-': case '_': e.preventDefault(); zoomBy(1 / 1.4); break;
         case 'z': case 'Z': { e.preventDefault(); const el = document.querySelector('.lanes-scroll'); zoomToFit(el ? el.clientWidth : window.innerWidth - 200); break; }

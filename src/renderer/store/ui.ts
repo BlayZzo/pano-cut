@@ -63,6 +63,8 @@ export interface UiState {
   vfxPanel: boolean;    // Effekt-Studio offen
   imagePanel: boolean;  // Bild-Assistent offen
   vfxPreset: string | null;  // vorgewählte Effektart (aus der Bibliothek)
+  pathEdit: string | null;
+  layersPanel: boolean;      // Ebenen-Fenster offen   // Clip-ID, deren Bewegungspfad in der Vorschau bearbeitet wird
   maskBrush: { clipId: string; trackId: string; size: number; all: boolean; tool?: 'brush' | 'erase' | 'lasso' } | null;  // Masken-Pinsel aktiv
   showBeats: boolean;   // Taktmarken in der Timeline
   multicamPanel: string | null;  // geöffnete Mehrkamera-Gruppe
@@ -96,6 +98,8 @@ export interface UiState {
   setVfxPanel(open: boolean, preset?: string | null): void;
   setImagePanel(open: boolean): void;
   setMaskBrush(b: UiState['maskBrush']): void;
+  setPathEdit(id: string | null): void;
+  setLayersPanel(on: boolean): void;
   setShowBeats(v: boolean): void;
   setMulticamPanel(id: string | null): void;
   setModelPanel(p: UiState['modelPanel']): void;
@@ -152,6 +156,8 @@ export const useUi = create<UiState>()((set, get) => ({
   imagePanel: false,
   vfxPreset: null,
   maskBrush: null,
+  pathEdit: null,
+  layersPanel: false,
   showBeats: true,
   multicamPanel: null,
   modelPanel: null,
@@ -189,6 +195,8 @@ export const useUi = create<UiState>()((set, get) => ({
   setVfxPanel: (vfxPanel, preset) => set({ vfxPanel, vfxPreset: preset ?? null }),
   setImagePanel: (imagePanel) => set({ imagePanel }),
   setMaskBrush: (maskBrush) => set({ maskBrush }),
+  setPathEdit: (pathEdit) => set({ pathEdit }),
+  setLayersPanel: (layersPanel) => set({ layersPanel }),
   setShowBeats: (showBeats) => set({ showBeats }),
   setMulticamPanel: (multicamPanel) => set({ multicamPanel }),
   setModelPanel: (modelPanel) => set(modelPanel ? { modelPanel, vfxPanel: false, imagePanel: false } : { modelPanel }),

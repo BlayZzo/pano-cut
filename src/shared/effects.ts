@@ -151,6 +151,13 @@ function motionKeyAt(m: Motion, t: number): MotionState {
     if (t >= a.t && t <= b.t) {
       let u = (t - a.t) / Math.max(1e-6, b.t - a.t);
       if (m.smooth) u = ease(u);
+      if (m.curve && k.length > 2) {
+        const p0 = k[Math.max(0, i - 1)], p3 = k[Math.min(k.length - 1, i + 2)];
+        return {
+          x: catmull(p0.x, a.x, b.x, p3.x, u), y: catmull(p0.y, a.y, b.y, p3.y, u), scale: a.scale + (b.scale - a.scale) * u,
+          rotation: a.rotation + (b.rotation - a.rotation) * u, opacity: a.opacity + (b.opacity - a.opacity) * u,
+        };
+      }
       return {
         x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u, scale: a.scale + (b.scale - a.scale) * u,
         rotation: a.rotation + (b.rotation - a.rotation) * u, opacity: a.opacity + (b.opacity - a.opacity) * u,
@@ -158,6 +165,11 @@ function motionKeyAt(m: Motion, t: number): MotionState {
     }
   }
   return pick(k[k.length - 1]);
+}
+
+/** Catmull-Rom-Kurve durch p1 → p2 (p0/p3 = Nachbarn) – gleiche Formel im Export (motionExpr.ts). */
+export function catmull(p0: number, p1: number, p2: number, p3: number, u: number): number {
+  return 0.5 * (2 * p1 + (-p0 + p2) * u + (2 * p0 - 5 * p1 + 4 * p2 - p3) * u * u + (-p0 + 3 * p1 - 3 * p2 + p3) * u * u * u);
 }
 
 function pick(k: MotionKeyframe): MotionState {

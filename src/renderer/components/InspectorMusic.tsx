@@ -5,7 +5,7 @@ import { beatsOnTimeline } from '@shared/beats';
 import { useUi } from '../store/ui';
 import { fmt, t } from '../i18n/de';
 import { Section, SelectField, Toggle } from './InspectorBits';
-import { autoCutToMusic, changeBeatTempo, detectBeats } from '../musicActions';
+import { autoCutToMusic, beatsToMarkers, changeBeatTempo, clearMarkers, detectBeats } from '../musicActions';
 
 let lastOptions: BeatCutOptions = { ...DEFAULT_BEAT_CUT };
 
@@ -53,6 +53,8 @@ export function InspectorMusic({ clip, media }: { clip: Clip; media: MediaItem }
                 { value: 'beat2', label: t.music.modeBeat2 },
                 { value: 'bar', label: t.music.modeBar },
                 { value: 'energy', label: t.music.modeEnergy },
+                { value: 'hits', label: t.music.modeHits },
+                { value: 'markers', label: t.music.modeMarkers },
               ]}
               onChange={(v) => update({ mode: v as BeatCutMode })}
             />
@@ -67,6 +69,11 @@ export function InspectorMusic({ clip, media }: { clip: Clip; media: MediaItem }
               onChange={(v) => update({ accent: v as BeatAccent })}
             />
             {opts.accent !== 'none' && (
+              <SelectField label={t.music.accentOn} value={opts.accentOn ?? 'down'} options={[
+                { value: 'hits', label: t.music.accentOnHits }, { value: 'down', label: t.music.accentOnDown }, { value: 'all', label: t.music.accentOnAll },
+              ]} onChange={(v) => update({ accentOn: v as BeatCutOptions['accentOn'] })} />
+            )}
+            {opts.accent !== 'none' && (
               <div className="field">
                 <label>{t.music.strength}</label>
                 <input type="range" min={0.2} max={2} step={0.1} value={opts.strength} onChange={(e) => update({ strength: parseFloat(e.target.value) })} />
@@ -74,9 +81,20 @@ export function InspectorMusic({ clip, media }: { clip: Clip; media: MediaItem }
               </div>
             )}
             <Toggle label={t.music.fill} checked={opts.fill} onChange={(v) => update({ fill: v })} />
-            <button className="btn primary" style={{ width: '100%', marginTop: 6 }} disabled={beats.beats.length === 0} onClick={() => autoCutToMusic(clip.id, opts)}>
+            <Toggle label={t.music.best} checked={!!opts.best} onChange={(v) => update({ best: v })} />
+            <button className="btn primary" style={{ width: '100%', marginTop: 6 }} disabled={beats.beats.length === 0 && opts.mode !== 'markers'} onClick={() => void autoCutToMusic(clip.id, opts)}>
               {t.music.run}
             </button>
+          </div>
+          <div className="music-auto">
+            <div className="music-auto-title">{t.music.markersTitle}</div>
+            <div className="hint">{t.music.markersHint}</div>
+            <div className="field-row" style={{ flexWrap: 'wrap', gap: 4 }}>
+              <button className="btn sm" onClick={() => beatsToMarkers(clip.id, 'hits')}>{t.music.markHits}</button>
+              <button className="btn sm" onClick={() => beatsToMarkers(clip.id, 'bars')}>{t.music.markBars}</button>
+              <button className="btn sm" onClick={() => beatsToMarkers(clip.id, 'beats')}>{t.music.markBeats}</button>
+              <button className="btn sm ghost" onClick={() => clearMarkers()}>{t.music.markClear}</button>
+            </div>
           </div>
         </>
       )}

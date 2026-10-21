@@ -6,6 +6,8 @@ import { beginTransaction, endTransaction, useProject } from '../store/project';
 import { useUi, usePlayheadCoarse, useView, updateView, getView } from '../store/ui';
 import { Popover } from './Popover';
 import { FollowTool } from './FollowTool';
+import { PathOverlay } from './PathOverlay';
+import { LayersPanel } from './LayersPanel';
 import { engine, playPause } from '../engine/instance';
 import { goEnd, goStart, markCameraHere, stepFrames } from '../actions';
 import { fmt, t } from '../i18n/de';
@@ -18,6 +20,7 @@ import { Model3DPanel } from './Model3DPanel';
 import { groupAt } from '../multicamActions';
 import { maskAt, trackActiveAt, trackBoxAt } from '@shared/ai';
 import { forgetMask } from '../engine/playback';
+import { resetFloatingPanels } from '../utils/floatingPanels';
 import { boxToSource, canvasToPng, canvasToSource, clipBox, dabToBox, drawSelection, loadMaskCanvas, paintDab, tintMask } from './previewTools';
 
 export function Preview(): React.ReactElement {
@@ -53,6 +56,8 @@ export function Preview(): React.ReactElement {
   const setImagePanel = useUi((s) => s.setImagePanel);
   const setVfxPanel = useUi((s) => s.setVfxPanel);
   const maskBrush = useUi((s) => s.maskBrush);
+  const pathEdit = useUi((s) => s.pathEdit);
+  const layersPanel = useUi((s) => s.layersPanel);
   const setMaskBrush = useUi((s) => s.setMaskBrush);
   const updateClip = useProject((s) => s.updateClip);
   const updateObjectTrack = useProject((s) => s.updateObjectTrack);
@@ -462,6 +467,8 @@ export function Preview(): React.ReactElement {
             <polygon points={lassoPath.map((p) => `${p.x},${p.y}`).join(' ')} />
           </svg>
         )}
+        {pathEdit && selectedClip && selectedClip.id === pathEdit && canvasRef.current && <PathOverlay clip={selectedClip} canvas={canvasRef.current} />}
+        {pathEdit && <div className="preview-badge">{t.path.badge} <button className="btn sm" style={{ marginLeft: 8 }} onClick={() => useUi.getState().setPathEdit(null)}>{t.path.done}</button></div>}
         {followOn && selectedClip && selectedMedia && canvasRef.current && <FollowTool clip={selectedClip} media={selectedMedia} canvas={canvasRef.current} onClose={() => setFollowOn(false)} />}
         {original && hasClips && <div className="preview-source-badge">{t.preview.originalBadge}</div>}
         {panoClip && !pickColor && <div className="preview-badge">360° · ziehen = umschauen · Mausrad = zoomen</div>}
@@ -477,6 +484,7 @@ export function Preview(): React.ReactElement {
         <EffectPanel />
         <ImagePanel />
         <Model3DPanel />
+        <LayersPanel />
       </div>
       <MulticamStrip />
       <div className="transport">
@@ -495,6 +503,7 @@ export function Preview(): React.ReactElement {
         <button className={`btn sm${aiPanel ? ' active' : ''}`} title={t.ai.title} onClick={() => setAiPanel(!aiPanel)} style={{ fontWeight: 700 }}>✦ {t.ai.button}</button>
         <button className={`btn sm${modelPanel ? ' active' : ''}`} title={t.model3d.title} onClick={() => setModelPanel(modelPanel ? null : {})} style={{ fontWeight: 700 }}>🧊 {t.model3d.button}</button>
         {hasMulticam && <button className={`btn sm${multicamPanel ? ' active' : ''}`} title={t.multicam.title} onClick={() => setMulticamPanel(multicamPanel ? null : (groupAt(useUi.getState().playhead)?.id ?? Object.keys(multicamGroups ?? {})[0] ?? null))}>🎥 {t.multicam.button}</button>}
+        <button className={`btn sm${layersPanel ? ' active' : ''}`} title={t.layerPanel.title} onClick={() => useUi.getState().setLayersPanel(!layersPanel)}>🧅 {t.layerPanel.button}</button>
         <button className="btn sm" title={t.moves.markHint} onClick={markCameraHere}>◆ {t.moves.markShort}</button>
         <button className={`btn sm${followOn ? ' active' : ''}`} title={t.follow.hint} onClick={() => {
           if (!selectedClip || !selectedMedia || selectedMedia.type !== 'video') { useUi.getState().toast(t.follow.selectVideo, 'info'); return; }
@@ -527,7 +536,7 @@ export function Preview(): React.ReactElement {
           <div className="popover-title" style={{ marginTop: 4 }}>{t.view.panels}</div>
           <label className="toggle"><input type="checkbox" checked={view.leftWidth > 0} onChange={(e) => updateView({ leftWidth: e.target.checked ? 300 : 0 })} /> {t.view.showLibrary}</label>
           <label className="toggle"><input type="checkbox" checked={view.rightWidth > 0} onChange={(e) => updateView({ rightWidth: e.target.checked ? 300 : 0 })} /> {t.view.showInspector}</label>
-          <button className="btn sm" onClick={() => updateView({ leftWidth: 300, rightWidth: 300, timelineHeight: 300 })}>{t.view.resetLayout}</button>
+          <button className="btn sm" onClick={() => { updateView({ leftWidth: 300, rightWidth: 300, timelineHeight: 300 }); resetFloatingPanels(); }}>{t.view.resetLayout}</button>
         </Popover>
         <button className={`btn icon ghost${loop ? ' active' : ''}`} title={t.preview.loop} onClick={() => setLoop(!loop)}><IconLoop /></button>
         <span className="timecode dim">{formatTime(duration, settings.fps)}</span>
