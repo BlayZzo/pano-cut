@@ -1,3 +1,13 @@
+## PanoCut 0.9.4 – Fehlerbehebung 360°-Vorschau, bessere Naht
+
+**Installieren**
+- Mac mit Apple-Chip (M1–M4): `PanoCut-0.9.4-mac-arm64.dmg`
+- Mac mit Intel: `PanoCut-0.9.4-mac-x64.dmg`
+- Windows 10/11: `PanoCut-0.9.4-win-x64.exe`
+
+- **Behoben**: In 0.9.3 blieb die 360°-Vorschau von Rohvideos (Insta360) leer.
+- **Naht**: Keine Kanten mehr direkt unter und über der Kamera; Zusammensetzen beim Export startet schneller.
+
 ## PanoCut 0.9.3 – Insta360-Stabilisierung, Horizont, unsichtbarer Selfie-Stick
 
 **Installieren**

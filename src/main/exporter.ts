@@ -13,6 +13,7 @@ import { fontDef, panoMatrix, panoViewAt, stereographicVfov, titleAnimationAt, v
 import { availableEncoders, availableFilters, FfmpegError, probeFile, runFfmpeg } from './ffmpeg';
 import { reverseVideo } from './reverse';
 import { nadirChain, needsStitching, stitchChain } from './stitch';
+import { readSeamTrack, seamUsable, writeSeamMaps } from './seamFlow';
 import { escapeFilterPath, fontFamilyName, resolveFontFile } from './fonts';
 import { injectSphericalMetadata } from './spherical';
 import { maskChain, writeMaskList } from './objects';
@@ -44,6 +45,7 @@ interface Segment {
   maskInput?: number;        // Eingabe-Index der Maskensequenz (Freistellen)
   maskList?: string;
   cutSize?: { w: number; h: number };  // Bildgröße des freigestellten Clips vor dem Einrechnen der Maske
+  seamMap?: string;          // bewegte Naht: Verschiebungskarten (FFV1)
 }
 
 interface TransitionSeg {
@@ -123,6 +125,7 @@ export class ExportJob {
       if (total <= 0 || segments.length === 0) throw new Error('Die Timeline ist leer – es gibt nichts zu exportieren.');
       await this.prepareStabilization(segments);
       await this.prepareCutoutSizes(segments);
+      await this.prepareSeams(segments);
 
       const encoders = await availableEncoders();
       let hardware = this.options.hardware;
@@ -372,6 +375,30 @@ export class ExportJob {
 
   // ---------------------------------------------------------------- Filterketten
 
+  /** Breite des zusammengesetzten Panoramas: nur so groß, wie die Ausgabe braucht (z. B. Full-HD-Ausschnitt mit 100° → ~6900 statt 7680). */
+  private stitchWidth(seg: Segment): number {
+    const c = seg.clip, media = seg.media!;
+    let eqW = media.info.width;
+    if (c.pano?.mode === 'flat') eqW = Math.min(eqW, Math.ceil((this.options.width * 360) / Math.max(20, Math.min(...c.pano.keyframes.map((k) => k.fov))) * 1.1));
+    else if (c.pano?.mode === 'equirect') eqW = Math.min(eqW, this.options.width);
+    return Math.max(256, Math.round(eqW / 8) * 8);
+  }
+
+  /** Bewegte Naht: Verschiebungskarten je Abschnitt vorab schreiben. */
+  private async prepareSeams(segs: Segment[]): Promise<void> {
+    for (const s of segs) {
+      const m = s.media;
+      if (!m?.stitch || s.reversedFile || !needsStitching(m.stitch) || !seamUsable(m) || !this.filters.has('displace')) continue;
+      const track = readSeamTrack(m.seam!);
+      if (!track) continue;
+      this.onProgress({ phase: 'preparing', percent: 0, message: 'Naht vorbereiten …' });
+      const eqW = this.stitchWidth(s);
+      try {
+        s.seamMap = await writeSeamMaps(track, m.stitch, s.srcIn, s.srcDur, eqW, eqW / 2, /1[02]/.test(m.info.pixFmt ?? ''), this.tmpFile('seam.mkv'));
+      } catch (e) { log.warn('Naht-Karten fehlgeschlagen', (e as Error).message); }
+    }
+  }
+
   private inputLabel(seg: Segment, index: number): string {
     const two = seg.media?.stitch?.mode === 'dualfisheye-2streams' && needsStitching(seg.media.stitch) && !seg.reversedFile;
     return two ? `[${index}:v:0][${index}:v:1]` : `[${index}:v]`;
@@ -399,12 +426,8 @@ export class ExportJob {
     // 360°-Rohvideo zuerst zusammensetzen (bei zwei Streams muss hstack ganz vorn stehen)
     const stitched = needsStitching(media.stitch) && !seg.reversedFile;
     if (stitched && media.stitch) {
-      // Nur so groß zusammensetzen, wie die Ausgabe braucht (z. B. Full-HD-Ausschnitt mit 100° → ~6900 statt 7680 Pixel breit)
-      let eqW = media.info.width;
-      if (c.pano?.mode === 'flat') eqW = Math.min(eqW, Math.ceil((W * 360) / Math.max(20, Math.min(...c.pano.keyframes.map((k) => k.fov))) * 1.1));
-      else if (c.pano?.mode === 'equirect') eqW = Math.min(eqW, W);
-      eqW = Math.max(256, Math.round(eqW / 8) * 8);
-      chain.push(stitchChain(media.stitch, ['', ''], eqW, eqW / 2, /1[02]/.test(media.info.pixFmt ?? '')));
+      const eqW = this.stitchWidth(seg);
+      chain.push(stitchChain(media.stitch, ['', ''], eqW, eqW / 2, /1[02]/.test(media.info.pixFmt ?? ''), opts.forTransition ? undefined : seg.seamMap));
       if (c.nadir?.enabled) chain.push(nadirChain(eqW, eqW / 2, c.nadir.size, c.nadir.feather, /1[02]/.test(media.info.pixFmt ?? '')));
     } else if (c.nadir?.enabled && media.info.is360 && !needsStitching(media.stitch) && media.info.width % 2 === 0 && media.info.height % 2 === 0) {
       chain.push(nadirChain(media.info.width, media.info.height, c.nadir.size, c.nadir.feather, /1[02]/.test(media.info.pixFmt ?? '')));

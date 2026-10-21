@@ -65,6 +65,7 @@ export interface MediaItem {
   companion?: string;      // Kamera-Vorschaudatei (DJI .LRF, GoPro/Insta360 .LRV), dient als Vorschau-Datei
   companionSwap?: boolean;
   proxyStitchKey?: string;
+  seam?: { file: string; rate: number; start: number; frames: number; key: string; enabled: boolean };  // bewegte Naht (Versatz naher Dinge), gilt für stitchKey = key
   imu?: { file: string; rate: number; start: number; score: number; model: string };  // eingemessene Bewegungsdaten (Lage-Spur) // 360°: mit welchen Zusammensetz-Einstellungen die Vorschau-Datei erstellt wurde // 360°: Linsen in der Kamera-Vorschaudatei andersherum als im Original
   proxyReversed?: string;  // rückwärts laufende Vorschau-Datei
   waveform?: string;       // Wellenform-Bild (Audio)

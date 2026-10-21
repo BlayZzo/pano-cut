@@ -58,21 +58,26 @@ export function lensModel(stitch: StitchSettings, i: 0 | 1): LensModel {
   return { matrix, euler: eulerFromMatrix(matrix), ihFov: (stitch.fov * crop.w) / r, crop, gain: cal.gain };
 }
 
-/** Bis zu welchem Längengrad (vom Linsen-Mittelpunkt) jede Linse benutzt wird (Grad) – Naht + 2° Rand. */
+/** Bis zu welchem Längengrad (vom Linsen-Mittelpunkt) jede Linse benutzt wird (Grad) – Naht + Rand (auch für die bewegte Naht). */
 export function coverHalf(stitch: StitchSettings): number {
-  return 90 + blendWidth(stitch) / 2 + 2;
+  return 90 + blendWidth(stitch) / 2 + 6;
 }
+
+/** Breite (Grad), über die eine Linse an ihrer Längengrad-Grenze ausgeblendet wird (keine Kanten an Zenit/Nadir). */
+export const COVER_FADE = 3;
 
 /** Gewicht der vorderen Linse (0..1) für eine Blickrichtung `u` NACH der Grund-Ausrichtung (wie Shader und geq). */
 export function frontWeight(u: [number, number, number], blend: number, cover: number): number {
   const uz = u[2];
   const lon = Math.abs((Math.atan2(u[0], u[2]) * 180) / Math.PI);
-  if (lon > cover) return 0;
-  if (lon < 180 - cover) return 1;
   const s = (Math.asin(Math.max(-1, Math.min(1, uz))) * 180) / Math.PI;
-  if (blend <= 0) return uz >= 0 ? 1 : 0;
-  const x = Math.max(0, Math.min(1, (s + blend / 2) / blend));
-  return x * x * (3 - 2 * x);
+  let x = blend <= 0 ? (uz >= 0 ? 1 : 0) : Math.max(0, Math.min(1, (s + blend / 2) / blend));
+  x = x * x * (3 - 2 * x);
+  // Grenzen der Linsen weich (vorne gültig bis lon < cover, hinten ab lon > 180 − cover)
+  const wf = Math.max(0, Math.min(1, (cover - lon) / COVER_FADE));
+  const wb = Math.max(0, Math.min(1, (lon - (180 - cover)) / COVER_FADE));
+  const a = x * wf, b = (1 - x) * wb;
+  return a + b > 0 ? a / (a + b) : (lon < 90 ? 1 : 0);
 }
 
 /** Wo im Linsenbild (0..1, bezogen aufs ganze Linsenbild) liegt die Richtung `v`? null = außerhalb. */

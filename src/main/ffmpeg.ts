@@ -268,3 +268,39 @@ export function pipeFfmpeg(args: string[]): FfmpegPipe {
     kill: () => { try { child.kill('SIGKILL'); } catch { /* ignorieren */ } },
   };
 }
+
+/**
+ * FFmpeg-Ausgabe Bild für Bild lesen (rawvideo auf stdout); `onFrame` darf async sein (Gegendruck über pause/resume).
+ */
+export function streamFrames(args: string[], frameBytes: number, onFrame: (data: Uint8Array, index: number) => void | Promise<void>, lowPriority = true): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const fullArgs = ['-hide_banner', '-nostdin', ...args];
+    log.debug('ffmpeg (frames)', fullArgs.join(' '));
+    const child = spawn(getFfmpegPath(), fullArgs, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    active.add(child);
+    if (lowPriority) { try { require('node:os').setPriority(child.pid!, 10); } catch { /* egal */ } }
+    let stderr = '';
+    child.stderr?.on('data', (d: Buffer) => { stderr += d.toString(); if (stderr.length > 20000) stderr = stderr.slice(-10000); });
+    let pending: Buffer = Buffer.alloc(0);
+    let index = 0;
+    let busy: Promise<void> = Promise.resolve();
+    child.stdout!.on('data', (d: Buffer) => {
+      pending = pending.length ? Buffer.concat([pending, d]) : d;
+      while (pending.length >= frameBytes) {
+        const frame = new Uint8Array(pending.subarray(0, frameBytes));
+        pending = pending.subarray(frameBytes);
+        const i = index++;
+        child.stdout!.pause();
+        busy = busy.then(() => onFrame(frame, i)).finally(() => child.stdout!.resume());
+      }
+    });
+    child.on('error', (e) => { active.delete(child); reject(e); });
+    child.on('close', (code) => {
+      active.delete(child);
+      busy.then(() => {
+        if (code === 0) resolve(index);
+        else reject(new FfmpegError(`FFmpeg-Fehler (Code ${code}):\n${stderr.split('\n').slice(-6).join('\n')}`, stderr, code));
+      }, reject);
+    });
+  });
+}

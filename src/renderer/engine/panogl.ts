@@ -1,38 +1,14 @@
 // WebGL-Renderer für 360°-Videos: Equirectangular → flache Ansicht / gedrehtes Panorama / Little Planet.
 // Die Mathematik entspricht FFmpegs v360-Filter, damit Vorschau und Export übereinstimmen.
 import type { PanoMode, StitchSettings } from '@shared/types';
-import { blendWidth, coverHalf, lensModel, mul3 } from '@shared/stitchModel';
+import { blendWidth, COVER_FADE, coverHalf, lensModel, mul3 } from '@shared/stitchModel';
+import { SEAM_BINS, SEAM_MAX, seamTaper } from '@shared/seamFlow';
 import { panoMatrix, verticalFov } from '@shared/pano';
 import type { PanoView } from '@shared/pano';
 
 const VERT = `
 attribute vec2 aPos;
 varying vec2 vUv;
-// Zwei Fischaugen → Farbe für Richtung v (Panorama-Koordinaten)
-vec3 stitchAt(vec3 v) {
-  vec4 c0 = fish(uL0 * v, uRect0, uK0);
-  vec4 c1 = fish(uL1 * v, uRect1, uK1);
-  vec3 gu = uG * v;
-  float uz = gu.z;
-  float lonu = abs(degrees(atan(gu.x, gu.z)));
-  float w;
-  if (lonu > uCover) w = 0.0;
-  else if (lonu < 180.0 - uCover) w = 1.0;
-  else if (uBlend <= 0.0) w = uz >= 0.0 ? 1.0 : 0.0;
-  else {
-    float x = clamp((degrees(asin(clamp(uz, -1.0, 1.0))) + uBlend * 0.5) / uBlend, 0.0, 1.0);
-    w = x * x * (3.0 - 2.0 * x);
-  }
-  if (c1.a < 0.5) w = 0.0;
-  if (c0.a < 0.5) w = 1.0;
-  return mix(c0.rgb * uGain0, c1.rgb * uGain1, w);
-}
-// Equirectangular → Farbe für Richtung v
-vec3 equiAt(vec3 v) {
-  float lon = atan(v.x, v.z) / PI;
-  float lat = asin(clamp(v.y, -1.0, 1.0)) / (PI * 0.5);
-  return texture2D(uTex, vec2((lon + 1.0) * 0.5, (lat + 1.0) * 0.5)).rgb;
-}
 void main() {
   vUv = vec2((aPos.x + 1.0) * 0.5, (1.0 - aPos.y) * 0.5);
   gl_Position = vec4(aPos, 0.0, 1.0);
@@ -56,6 +32,8 @@ uniform vec3 uGain0;
 uniform vec3 uGain1;
 uniform float uBlend;   // Breite der weichen Naht (Grad)
 uniform float uCover;   // Linse wird bis zu diesem Längengrad benutzt (Grad)
+uniform sampler2D uDisp; // bewegte Naht: Versatz je Nahtstelle (SEAM_BINS × 1, Byte → ±SEAM_MAX°)
+uniform vec3 uSeam;       // an (1/0), t0, t1 (Grad)
 uniform vec2 uNadir;    // unten ausblenden: ab Breite x (Grad), weicher Rand y (Grad); x ≥ 90 = aus
 varying vec2 vUv;
 const float PI = 3.141592653589793;
@@ -67,6 +45,41 @@ vec4 fish(vec3 d, vec4 rect, float k) {
   vec2 f = d.xy / lh * phi * k;
   if (abs(f.x) >= 0.5 || abs(f.y) >= 0.5) return vec4(0.0);
   return vec4(texture2D(uTex, rect.xy + (f + 0.5) * rect.zw).rgb, 1.0);
+}
+// Zwei Fischaugen → Farbe für Richtung v (Panorama-Koordinaten)
+vec3 seamShift(vec3 gu, float sgn) {
+  // bewegte Naht (shared/seamFlow.ts shiftedDir): quer zur Naht um ±Versatz/2 verschieben, weich auslaufend
+  float s = asin(clamp(gu.z, -1.0, 1.0));
+  float x = clamp((uSeam.z - abs(degrees(s))) / (uSeam.z - uSeam.y), 0.0, 1.0);
+  float tp = x * x * (3.0 - 2.0 * x);
+  float a = atan(gu.y, gu.x);
+  float d = (texture2D(uDisp, vec2(a / (2.0 * PI) + 0.5, 0.5)).r * 2.0 - 1.0) * ${SEAM_MAX.toFixed(1)};
+  float s2 = s + sgn * 0.5 * radians(d) * tp;
+  return vec3(cos(s2) * cos(a), cos(s2) * sin(a), sin(s2)) * uG;
+}
+vec3 stitchAt(vec3 v) {
+  vec3 v0 = v, v1 = v;
+  if (uSeam.x > 0.5) { vec3 g = uG * v; v0 = seamShift(g, -1.0); v1 = seamShift(g, 1.0); }
+  vec4 c0 = fish(uL0 * v0, uRect0, uK0);
+  vec4 c1 = fish(uL1 * v1, uRect1, uK1);
+  vec3 gu = uG * v;
+  float uz = gu.z;
+  float lonu = abs(degrees(atan(gu.x, gu.z)));
+  // wie frontWeight (stitchModel.ts): Naht weich, Linsen-Grenzen weich
+  float x = uBlend <= 0.0 ? (uz >= 0.0 ? 1.0 : 0.0) : clamp((degrees(asin(clamp(uz, -1.0, 1.0))) + uBlend * 0.5) / uBlend, 0.0, 1.0);
+  x = x * x * (3.0 - 2.0 * x);
+  float wa = x * clamp((uCover - lonu) / ${COVER_FADE.toFixed(1)}, 0.0, 1.0);
+  float wb = (1.0 - x) * clamp((lonu - (180.0 - uCover)) / ${COVER_FADE.toFixed(1)}, 0.0, 1.0);
+  float w = wa + wb > 0.0 ? wa / (wa + wb) : (lonu < 90.0 ? 1.0 : 0.0);
+  if (c1.a < 0.5) w = 0.0;
+  if (c0.a < 0.5) w = 1.0;
+  return mix(c0.rgb * uGain0, c1.rgb * uGain1, w);
+}
+// Equirectangular → Farbe für Richtung v
+vec3 equiAt(vec3 v) {
+  float lon = atan(v.x, v.z) / PI;
+  float lat = asin(clamp(v.y, -1.0, 1.0)) / (PI * 0.5);
+  return texture2D(uTex, vec2((lon + 1.0) * 0.5, (lat + 1.0) * 0.5)).rgb;
 }
 void main() {
   vec2 p = vUv * 2.0 - 1.0;
@@ -111,7 +124,7 @@ void main() {
 }`;
 
 /** Rohvideo mit zwei Fischaugen nebeneinander: Zusammensetz-Einstellungen; `swap` = Bildhälften andersherum. */
-export interface FisheyeInput { stitch: StitchSettings; swap?: boolean }
+export interface FisheyeInput { stitch: StitchSettings; swap?: boolean; disp?: Uint8Array }
 
 export class PanoGL {
   readonly canvas: HTMLCanvasElement;
@@ -124,6 +137,7 @@ export class PanoGL {
   private u: Record<string, WebGLUniformLocation | null> = {};
   private lastSource: unknown = null;
   private lastSourceTime = -1;
+  private dispTex: WebGLTexture | null = null;
 
   constructor() {
     this.canvas = document.createElement('canvas');
@@ -172,8 +186,19 @@ export class PanoGL {
     this.uRot = gl.getUniformLocation(prog, 'uRot');
     this.uRange = gl.getUniformLocation(prog, 'uRange');
     this.uMode = gl.getUniformLocation(prog, 'uMode');
-    for (const n of ['uInput', 'uL0', 'uL1', 'uG', 'uRect0', 'uRect1', 'uK0', 'uK1', 'uGain0', 'uGain1', 'uBlend', 'uCover', 'uNadir']) this.u[n] = gl.getUniformLocation(prog, n);
+    for (const n of ['uInput', 'uL0', 'uL1', 'uG', 'uRect0', 'uRect1', 'uK0', 'uK1', 'uGain0', 'uGain1', 'uBlend', 'uCover', 'uNadir', 'uSeam']) this.u[n] = gl.getUniformLocation(prog, n);
     gl.uniform1i(gl.getUniformLocation(prog, 'uTex'), 0);
+    gl.uniform1i(gl.getUniformLocation(prog, 'uDisp'), 1);
+    this.dispTex = gl.createTexture();
+    gl.activeTexture(gl.TEXTURE1);
+    gl.bindTexture(gl.TEXTURE_2D, this.dispTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.REPEAT);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+    gl.pixelStorei(gl.UNPACK_ALIGNMENT, 1);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, SEAM_BINS, 1, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, new Uint8Array(SEAM_BINS).fill(128));
+    gl.activeTexture(gl.TEXTURE0);
     this.program = prog;
   }
 
@@ -233,6 +258,14 @@ export class PanoGL {
       gl.uniformMatrix3fv(this.u.uG, false, col(panoMatrix(st.yaw, st.pitch, st.roll)));
       gl.uniform1f(this.u.uBlend, blendWidth(st));
       gl.uniform1f(this.u.uCover, coverHalf(st));
+      if (fisheye.disp) {
+        const { t0, t1 } = seamTaper(st);
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, this.dispTex);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, SEAM_BINS, 1, gl.LUMINANCE, gl.UNSIGNED_BYTE, fisheye.disp);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.uniform3f(this.u.uSeam, 1, t0, t1);
+      } else gl.uniform3f(this.u.uSeam, 0, 1, 2);
     }
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
     return this.canvas;

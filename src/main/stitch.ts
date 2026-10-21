@@ -1,5 +1,7 @@
 import type { StitchSettings } from '@shared/types';
-import { blendWidth, coverHalf, eulerFromMatrix, lensModel, mul3 } from '@shared/stitchModel';
+import { blendWidth, COVER_FADE, coverHalf, eulerFromMatrix, lensModel, mul3 } from '@shared/stitchModel';
+import { escapeFilterPath } from './fonts';
+import { MAP_H, MAP_W } from './seamFlow';
 import { panoMatrix } from '@shared/pano';
 
 let labelSeq = 0;
@@ -14,8 +16,8 @@ function advanced(stitch: StitchSettings): boolean {
  * `inputs` sind die Eingangs-Labels (ein Label bei Side-by-Side, zwei bei zwei Streams).
  * Rückgabe ist die Filterkette OHNE Ausgangs-Label.
  */
-export function stitchChain(stitch: StitchSettings, inputs: string[], outW?: number, outH?: number, deep = false): string {
-  if (stitch.mode !== 'equirect' && outW && outH && advanced(stitch)) return lensStitchChain(stitch, inputs, outW, outH, deep);
+export function stitchChain(stitch: StitchSettings, inputs: string[], outW?: number, outH?: number, deep = false, seamMap?: string): string {
+  if (stitch.mode !== 'equirect' && outW && outH && (advanced(stitch) || seamMap)) return lensStitchChain(stitch, inputs, outW, outH, deep, seamMap);
   const size = outW && outH ? `:w=${outW}:h=${outH}` : '';
   const rot = `:yaw=${f(stitch.yaw)}:pitch=${f(stitch.pitch)}:roll=${f(stitch.roll)}`;
   const fov = `:ih_fov=${f(stitch.fov)}:iv_fov=${f(stitch.fov)}`;
@@ -38,7 +40,7 @@ export function stitchChain(stitch: StitchSettings, inputs: string[], outW?: num
  * (Mittelpunkt per Zuschnitt, eigenes Sichtfeld und Drehung, Farbe), dann weiche Naht per maskedmerge.
  * Die Maske ist EIN Bild (einmal per geq berechnet); maskedmerge wiederholt das letzte Maskenbild von selbst.
  */
-function lensStitchChain(stitch: StitchSettings, inputs: string[], W: number, H: number, deep: boolean): string {
+function lensStitchChain(stitch: StitchSettings, inputs: string[], W: number, H: number, deep: boolean, seamMap?: string): string {
   const id = `st${++labelSeq}`;
   const two = stitch.mode === 'dualfisheye-2streams';
   const head = two ? `${inputs[0]}${inputs[1]}hstack,` : `${inputs[0]}`;
@@ -76,22 +78,35 @@ function lensStitchChain(stitch: StitchSettings, inputs: string[], W: number, H:
   const ux = `(${f(g[0], 8)}*cos(ld(1))*sin(ld(0))+${f(g[1], 8)}*sin(ld(1))+${f(g[2], 8)}*cos(ld(1))*cos(ld(0)))`;
   const uz = `(${f(g[6], 8)}*cos(ld(1))*sin(ld(0))+${f(g[7], 8)}*sin(ld(1))+${f(g[8], 8)}*cos(ld(1))*cos(ld(0)))`;
   const seam = B > 0
-    ? `st(2,clip((asin(${uz})*180/PI+${f(B / 2, 4)})/${f(B, 4)},0,1));ld(2)*ld(2)*(3-2*ld(2))`
-    : `gte(${uz},0)`;
-  const expr = `st(0,((2*X+1)/W-1)*PI);st(1,((2*Y+1)/H-1)*PI/2);st(3,abs(atan2(${ux},${uz}))*180/PI);`
-    + `if(gt(ld(3),${f(cover, 4)}),0,if(lt(ld(3),${f(180 - cover, 4)}),1,${seam}))*${max}`;
-  const mask = `color=c=black:s=${W}x${H}:r=1:d=1,format=${fmt},geq=lum='${expr}':cb='${expr}':cr='${expr}'[${id}m];`;
+    ? `st(2,clip((asin(${uz})*180/PI+${f(B / 2, 4)})/${f(B, 4)},0,1));st(2,ld(2)*ld(2)*(3-2*ld(2)))`
+    : `st(2,gte(${uz},0))`;
+  // wie frontWeight: Naht weich, Linsen-Grenzen (Längengrad) weich ausgeblendet
+  const expr = `st(0,((2*X+1)/W-1)*PI);st(1,((2*Y+1)/H-1)*PI/2);st(3,abs(atan2(${ux},${uz}))*180/PI);${seam};`
+    + `st(4,ld(2)*clip((${f(cover, 4)}-ld(3))/${COVER_FADE},0,1));st(5,(1-ld(2))*clip((ld(3)-${f(180 - cover, 4)})/${COVER_FADE},0,1));`
+    + `if(gt(ld(4)+ld(5),0),ld(4)/(ld(4)+ld(5)),lt(ld(3),90))*${max}`;
+  // Maske in Viertel-Größe rechnen (geq ist langsam) und weich hochskalieren
+  const mw = Math.max(64, Math.round(W / 8) * 2), mh = Math.max(32, Math.round(H / 8) * 2);
+  const mask = `color=c=black:s=${mw}x${mh}:r=1:d=1,format=${fmt},geq=lum='${expr}':cb='${expr}':cr='${expr}',scale=${W}:${H}:flags=bilinear[${id}m];`;
+  // Bewegte Naht: beide Linsen per displace zueinander verschieben (Karten aus seamFlow.writeSeamMaps)
+  const disp = (e: string) => {
+    if (!seamMap) return '';
+    const sc = `scale=${W}:${H}:flags=bilinear`;
+    return `movie='${escapeFilterPath(seamMap)}',format=${fmt},split=4[${id}k0][${id}k1][${id}k2][${id}k3];`
+      + [0, 1, 2, 3].map((k) => `[${id}k${k}]crop=${MAP_W}:${MAP_H}:0:${k * MAP_H},${sc}[${id}q${k}];`).join('')
+      + `[${e}0][${id}q0][${id}q1]displace=edge=smear[${e}0d];[${e}1][${id}q2][${id}q3]displace=edge=smear[${e}1d];`;
+  };
+  const merge = (e: string) => seamMap ? `${disp(e)}[${e}0d][${e}1d][${id}m]maskedmerge` : `[${e}0][${e}1][${id}m]maskedmerge`;
   if (!partial) {
     return `${head}format=${fmt},split=2[${id}a][${id}b];`
       + `[${id}a]${lens(0)}[${id}e0];[${id}b]${lens(1)}[${id}e1];` + mask
-      + `[${id}e0][${id}e1][${id}m]maskedmerge`;
+      + merge(`${id}e`);
   }
   const hw = wp / 2;
   return `${head}format=${fmt},split=2[${id}a][${id}b];`
     + `[${id}a]${lens(0)},split=2[${id}p][${id}q];`
     + `[${id}p]crop=${hw}:${H}:${hw}:0,pad=${W - hw}:${H}:0:0:black[${id}r];[${id}q]crop=${hw}:${H}:0:0[${id}l];[${id}r][${id}l]hstack[${id}e0];`
     + `[${id}b]${lens(1)},pad=${W}:${H}:${(W - wp) / 2}:0:black[${id}e1];` + mask
-    + `[${id}e0][${id}e1][${id}m]maskedmerge`;
+    + merge(`${id}e`);
 }
 
 /**
