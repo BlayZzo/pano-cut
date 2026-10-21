@@ -145,4 +145,10 @@ Kontaktschatten (PNG, multiply). Leuchtspuren `fx.trailsMode` all/lights/marked 
 blend lighten, markiert × Maskenfilm `main/lightMask.ts` in Bildkoordinaten, Größe per 1-Bild-Messung). Titel: `titleAnimationAt` ↔
 `titleAnimExpr` (drawtext fontsize/x/y/alpha-Ausdrücke), `animationOut`, `glow`, `outlineColor`, neue Schriften. UHD = Original + `previewQuality: 'uhd'`.
 0.10.1: `motion.blur` → `animBlurFrames` (Vorschau: letzte N Lagen per 'lighter' auf Hilfs-Canvas gemittelt ↔ Export `tmix` nach perspective).
+0.11.0: Masken-Editor `components/MaskEditor.tsx` (ui.maskEditor; Pinsel/Radierer/Lasso/Punkte/KI/Hand, Zoom, Ansichten; speichert ObjectTrack
+`keys` = bearbeitete Stellen + `masks`, `space` 'source'|'equirect', `maskSize`). Hauptprozess `main/maskTrack.ts` (Bilder in Masken-Auflösung,
+360° = gestitchtes Equirect 2048×1024; `trackMask`: Lucas-Kanade `shared/flow.ts` + MobileSAM `main/sam.ts` je Bild, Rahmen + innere Punkte,
+Ausschnitt um das Objekt, bei 360° über die Kante). MobileSAM-Modelle gespiegelt im Release `models-1` (Workflow models.yml).
+Equirect-Masken: Vorschau = panogl `uMask` (Alpha in der 360-Ansicht), Export = alphamerge VOR der Ansicht + Alpha an der Farbe vorbei.
+`writeMaskList`: jede Maske gilt bis zur Mitte zur nächsten (= maskAt). UI-Test öffnet den Editor und malt einen Strich.
 Ansicht/Layout: `ViewSettings` (`settings.view`, `useView`/`updateView`), `Splitter.tsx`, `Popover.tsx`.

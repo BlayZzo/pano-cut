@@ -1,3 +1,20 @@
+## PanoCut 0.11.0 – Neuer Masken-Editor mit KI und Verfolgen
+
+**Installieren**
+- Mac mit Apple-Chip (M1–M4): `PanoCut-0.11.0-mac-arm64.dmg`
+- Mac mit Intel: `PanoCut-0.11.0-mac-x64.dmg`
+- Windows 10/11: `PanoCut-0.11.0-win-x64.exe`
+
+**✏️ Masken-Editor** (Inspektor → Masken → „Masken-Editor öffnen“): eigener Bearbeitungs-Bildschirm wie in Photoshop.
+- Werkzeuge: 🤖 KI (aufs Objekt klicken oder Rahmen ziehen – genaue Kanten, mit Alt-Klick Bereiche ausnehmen), 🖌 Pinsel und 🩹 Radierer (Größe, Härte), ➰ Lasso (danach Punkte verschiebbar), 📍 Punkte-Werkzeug (einzelne Punkte setzen, verschieben, einfügen, löschen), ✋ Hand.
+- Zoom mit dem Mausrad bis ganz nah, Verschieben mit Leertaste/Hand, Maske pink, lila oder türkis durchsichtig – oder als Schwarzweiß-Maske bzw. freigestellt ansehen. Rückgängig mit ⌘Z.
+- **🎯 Verfolgen**: Die Maske läuft mit dem Objekt durch den Clip – vorwärts, rückwärts, bis zum Ende oder bis zu einer Zeit. Im KI-Modus wird die Form Bild für Bild neu angepasst (Arme, Beine). An jeder Stelle nachkorrigieren und von dort weiter verfolgen.
+- Feinjustieren: weiche Kante, Kante wachsen/schrumpfen, umkehren.
+- **360°**: Die Maske gilt für das ganze Rundum-Bild – Kamerafahrten und Blickrichtung lassen sich danach noch ändern.
+- Verwenden als: Objekt freistellen, Objekt entfernen oder als eigene Ebene nach vorne (z. B. Text dahinter).
+
+Die KI (MobileSAM, 44 MB) wird beim ersten Benutzen einmal heruntergeladen.
+
 ## PanoCut 0.10.1 – Bewegungsunschärfe für Animationen
 
 **Installieren**
