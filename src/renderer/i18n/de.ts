@@ -1170,6 +1170,7 @@ export const de = {
     hint: 'So fährt der Clip eine Strecke ab: Abspielkopf an den Anfang setzen und ins Bild klicken (Start), weiter vorspulen und wieder klicken (Zwischenpunkte, Ende).',
     curve: 'Weiche Kurve durch alle Punkte',
     smooth: 'Sanft anfahren und abbremsen',
+    blur: 'Bewegungsunschärfe',
     even: '⏱ Gleichmäßiges Tempo',
     evenHint: 'Verteilt die Zeiten so, dass der Clip überall gleich schnell fährt.',
     reverse: '⇄ Umdrehen',

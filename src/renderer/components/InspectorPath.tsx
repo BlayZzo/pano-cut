@@ -4,7 +4,7 @@ import type { Clip, Motion } from '@shared/types';
 import { setDirty, useProject } from '../store/project';
 import { useUi } from '../store/ui';
 import { fmt, t } from '../i18n/de';
-import { Section, Toggle } from './InspectorBits';
+import { Section, Slider, Toggle } from './InspectorBits';
 import { emptyMotion } from './PathOverlay';
 
 /** Zeiten so verteilen, dass die Strecke überall gleich schnell abgefahren wird (gleiche Anfangs-/Endzeit). */
@@ -36,6 +36,7 @@ export function InspectorPath({ clip }: { clip: Clip }): React.ReactElement {
       }}>{editing ? t.path.done : t.path.edit}</button>
       <Toggle label={t.path.curve} checked={m.curve !== false} onChange={(v) => write({ ...m, curve: v })} />
       <Toggle label={t.path.smooth} checked={m.smooth} onChange={(v) => write({ ...m, smooth: v })} />
+      <Slider label={t.path.blur} value={m.blur ?? 0} min={0} max={1} step={0.05} display={(v) => `${Math.round(v * 100)} %`} onChange={(v) => write({ ...m, blur: v })} />
       <div className="field-row" style={{ flexWrap: 'wrap', gap: 4 }}>
         <button className="btn sm" title={t.path.evenHint} disabled={n < 3} onClick={() => write(evenPathTiming(m))}>{t.path.even}</button>
         <button className="btn sm" disabled={n < 2} onClick={() => {

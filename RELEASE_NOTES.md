@@ -1,3 +1,12 @@
+## PanoCut 0.10.1 – Bewegungsunschärfe für Animationen
+
+**Installieren**
+- Mac mit Apple-Chip (M1–M4): `PanoCut-0.10.1-mac-arm64.dmg`
+- Mac mit Intel: `PanoCut-0.10.1-mac-x64.dmg`
+- Windows 10/11: `PanoCut-0.10.1-win-x64.exe`
+
+- **Bewegungsunschärfe für Animationen** (Inspektor → 🛤 Bewegungspfad): Was sich schnell bewegt, verwischt – in Vorschau und Export. Das „Herabfallen“ nutzt sie automatisch, dadurch wirkt der Fall echter.
+
 ## PanoCut 0.10.0 – Naht wie Insta360 Studio, Beat-Marker, Bewegungspfade, Ebenen, Carporn, Lichtspuren
 
 **Installieren**

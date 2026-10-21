@@ -304,7 +304,8 @@ export async function dropObjectIn(clipId: string, opts: DropInOptions, onProgre
   if (impact !== null && opts.shake) kfs = combineKeyframes(kfs, shakeKeyframes(impact, shakeStrength, dur));
   const scene = impact !== null ? sceneClipBelow(clip.trackId, clip.start + impact) : null;
   beginTransaction();
-  useProject.getState().updateClip(clip.id, { motion: { preset: opts.style, intensity: opts.strength, smooth: false, keyframes: kfs } });
+  // Bewegungsunschärfe: beim schnellen Fall verwischt das Objekt, liegt es, ist es wieder scharf
+  useProject.getState().updateClip(clip.id, { motion: { preset: opts.style, intensity: opts.strength, smooth: false, keyframes: kfs, blur: 0.6 } });
   if (scene && opts.shake && impact !== null) shakeScene(scene, clip.start + impact + 0.02, shakeStrength);
   endTransaction();
   // Kontaktschatten am Boden: wird dunkler und schärfer, je näher das Objekt kommt

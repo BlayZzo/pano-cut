@@ -11,7 +11,7 @@ import { SEAM_BINS, seamAt, type SeamTrack } from '@shared/seamFlow';
 import { circleMask, lightKey, lightKeyParams, lightsAt } from '@shared/lights';
 import { sharedChromaGL } from './chromagl';
 import { sharedColorGL } from './colorgl';
-import { motionAt } from '@shared/effects';
+import { animBlurFrames, hasGeometryMotion, motionAt } from '@shared/effects';
 import { drawStyledText, drawSubtitleView } from './text';
 import { DEFAULT_TRANSLATION_COLOR, charsPerLine, subtitleViewAt } from '@shared/subtitles';
 import { blendDef, hasShadow, shadowPixels } from '@shared/layers';
@@ -469,6 +469,7 @@ export class PlaybackEngine {
   }
 
   // ---- Stabilisierung (Bewegungsdaten) ----
+  private blurCanvas: HTMLCanvasElement | null = null;
   private imuTracks = new Map<string, ImuTrack | 'loading'>();
   private imuTargets = new Map<string, ImuTrack>();
   /** Gegendrehung für einen 360°-Clip zur Dateizeit `fileT` (oder null, wenn aus/noch nicht geladen). */
@@ -773,6 +774,46 @@ export class PlaybackEngine {
 
     const tr = clip.transform;
     const mo = motionAt(clip.motion, localT);
+    // Bild mit Lage/Größe/Drehung an die Zielfläche zeichnen
+    const paint = (g: CanvasRenderingContext2D, m: { x: number; y: number; scale: number; rotation: number }) => {
+      g.translate(W / 2 + ((tr.x + m.x) / 100) * W + (extra.dx ?? 0), H / 2 + ((tr.y + m.y) / 100) * H + (extra.dy ?? 0));
+      g.rotate(((tr.rotation + m.rotation) * Math.PI) / 180);
+      const sc = Math.max(0.01, tr.scale * m.scale);
+      if (reframed && !cgl.available) {
+        // ohne WebGL: Ausschnitt direkt beim Zeichnen
+        g.drawImage(source, crop!.x * vw, crop!.y * vh, crop!.w * vw, crop!.h * vh, (-W * sc) / 2, (-H * sc) / 2, W * sc, H * sc);
+      } else if (reframed) {
+        g.drawImage(source, (-W * sc) / 2, (-H * sc) / 2, W * sc, H * sc);
+      } else if (clip.fit === 'cover') {
+        const s = Math.max(W / vw, H / vh);
+        const sw = W / s, sh = H / s;
+        g.drawImage(source, (vw - sw) / 2, (vh - sh) / 2, sw, sh, (-W * sc) / 2, (-H * sc) / 2, W * sc, H * sc);
+      } else if (clip.fit === 'stretch') {
+        g.drawImage(source, (-W * sc) / 2, (-H * sc) / 2, W * sc, H * sc);
+      } else {
+        const s = Math.min(W / vw, H / vh) * sc;
+        const dw = vw * s, dh = vh * s;
+        g.drawImage(source, -dw / 2, -dh / 2, dw, dh);
+      }
+    };
+    // Bewegungsunschärfe der Animation: die letzten N Bilder gemittelt (wie tmix nach perspective im Export)
+    const blurN = animBlurFrames(clip.motion);
+    let layer: HTMLCanvasElement | null = null;
+    if (blurN > 1 && hasGeometryMotion(clip.motion)) {
+      const fps = this.project.settings.fps || 30;
+      if (!this.blurCanvas || this.blurCanvas.width !== W || this.blurCanvas.height !== H) { this.blurCanvas = document.createElement('canvas'); this.blurCanvas.width = W; this.blurCanvas.height = H; }
+      layer = this.blurCanvas;
+      const g = layer.getContext('2d')!;
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.globalCompositeOperation = 'copy'; g.globalAlpha = 0; g.fillRect(0, 0, W, H);
+      g.globalCompositeOperation = 'lighter';
+      for (let k = 0; k < blurN; k++) {
+        g.save();
+        g.globalAlpha = 1 / blurN;
+        paint(g, motionAt(clip.motion, Math.max(0, localT - k / fps)));
+        g.restore();
+      }
+    }
     ctx.save();
     if (extra.clipPath) extra.clipPath(ctx);
     ctx.globalAlpha = clamp(clip.opacity * mo.opacity, 0, 1) * (extra.alpha ?? 1);
@@ -787,25 +828,8 @@ export class PlaybackEngine {
     }
     // Weichzeichnen (gleiche Stärke relativ zur Bildhöhe wie im Export)
     ctx.filter = clip.fx && clip.fx.blur > 0.01 ? `blur(${clip.fx.blur * 0.02 * H}px)` : 'none';
-    ctx.translate(W / 2 + ((tr.x + mo.x) / 100) * W + (extra.dx ?? 0), H / 2 + ((tr.y + mo.y) / 100) * H + (extra.dy ?? 0));
-    ctx.rotate(((tr.rotation + mo.rotation) * Math.PI) / 180);
-    const sc = Math.max(0.01, tr.scale * mo.scale);
-    if (reframed && !cgl.available) {
-      // ohne WebGL: Ausschnitt direkt beim Zeichnen
-      ctx.drawImage(source, crop!.x * vw, crop!.y * vh, crop!.w * vw, crop!.h * vh, (-W * sc) / 2, (-H * sc) / 2, W * sc, H * sc);
-    } else if (reframed) {
-      ctx.drawImage(source, (-W * sc) / 2, (-H * sc) / 2, W * sc, H * sc);
-    } else if (clip.fit === 'cover') {
-      const s = Math.max(W / vw, H / vh);
-      const sw = W / s, sh = H / s;
-      ctx.drawImage(source, (vw - sw) / 2, (vh - sh) / 2, sw, sh, (-W * sc) / 2, (-H * sc) / 2, W * sc, H * sc);
-    } else if (clip.fit === 'stretch') {
-      ctx.drawImage(source, (-W * sc) / 2, (-H * sc) / 2, W * sc, H * sc);
-    } else {
-      const s = Math.min(W / vw, H / vh) * sc;
-      const dw = vw * s, dh = vh * s;
-      ctx.drawImage(source, -dw / 2, -dh / 2, dw, dh);
-    }
+    if (layer) ctx.drawImage(layer, 0, 0);
+    else paint(ctx, mo);
     ctx.restore();
   }
 

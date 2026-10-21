@@ -144,4 +144,5 @@ Carporn `renderer/tools/carporn.ts`, Kino-Balken `settings.letterbox` (Engine fi
 Kontaktschatten (PNG, multiply). Leuchtspuren `fx.trailsMode` all/lights/marked (`shared/lights.ts` lightKey, `trackLights`; Export lutrgb +
 blend lighten, markiert × Maskenfilm `main/lightMask.ts` in Bildkoordinaten, Größe per 1-Bild-Messung). Titel: `titleAnimationAt` ↔
 `titleAnimExpr` (drawtext fontsize/x/y/alpha-Ausdrücke), `animationOut`, `glow`, `outlineColor`, neue Schriften. UHD = Original + `previewQuality: 'uhd'`.
+0.10.1: `motion.blur` → `animBlurFrames` (Vorschau: letzte N Lagen per 'lighter' auf Hilfs-Canvas gemittelt ↔ Export `tmix` nach perspective).
 Ansicht/Layout: `ViewSettings` (`settings.view`, `useView`/`updateView`), `Splitter.tsx`, `Popover.tsx`.

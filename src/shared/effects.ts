@@ -241,6 +241,12 @@ export const EFFECT_BLOCKS: Array<Omit<EffectBlock, 'apply'> & { apply: (clip: C
 ];
 
 /** Hat ein Clip eine Animation, die nicht neutral ist? */
+/** Anzahl gemittelter Bilder für die Bewegungsunschärfe einer Animation (1 = aus) – Vorschau und Export gleich. */
+export function animBlurFrames(m: Motion | undefined): number {
+  const b = m?.blur ?? 0;
+  return b > 0.01 ? 2 + Math.round(4 * Math.min(1, b)) : 1;
+}
+
 export function hasMotion(m: Motion | undefined): boolean {
   if (!m) return false;
   if (m.osc && m.osc.amp > 0) return true;

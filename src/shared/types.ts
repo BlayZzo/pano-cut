@@ -359,6 +359,7 @@ export interface Motion {
   smooth: boolean;
   keyframes: MotionKeyframe[];
   osc?: { kind: 'shake' | 'pulse' | 'float'; amp: number };  // gleichmäßige Schwingung (wird zu den Keyframes addiert)
+  blur?: number;       // 0..1 Bewegungsunschärfe der Animation (schnelle Bewegung verwischt – Export: tmix nach perspective)
   curve?: boolean;     // Bewegungspfad als weiche Kurve durch alle Punkte (Catmull-Rom) statt gerader Linien
 }
 

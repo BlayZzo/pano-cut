@@ -21,7 +21,7 @@ import { injectSphericalMetadata } from './spherical';
 import { maskChain, writeMaskList } from './objects';
 import { blendDef, hasShadow, shadowPixels } from '@shared/layers';
 import { bakeGradeLut, exposureGainAt, gradeForLut, gradeKey, hasExposureCurve, isNeutralGrade, lutToCube, parseCube } from '@shared/color';
-import { hasGeometryMotion, hasOpacityMotion } from '@shared/effects';
+import { animBlurFrames, hasGeometryMotion, hasOpacityMotion } from '@shared/effects';
 import { dynCorners, exposureCommands, framePiecewise, opacityCommands, perspectiveCorners } from './motionExpr';
 import { trackBoxAt } from '@shared/ai';
 
@@ -586,6 +586,9 @@ export class ExportJob {
       post.push(`pad=${W + 2 * B}:${H + 2 * B}:(ow-iw)/2:(oh-ih)/2:color=black@0`, 'format=yuva444p');
       const k = perspectiveCorners(c.motion, t, W, H, fps, localOffset, B);
       post.push(`perspective=x0='${k[0]}':y0='${k[1]}':x1='${k[2]}':y1='${k[3]}':x2='${k[4]}':y2='${k[5]}':x3='${k[6]}':y3='${k[7]}':sense=destination:eval=frame:interpolation=linear`, `crop=${W}:${H}:${B}:${B}`, 'format=rgba');
+      // Bewegungsunschärfe der Animation (Vorschau: drawClip mittelt die letzten N Lagen)
+      const nb = animBlurFrames(c.motion);
+      if (nb > 1) post.push(`tmix=frames=${nb}`);
     } else {
       // Feste Transformation
       if (Math.abs(t.scale - 1) > 1e-4) post.push(`scale=w=trunc(iw*${fnum(t.scale)}/2)*2:h=trunc(ih*${fnum(t.scale)}/2)*2:flags=bicubic`);
