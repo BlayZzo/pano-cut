@@ -1,0 +1,28 @@
+name: KI-Modelle spiegeln
+# Lädt freie KI-Modelle (Apache-2.0) von Hugging Face und legt sie als Release „models-1“ ab,
+# damit PanoCut sie zuverlässig von GitHub laden kann. Start: gh workflow run models.yml
+on:
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Modelle laden
+        run: |
+          set -e
+          mkdir m && cd m
+          base=https://huggingface.co/nrl-ai/samexporter-onnx-models/resolve/main
+          curl -fL -o mobile_sam.encoder.onnx "$base/mobile_sam/mobile_sam.encoder.onnx"
+          curl -fL -o mobile_sam.decoder.onnx "$base/mobile_sam/mobile_sam.decoder.onnx"
+          curl -fL -o MOBILE_SAM_LICENSE.txt "$base/mobile_sam/LICENSE"
+          ls -la
+          sha256sum * > SHA256SUMS.txt
+      - name: Release models-1 anlegen/aktualisieren
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cd m
+          gh release view models-1 -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || gh release create models-1 -R "$GITHUB_REPOSITORY" --title "KI-Modelle" --notes "Gespiegelte KI-Modelle für PanoCut (Lizenzen liegen bei)." --prerelease
+          gh release upload models-1 -R "$GITHUB_REPOSITORY" --clobber *
