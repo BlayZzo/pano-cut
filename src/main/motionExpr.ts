@@ -119,7 +119,9 @@ export function framePiecewise(vals: number[], tol: number): string {
 export function opacityCommands(m: Motion, baseOpacity: number, id: string, offset: number): string {
   const k = m.keyframes;
   const lines: string[] = [];
-  const ease = m.smooth ? 'TI*TI*(3-2*TI)' : 'TI';
+  // Fortschritt über die echte Zeit T (nicht TI): beginnt der Abschnitt mitten im Intervall, bliebe TI sonst falsch skaliert
+  const prog = (t0: number, t1: number) => `clip((T-${f(t0)})/${f(Math.max(1e-6, t1 - t0))},0,1)`;
+  const ease = (t0: number, t1: number) => { const x = prog(t0, t1); return m.smooth ? `${x}*${x}*(3-2*${x})` : x; };
   const val = (v: number) => f(Math.max(0, Math.min(1, v * baseOpacity)));
   if (k.length === 0) return '';
   // vor dem ersten Keyframe
@@ -127,7 +129,7 @@ export function opacityCommands(m: Motion, baseOpacity: number, id: string, offs
   for (let i = 0; i < k.length - 1; i++) {
     const t0 = k[i].t - offset, t1 = k[i + 1].t - offset;
     if (t1 <= 0) continue;
-    lines.push(`${f(Math.max(0, t0))}-${f(t1)} [expr] colorchannelmixer@${id} aa 'lerp(${val(k[i].opacity)},${val(k[i + 1].opacity)},${ease})';`);
+    lines.push(`${f(Math.max(0, t0))}-${f(t1)} [expr] colorchannelmixer@${id} aa 'lerp(${val(k[i].opacity)},${val(k[i + 1].opacity)},${ease(t0, t1)})';`);
   }
   const last = k[k.length - 1];
   lines.push(`${f(Math.max(0, last.t - offset))}-${f(Math.max(0, last.t - offset) + 100000)} [expr] colorchannelmixer@${id} aa '${val(last.opacity)}';`);

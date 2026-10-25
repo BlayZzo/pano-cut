@@ -152,4 +152,11 @@ Ausschnitt um das Objekt, bei 360° über die Kante). MobileSAM-Modelle gespiege
 Equirect-Masken: Vorschau = panogl `uMask` (Alpha in der 360-Ansicht), Export = alphamerge VOR der Ansicht + Alpha an der Farbe vorbei.
 `writeMaskList`: jede Maske gilt bis zur Mitte zur nächsten (= maskAt). UI-Test öffnet den Editor und malt einen Strich.
 0.11.1: Export setzt `-reinit_filter 0` vor jedes `-i` (Eigenschafts-Wechsel mitten im Video → Neuaufbau großer Graphen scheiterte); Fehler-Eingang wird geloggt.
+0.11.2: Echte Ursache „Failed to configure output pad … Resource temporarily unavailable“ = Thread-Erschöpfung (jeder Decoder und jedes swscale
+startet Kerne-viele Threads; 62 Eingänge/~1900 Filter → macOS-Limit; lokal nachgestellt mit `ulimit -u` als nobody). Lösung: `threadBudget`
+(`-filter_complex_threads`, `-threads` je Eingang, Filter ohne Anführungszeichen-Inhalt gezählt) + Abschnitts-Export: `planChunks` (gewichtete Last
+≤ `CHUNK_LOAD`=6, Env `PANOCUT_CHUNK_LOAD`; Grenzen nie in Titeln/Übergangsfenstern, möglichst nicht in Stabilisierung/Nachzieh-Effekten, bevorzugt an
+Schnitten, Bildraster) → `runChunked`: Unteraufträge `new ExportJob(..., 'video')` mit `range`, ein Ton-Durchgang `'audio'` (Eingänge `-vn`,
+Rückwärts-Clips per `areverse` statt Umkehr-Datei), concat-Demuxer `-c copy` + Ton, Hardware-Rückfall → alle Abschnitte neu in Software.
+sendcmd-Interpolation über `T` statt `TI` (TI ist bei abgeschnittenem Intervall falsch). Hohe Qualität: `-sws_flags lanczos+accurate_rnd`.
 Ansicht/Layout: `ViewSettings` (`settings.view`, `useView`/`updateView`), `Splitter.tsx`, `Popover.tsx`.

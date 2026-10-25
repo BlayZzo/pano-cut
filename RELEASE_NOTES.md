@@ -1,3 +1,15 @@
+## PanoCut 0.11.2 – Export großer Projekte funktioniert
+
+**Installieren**
+- Mac mit Apple-Chip (M1–M4): `PanoCut-0.11.2-mac-arm64.dmg`
+- Mac mit Intel: `PanoCut-0.11.2-mac-x64.dmg`
+- Windows 10/11: `PanoCut-0.11.2-win-x64.exe`
+
+- **Behoben**: Bei großen Projekten (viele 4K-/8K- und 360°-Clips mit Übergängen) startete der Export gar nicht und meldete „Failed to configure output pad … Resource temporarily unavailable“. Ursache: FFmpeg wollte alle Videos gleichzeitig öffnen und startete dafür Tausende Threads – mehr, als der Mac erlaubt.
+- **Neu**: Große Projekte werden automatisch in Abschnitten gerendert (Grenzen nie in Übergängen oder Titeln), der Ton wird in einem Stück gemischt, danach wird alles verlustfrei zusammengefügt. Das Ergebnis ist genau ein Video – in deiner gewählten Auflösung, Qualität und Codec, aus den Original-Dateien.
+- **Besser**: Bei Qualität „Hoch“ und „Maximal“ werden die 4K/8K-Originale schärfer verkleinert (Lanczos).
+- **Behoben**: 360°-Fahrten und Deckkraft-Animationen, die mitten in einer Fahrt beginnen (Bereichs-Export, Abschnitte), hatten leicht falsche Zwischenwerte.
+
 ## PanoCut 0.11.1 – Export-Fehler behoben
 
 **Installieren**

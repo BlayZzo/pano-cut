@@ -101,6 +101,16 @@ function ffColor(hex: string, alpha = 1): string {
   return `0x${h.length === 6 ? h : 'ffffff'}@${fnum(Math.max(0, Math.min(1, alpha)))}`;
 }
 
+/** Höchstens so viele (gewichtete) Video-Eingänge gleichzeitig pro Abschnitt. */
+const CHUNK_LOAD = Number(process.env.PANOCUT_CHUNK_LOAD) || 6;
+
+/** Threads je Decoder (0 = automatisch) und für die Filter, damit die Gesamtzahl im Rahmen bleibt. */
+export function threadBudget(inputs: number, filters: number, cores: number): { decoder: number; filter: number } {
+  const decoder = inputs <= 4 ? 0 : Math.max(1, Math.min(cores, Math.floor(256 / inputs)));
+  const filter = Math.max(1, Math.min(cores, Math.floor(1024 / Math.max(1, filters))));
+  return { decoder, filter };
+}
+
 export class ExportJob {
   private labelSeq = 0;
   private controller = new AbortController();
@@ -110,26 +120,40 @@ export class ExportJob {
   private currentSegments: Segment[] = [];
   private lutCache = new Map<string, string>();
 
-  constructor(private project: Project, private options: ExportOptions, private onProgress: ProgressFn) {
+  private child: ExportJob | null = null;
+  /** Mit welchem Encoder dieser Auftrag tatsächlich fertig wurde (Hardware → ggf. Software-Rückfall). */
+  usedHardware = false;
+
+  /**
+   * mode: 'all' = Bild + Ton in einem Durchgang; 'video' = nur Bild (Abschnitt eines großen Projekts);
+   * 'audio' = nur Ton über den ganzen Bereich.
+   */
+  constructor(private project: Project, private options: ExportOptions, private onProgress: ProgressFn, private mode: 'all' | 'video' | 'audio' = 'all') {
     this.tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'panocut-export-'));
   }
 
   cancel(): void {
     this.controller.abort();
+    this.child?.cancel();
   }
 
   async run(): Promise<string> {
     try {
       this.onProgress({ phase: 'preparing', percent: 0, message: 'Vorbereitung …' });
       this.filters = await availableFilters();
+      // Große Projekte: in Abschnitten rendern (wenige gleichzeitige Decoder statt Dutzender 4K/8K-Ströme)
+      const chunks = this.planChunks();
+      if (chunks.length > 1) return await this.runChunked(chunks);
       const segments = await this.collectSegments();
       const transitions = this.collectTransitions(segments);
       const total = this.totalDuration();
       if (total <= 0 || segments.length === 0) throw new Error('Die Timeline ist leer – es gibt nichts zu exportieren.');
-      await this.prepareStabilization(segments);
-      await this.prepareCutoutSizes(segments);
-      await this.prepareSeams(segments);
-      await this.prepareLightMasks(segments);
+      if (this.mode !== 'audio') {
+        await this.prepareStabilization(segments);
+        await this.prepareCutoutSizes(segments);
+        await this.prepareSeams(segments);
+        await this.prepareLightMasks(segments);
+      }
 
       const encoders = await availableEncoders();
       let hardware = this.options.hardware;
@@ -145,6 +169,7 @@ export class ExportJob {
           } else {
             await this.render(this.buildArgs(segments, transitions, total, hardware, encoders, {}), total, startedAt, 0, 1);
           }
+          this.usedHardware = hardware;
           if (this.options.spherical && (this.options.format === 'mp4' || this.options.format === 'mov')) {
             this.onProgress({ phase: 'rendering', percent: 99, message: '360°-Metadaten einfügen …' });
             try { await injectSphericalMetadata(this.options.outputPath); } catch (e) { log.warn('360°-Metadaten fehlgeschlagen', e); }
@@ -178,13 +203,27 @@ export class ExportJob {
   private async render(rawArgs: string[], total: number, startedAt: number, from: number, to: number, message?: string): Promise<void> {
     // Eingänge, deren Bildeigenschaften sich mitten im Video ändern (Farbraum, Pixelformat, Kamera-Wechsel), würden sonst
     // den ganzen Export-Graphen neu aufbauen – das scheitert bei großen Projekten („Error reinitializing filters“).
-    const args: string[] = [];
+    // Thread-Budget: jeder Decoder und jeder Farbumrechner (swscale) startet sonst so viele Threads wie der Rechner Kerne hat.
+    // Bei Dutzenden Eingängen und Hunderten Filtern sind das Tausende Threads → macOS verweigert weitere
+    // („Failed to configure output pad … Resource temporarily unavailable“).
+    const fileInputs = rawArgs.filter((a, i) => a === '-i' && rawArgs[i - 1] !== 'lavfi').length;
+    const gi = rawArgs.indexOf('-filter_complex_script');
+    let filterCount = 1;
+    try { if (gi >= 0) filterCount = (fs.readFileSync(rawArgs[gi + 1], 'utf8').replace(/'[^']*'/g, '').match(/[,;]/g)?.length ?? 0) + 1; } catch { /* egal */ }
+    const t = threadBudget(fileInputs, filterCount, os.cpus().length || 4);
+    const args: string[] = ['-filter_complex_threads', String(t.filter)];
+    // Hohe Qualität: schärferes Verkleinern der 4K/8K-Originale (Lanczos statt bikubisch)
+    if (this.options.quality === 'high' || this.options.quality === 'max') args.push('-sws_flags', 'lanczos+accurate_rnd');
     const inputs: string[] = [];
     for (let i = 0; i < rawArgs.length; i++) {
-      if (rawArgs[i] === '-i' && i > 0 && rawArgs[i - 1] !== 'lavfi') { args.push('-reinit_filter', '0'); inputs.push(rawArgs[i + 1]); }
-      else if (rawArgs[i] === '-i') inputs.push(rawArgs[i + 1]);
+      if (rawArgs[i] === '-i' && i > 0 && rawArgs[i - 1] !== 'lavfi') {
+        args.push('-reinit_filter', '0');
+        if (t.decoder > 0) args.push('-threads', String(t.decoder));
+        inputs.push(rawArgs[i + 1]);
+      } else if (rawArgs[i] === '-i') inputs.push(rawArgs[i + 1]);
       args.push(rawArgs[i]);
     }
+    if (fileInputs > 6) log.info('Export-Graph', { inputs: fileInputs, filters: filterCount, threads: t });
     try {
       await this.runRender(args, total, startedAt, from, to, message);
     } catch (err) {
@@ -193,6 +232,139 @@ export class ExportJob {
       if (m) log.warn('Export-Fehler bei Eingang', m[1], inputs[Number(m[1])]);
       throw err;
     }
+  }
+
+  /**
+   * Abschnitte für große Projekte: Grenzen bevorzugt an Schnitten, nie in Übergängen oder Titeln,
+   * höchstens CHUNK_LOAD gleichzeitige Video-Eingänge pro Abschnitt. Leeres Ergebnis = alles in einem Durchgang.
+   */
+  private planChunks(): Array<{ start: number; end: number }> {
+    const o = this.options;
+    if (this.mode !== 'all' || o.codec === 'gif' || o.codec === 'jpeg') return [];
+    const p = this.project;
+    const r = this.range();
+    const fps = o.fps || 30;
+    const tracks = new Map(p.tracks.map((t) => [t.id, t]));
+    const all = Object.values(p.clips).filter((c) => {
+      const t = tracks.get(c.trackId);
+      return t && t.kind === 'video' && !t.hidden && c.start < r.end && clipEnd(c) > r.start;
+    });
+    const vids = all.filter((c) => c.kind !== 'title' && p.media[c.mediaId]?.type !== 'audio');
+    const hard: Array<[number, number]> = all.filter((c) => c.kind === 'title').map((c) => [c.start, clipEnd(c)]);
+    const trCuts: number[] = [];
+    for (const b of vids) {
+      if (!b.transition) continue;
+      const a = vids.find((x) => x.trackId === b.trackId && x !== b && Math.abs(clipEnd(x) - b.start) < 1 / fps);
+      if (!a) continue;
+      const d = Math.min(b.transition.duration, clipDuration(a), clipDuration(b));
+      hard.push([b.start - d / 2, b.start + d / 2]);
+      trCuts.push(b.start);
+    }
+    // Zeitabhängige Wirkungen (Stabilisierung, Nachzieh-Effekte) lieber nicht mitten im Clip teilen
+    const soft: Array<[number, number]> = vids.filter((c) => c.stabilize?.enabled || (c.fx?.trails ?? 0) > 0.01 || (c.fx?.motionBlur ?? 0) > 0.01).map((c) => [c.start, clipEnd(c)]);
+    const weight = (c: Clip) => 1 + (c.cutout?.enabled ? 1 : 0) + (p.media[c.mediaId]?.info.is360 ? 1 : 0); // 360° = zwei Linsen, 8K
+    const load = (a: number, b: number) =>
+      vids.reduce((n, c) => n + (c.start < b - 1e-6 && clipEnd(c) > a + 1e-6 ? weight(c) : 0), 0) + 2 * trCuts.filter((t) => t > a && t < b).length;
+    if (load(r.start, r.end) <= CHUNK_LOAD) return [];
+    const inside = (t: number, iv: Array<[number, number]>) => iv.some(([x, y]) => t > x - 0.02 && t < y + 0.02);
+    const snap = (t: number) => r.start + Math.round((t - r.start) * fps) / fps;
+    const cuts = new Set<number>();
+    for (const c of vids) for (const t of [c.start, clipEnd(c)]) if (t > r.start + 0.2 && t < r.end - 0.2) cuts.add(snap(t));
+    const grid: number[] = [];
+    for (let t = r.start + 1; t < r.end - 0.2; t += 1) grid.push(snap(t));
+    const ok = (t: number, useSoft: boolean) => !inside(t, hard) && (!useSoft || !inside(t, soft));
+    const out: Array<{ start: number; end: number }> = [];
+    let a = r.start;
+    while (r.end - a > 1e-3) {
+      if (load(a, r.end) <= CHUNK_LOAD) { out.push({ start: a, end: r.end }); break; }
+      let end: number | null = null;
+      for (const useSoft of [true, false]) {
+        const cand = [...cuts].map((t) => ({ t, cut: true })).concat(grid.map((t) => ({ t, cut: false })))
+          .filter((c) => c.t > a + 0.5 && ok(c.t, useSoft)).sort((x, y) => x.t - y.t);
+        if (cand.length === 0) continue;
+        let bestCut: number | null = null, bestAny: number | null = null;
+        for (const c of cand) {
+          if (load(a, c.t) > CHUNK_LOAD) break;
+          bestAny = c.t;
+          if (c.cut) bestCut = c.t;
+        }
+        if (bestAny === null) end = cand[0].t; // schon an dieser Stelle zu viele Ebenen → kleinster Abschnitt
+        else end = bestCut !== null && bestCut - a >= 0.5 * (bestAny - a) ? bestCut : bestAny;
+        break;
+      }
+      if (end === null || end >= r.end - 0.2) { out.push({ start: a, end: r.end }); break; }
+      out.push({ start: a, end });
+      a = end;
+    }
+    return out;
+  }
+
+  /** Abschnitte einzeln rendern (nur Bild), Ton in einem Durchgang, dann verlustfrei aneinanderhängen. */
+  private async runChunked(chunks: Array<{ start: number; end: number }>): Promise<string> {
+    const o = this.options;
+    const total = this.totalDuration();
+    const ext = o.format === 'webm' ? 'webm' : o.format === 'mov' ? 'mov' : 'mp4';
+    const startedAt = Date.now();
+    const audioShare = 0.03;
+    log.info('Export in Abschnitten', chunks.map((c) => `${c.start.toFixed(2)}–${c.end.toFixed(2)}`).join(', '));
+    const report = (frac: number, message: string, extra: Partial<ExportProgress> = {}) => {
+      const elapsed = (Date.now() - startedAt) / 1000;
+      const eta = frac > 0.02 ? (elapsed * (1 - frac)) / frac : undefined;
+      this.onProgress({ phase: 'rendering', fps: extra.fps, speed: extra.speed, eta, percent: Math.min(99, Math.round(frac * 100)), message });
+    };
+    let hardware = o.hardware;
+    let files: string[] = [];
+    for (let i = 0; i < chunks.length; i++) {
+      const c = chunks[i];
+      const done = chunks.slice(0, i).reduce((n, x) => n + (x.end - x.start), 0) / total;
+      const share = (c.end - c.start) / total;
+      const file = path.join(this.tempDir, `part_${i}.${ext}`);
+      const job = new ExportJob(this.project, {
+        ...o, outputPath: file, range: c, hardware, spherical: false, loudness: undefined,
+        maxSizeMB: o.maxSizeMB ? o.maxSizeMB * share : undefined,
+      }, (p) => {
+        if (p.phase !== 'preparing' && p.phase !== 'rendering') return;
+        report((done + share * ((p.phase === 'rendering' ? p.percent : 0) / 100)) * (1 - audioShare), `Abschnitt ${i + 1} von ${chunks.length} · ${p.message ?? ''}`, p);
+      }, 'video');
+      this.child = job;
+      await job.run();
+      this.child = null;
+      files.push(file);
+      if (hardware && !job.usedHardware) {
+        // Grafikchip ist ausgestiegen: alle Abschnitte gleich kodieren, sonst passen sie beim Zusammenfügen nicht
+        hardware = false;
+        if (i > 0) { files = []; i = -1; }
+      }
+    }
+    let audioFile: string | null = null;
+    if (o.codec !== 'gif') {
+      audioFile = path.join(this.tempDir, o.format === 'webm' ? 'audio.webm' : 'audio.m4a');
+      const job = new ExportJob(this.project, { ...o, outputPath: audioFile, spherical: false, maxSizeMB: undefined }, (p) => {
+        if (p.phase === 'rendering') report(1 - audioShare + audioShare * (p.percent / 100), 'Ton mischen …');
+      }, 'audio');
+      this.child = job;
+      await job.run();
+      this.child = null;
+    }
+    report(0.995, 'Abschnitte zusammenfügen …');
+    const list = path.join(this.tempDir, 'parts.txt');
+    fs.writeFileSync(list, files.map((f) => `file '${f.replace(/'/g, "'\\''")}'`).join('\n'));
+    const args = ['-f', 'concat', '-safe', '0', '-i', list];
+    if (audioFile) args.push('-i', audioFile);
+    args.push('-map', '0:v:0');
+    if (audioFile) args.push('-map', '1:a:0');
+    args.push('-c', 'copy');
+    if (o.codec === 'h265') args.push('-tag:v', 'hvc1');
+    if (o.format === 'mp4' || o.format === 'mov') args.push('-movflags', '+faststart');
+    args.push('-t', fnum(total), o.outputPath);
+    await runFfmpeg(args, { signal: this.controller.signal });
+    this.usedHardware = hardware;
+    if (o.spherical && (o.format === 'mp4' || o.format === 'mov')) {
+      report(0.998, '360°-Metadaten einfügen …');
+      try { await injectSphericalMetadata(o.outputPath); } catch (e) { log.warn('360°-Metadaten fehlgeschlagen', e); }
+    }
+    this.onProgress({ phase: 'done', percent: 100, outputPath: o.outputPath, message: 'Fertig' });
+    return o.outputPath;
   }
 
   private async runRender(args: string[], total: number, startedAt: number, from: number, to: number, message?: string): Promise<void> {
@@ -266,7 +438,7 @@ export class ExportJob {
           tlStart: segStart - r.start, tlDur: segEnd - segStart, localOffset: segStart - clip.start,
           isImage, isTitle: false, hasAudio, hasVideo, inputIndex: -1, reversedFile: false,
         };
-        if (clip.reverse && !isImage) {
+        if (clip.reverse && !isImage && this.mode !== 'audio') {
           const out = this.tmpFile(`rev_${clip.id}.mov`);
           reversedJobs.push(async () => {
             const stitched = hasVideo && needsStitching(media.stitch);
@@ -891,10 +1063,12 @@ export class ExportJob {
         const a = pts[i], b = pts[i + 1];
         if (b.t <= 0) continue;
         const parts: string[] = [];
-        if (!yawVar && Math.abs(b.yaw - a.yaw) > 1e-6) parts.push(`[expr] v360@${id} yaw 'lerp(${fnum(a.yaw)},${fnum(b.yaw)},${easeExpr(easeKind, 'TI')})'`);
+        // Fortschritt über die echte Zeit T statt TI: beginnt das Stück mitten in der Fahrt (Abschnitt/Bereich), stimmt es trotzdem
+        const ti = `clip((T-${fnum(a.t)})/${fnum(Math.max(1e-6, b.t - a.t))},0,1)`;
+        if (!yawVar && Math.abs(b.yaw - a.yaw) > 1e-6) parts.push(`[expr] v360@${id} yaw 'lerp(${fnum(a.yaw)},${fnum(b.yaw)},${easeExpr(easeKind, ti)})'`);
         for (const k of keys) {
           if (Math.abs(b[k] - a[k]) < 1e-6) continue;
-          const e = easeExpr(easeKind, 'TI');
+          const e = easeExpr(easeKind, ti);
           if (k === 'fov') {
             parts.push(`[expr] v360@${id} h_fov 'lerp(${fnum(a.fov)},${fnum(b.fov)},${e})'`);
             parts.push(`[expr] v360@${id} v_fov 'lerp(${fnum(vf(a.fov))},${fnum(vf(b.fov))},${e})'`);
@@ -1127,8 +1301,16 @@ export class ExportJob {
     let inputCount = 0;
     const hwDecode = hardware && process.platform === 'darwin';
     this.currentSegments = segs;
+    const audioOnly = this.mode === 'audio';
     for (const s of segs) {
       if (s.isTitle) continue;
+      if (audioOnly) {
+        // Nur Ton: Bild gar nicht erst dekodieren; Clips ohne Ton bekommen einen stummen Platzhalter (Eingangsnummern bleiben gleich)
+        if (s.hasAudio && !s.isImage) args.push('-vn', '-ss', fnum(s.srcIn), '-t', fnum(s.srcDur), '-i', s.file);
+        else args.push('-f', 'lavfi', '-t', '0.1', '-i', 'anullsrc=r=48000:cl=stereo');
+        inputCount++;
+        continue;
+      }
       if (s.media?.hasAlpha) args.push('-c:v', 'libvpx-vp9');
       if (s.isImage) args.push('-loop', '1', '-framerate', String(fps), '-t', fnum(s.tlDur), '-i', s.file);
       else {
@@ -1139,7 +1321,7 @@ export class ExportJob {
       inputCount++;
     }
     // Maskensequenzen für freigestellte Clips
-    for (const s of segs) {
+    for (const s of audioOnly ? [] : segs) {
       const track = this.cutoutTrack(s);
       if (!track?.masks?.length) continue;
       const list = this.tmpFile(`masks_${s.clip.id}.txt`);
@@ -1149,7 +1331,7 @@ export class ExportJob {
       s.maskList = list;
     }
     // Zusätzliche Fenster-Eingaben für Übergänge
-    for (const tr of transitions) {
+    for (const tr of audioOnly ? [] : transitions) {
       const winA = tr.duration * tr.a.clip.speed, winB = tr.duration * tr.b.clip.speed;
       if (tr.a.isImage) args.push('-loop', '1', '-framerate', String(fps), '-t', fnum(tr.duration), '-i', tr.a.file);
       else args.push('-ss', fnum(tr.srcA), '-t', fnum(winA), '-i', tr.a.file);
@@ -1158,19 +1340,20 @@ export class ExportJob {
       else args.push('-ss', fnum(tr.srcB), '-t', fnum(winB), '-i', tr.b.file);
       tr.inputB = inputCount++;
     }
-    const wantAudio = o.codec !== 'gif' && o.codec !== 'jpeg' && pass.pass !== 1; // Durchgang 1 analysiert nur das Bild
+    const wantAudio = o.codec !== 'gif' && o.codec !== 'jpeg' && pass.pass !== 1 && this.mode !== 'video'; // Durchgang 1 analysiert nur das Bild
     const silenceIdx = inputCount;
     if (wantAudio) args.push('-f', 'lavfi', '-t', fnum(total), '-i', 'anullsrc=r=48000:cl=stereo');
 
     const filters: string[] = [];
+    const transitionsByB = new Map<Segment, TransitionSeg>();
+    for (const tr of transitions) transitionsByB.set(tr.b, tr);
+    if (!audioOnly) {
     const bg = this.project.settings.background || '#000000';
     filters.push(`color=c=${esc(bg)}:s=${W}x${H}:r=${fps}:d=${fnum(total)},format=yuv420p[base]`);
 
     // ---- Video-Ketten ----
     let last = 'base';
     let vi = 0;
-    const transitionsByB = new Map<Segment, TransitionSeg>();
-    for (const tr of transitions) transitionsByB.set(tr.b, tr);
 
     for (const s of segs) {
       if (!s.hasVideo) continue;
@@ -1314,6 +1497,7 @@ export class ExportJob {
     } else {
       filters.push(`[${last}]format=${finalPix}[vout]`);
     }
+    } // !audioOnly
 
     // ---- Audio-Ketten ----
     const audioLabels: string[] = [];
@@ -1325,6 +1509,8 @@ export class ExportJob {
       if (!wantAudio || !s.hasAudio || s.isImage || s.isTitle) continue;
       const c = s.clip;
       const chain: string[] = ['asetpts=PTS-STARTPTS'];
+      // Rückwärts-Clips: im reinen Ton-Durchgang wird nur der Ton umgedreht (statt das ganze Video umzukehren)
+      if (c.reverse && !s.reversedFile) chain.push('areverse');
       chain.push(...atempoChain(c.speed));
       if (Math.abs(c.volume - 1) > 1e-4) chain.push(`volume=${fnum(c.volume)}`);
       if (c.fadeIn > 0.01) chain.push(`afade=t=in:st=0:d=${fnum(Math.min(c.fadeIn, s.tlDur))}`);
@@ -1362,8 +1548,14 @@ export class ExportJob {
     const graphFile = this.tmpFile(`graph_${pass.pass ?? 0}.txt`);
     fs.writeFileSync(graphFile, filters.join(';\n'));
     args.push('-filter_complex_script', graphFile);
-    args.push('-map', '[vout]');
+    if (!audioOnly) args.push('-map', '[vout]');
     if (wantAudio) args.push('-map', '[aout]');
+    if (audioOnly) {
+      if (o.format === 'webm') args.push('-c:a', 'libopus', '-b:a', `${o.audioBitrate}k`);
+      else args.push('-c:a', 'aac', '-b:a', `${o.audioBitrate}k`);
+      args.push('-vn', '-t', fnum(total), o.outputPath);
+      return args;
+    }
 
     // ---- Encoder ----
     const isMac = process.platform === 'darwin';
