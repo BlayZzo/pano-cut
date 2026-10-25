@@ -151,4 +151,5 @@ blend lighten, markiert × Maskenfilm `main/lightMask.ts` in Bildkoordinaten, Gr
 Ausschnitt um das Objekt, bei 360° über die Kante). MobileSAM-Modelle gespiegelt im Release `models-1` (Workflow models.yml).
 Equirect-Masken: Vorschau = panogl `uMask` (Alpha in der 360-Ansicht), Export = alphamerge VOR der Ansicht + Alpha an der Farbe vorbei.
 `writeMaskList`: jede Maske gilt bis zur Mitte zur nächsten (= maskAt). UI-Test öffnet den Editor und malt einen Strich.
+0.11.1: Export setzt `-reinit_filter 0` vor jedes `-i` (Eigenschafts-Wechsel mitten im Video → Neuaufbau großer Graphen scheiterte); Fehler-Eingang wird geloggt.
 Ansicht/Layout: `ViewSettings` (`settings.view`, `useView`/`updateView`), `Splitter.tsx`, `Popover.tsx`.

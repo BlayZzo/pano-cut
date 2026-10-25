@@ -1,3 +1,12 @@
+## PanoCut 0.11.1 – Export-Fehler behoben
+
+**Installieren**
+- Mac mit Apple-Chip (M1–M4): `PanoCut-0.11.1-mac-arm64.dmg`
+- Mac mit Intel: `PanoCut-0.11.1-mac-x64.dmg`
+- Windows 10/11: `PanoCut-0.11.1-win-x64.exe`
+
+- **Behoben**: Bei großen Projekten brach der Export mit „Error reinitializing filters“ ab, wenn sich in einem Video mitten drin die Bildeigenschaften ändern (z. B. Farbraum bei Drohnen-/Kamera-Videos). Dein Schnitt bleibt erhalten – einfach erneut exportieren.
+
 ## PanoCut 0.11.0 – Neuer Masken-Editor mit KI und Verfolgen
 
 **Installieren**

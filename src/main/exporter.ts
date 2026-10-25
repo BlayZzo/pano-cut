@@ -175,7 +175,27 @@ export class ExportJob {
     }
   }
 
-  private async render(args: string[], total: number, startedAt: number, from: number, to: number, message?: string): Promise<void> {
+  private async render(rawArgs: string[], total: number, startedAt: number, from: number, to: number, message?: string): Promise<void> {
+    // Eingänge, deren Bildeigenschaften sich mitten im Video ändern (Farbraum, Pixelformat, Kamera-Wechsel), würden sonst
+    // den ganzen Export-Graphen neu aufbauen – das scheitert bei großen Projekten („Error reinitializing filters“).
+    const args: string[] = [];
+    const inputs: string[] = [];
+    for (let i = 0; i < rawArgs.length; i++) {
+      if (rawArgs[i] === '-i' && i > 0 && rawArgs[i - 1] !== 'lavfi') { args.push('-reinit_filter', '0'); inputs.push(rawArgs[i + 1]); }
+      else if (rawArgs[i] === '-i') inputs.push(rawArgs[i + 1]);
+      args.push(rawArgs[i]);
+    }
+    try {
+      await this.runRender(args, total, startedAt, from, to, message);
+    } catch (err) {
+      // Welche Datei gehört zur Fehlermeldung „stream #61:0“? → ins Protokoll
+      const m = /stream #(\d+):/.exec((err as Error).message ?? '');
+      if (m) log.warn('Export-Fehler bei Eingang', m[1], inputs[Number(m[1])]);
+      throw err;
+    }
+  }
+
+  private async runRender(args: string[], total: number, startedAt: number, from: number, to: number, message?: string): Promise<void> {
     await runFfmpeg(args, {
       signal: this.controller.signal,
       onProgress: (p) => {
