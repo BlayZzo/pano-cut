@@ -159,4 +159,7 @@ startet Kerne-viele Threads; 62 Eingänge/~1900 Filter → macOS-Limit; lokal na
 Schnitten, Bildraster) → `runChunked`: Unteraufträge `new ExportJob(..., 'video')` mit `range`, ein Ton-Durchgang `'audio'` (Eingänge `-vn`,
 Rückwärts-Clips per `areverse` statt Umkehr-Datei), concat-Demuxer `-c copy` + Ton, Hardware-Rückfall → alle Abschnitte neu in Software.
 sendcmd-Interpolation über `T` statt `TI` (TI ist bei abgeschnittenem Intervall falsch). Hohe Qualität: `-sws_flags lanczos+accurate_rnd`.
+0.11.3: Projekte öffnen: `fileAssociations` (.panocut), `open-file` (Mac, auch vor ready) / argv + `second-instance` (Windows) → `pendingProject`,
+Renderer holt ihn per IPC `takePendingProject` beim Start (setzt `rendererReady`; danach per menuAction `openRecent:`). TopBar-Knopf „Öffnen“
+(Popover mit IPC `recentProjects`), Projektdatei ins Fenster ziehen (App.tsx, capture-drop). openProject-Fehler → Meldung. Fehlgeschlagener Export löscht die Datei.
 Ansicht/Layout: `ViewSettings` (`settings.view`, `useView`/`updateView`), `Splitter.tsx`, `Popover.tsx`.

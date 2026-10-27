@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useStore } from 'zustand';
 import { useProject } from '../store/project';
 import { useUi } from '../store/ui';
-import { doRedo, doUndo, saveProject } from '../actions';
+import { doRedo, doUndo, loadProjectPath, newProjectFlow, openProject, saveProject } from '../actions';
 import { t } from '../i18n/de';
 import { IconExport, IconRedo, IconSave, IconSettings, IconUndo } from './Icons';
 import logo from '../assets/logo.svg';
@@ -149,6 +149,23 @@ function PrepIndicator(): React.ReactElement | null {
   );
 }
 
+/** Liste der zuletzt geöffneten Projekte (wird beim Aufklappen frisch geladen). */
+function RecentProjects(): React.ReactElement {
+  const [list, setList] = useState<string[] | null>(null);
+  useEffect(() => { void window.panocut.recentProjects().then(setList); }, []);
+  const name = (p: string) => (p.split(/[\\/]/).pop() ?? p).replace(/\.panocut$/i, '');
+  return (
+    <div className="open-menu">
+      <button className="btn sm primary" onClick={() => void openProject()}>📂 {t.top.openFile}</button>
+      <button className="btn sm" onClick={() => void newProjectFlow()}>＋ {t.top.newProject}</button>
+      <div className="popover-title" style={{ marginTop: 10 }}>{t.top.recent}</div>
+      {list === null ? null : list.length === 0 ? <div className="muted small">{t.top.noRecent}</div> : list.map((p) => (
+        <button key={p} className="btn sm ghost recent-item" title={p} onClick={() => void loadProjectPath(p)}>🎬 {name(p)}</button>
+      ))}
+    </div>
+  );
+}
+
 export function TopBar({ mac }: { mac: boolean }): React.ReactElement {
   const name = useProject((s) => s.project.name);
   const rename = useProject((s) => s.rename);
@@ -183,6 +200,7 @@ export function TopBar({ mac }: { mac: boolean }): React.ReactElement {
       <ExportQueue />
       <button className="btn icon ghost" title={t.top.undo} onClick={doUndo} disabled={!canUndo}><IconUndo /></button>
       <button className="btn icon ghost" title={t.top.redo} onClick={doRedo} disabled={!canRedo}><IconRedo /></button>
+      <Popover label={<>📂 {t.top.open}</>} title={t.top.openProject} align="right"><RecentProjects /></Popover>
       <button className="btn" title={`${t.top.save} (⌘/Strg+S)`} onClick={() => void saveProject(false)}><IconSave />{t.top.save}</button>
       <button className="btn primary" title={`${t.top.export} (⌘/Strg+E)`} onClick={() => openDialog('export')}><IconExport />{t.top.export}</button>
       <button className="btn icon ghost" title={t.top.settings} onClick={() => openDialog('settings')}><IconSettings /></button>

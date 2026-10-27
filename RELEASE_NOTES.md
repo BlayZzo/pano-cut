@@ -1,3 +1,16 @@
+## PanoCut 0.11.3 – Projekte öffnen
+
+**Installieren**
+- Mac mit Apple-Chip (M1–M4): `PanoCut-0.11.3-mac-arm64.dmg`
+- Mac mit Intel: `PanoCut-0.11.3-mac-x64.dmg`
+- Windows 10/11: `PanoCut-0.11.3-win-x64.exe`
+
+- **Neu: Knopf „📂 Öffnen“** oben rechts neben „Speichern“: zeigt deine zuletzt geöffneten Projekte zum Anklicken, „Projektdatei auswählen …“ und „Neues Projekt“.
+- **Behoben**: Doppelklick auf eine `.panocut`-Datei im Finder/Explorer startete PanoCut, öffnete das Projekt aber nicht. Jetzt öffnet es sich direkt – auch wenn PanoCut schon läuft.
+- **Neu**: Eine Projektdatei einfach ins PanoCut-Fenster ziehen öffnet sie.
+- Kann eine Projektdatei nicht gelesen werden, erscheint jetzt eine klare Meldung (vorher passierte einfach nichts).
+- Ein abgebrochener oder fehlgeschlagener Export hinterlässt keine kaputte Videodatei mehr.
+
 ## PanoCut 0.11.2 – Export großer Projekte funktioniert
 
 **Installieren**

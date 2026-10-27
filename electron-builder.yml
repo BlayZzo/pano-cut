@@ -25,6 +25,13 @@ extraResources:
   - from: resources/whisper/${os}-${arch}
     to: whisper
 
+# Doppelklick auf eine Projektdatei öffnet sie in PanoCut
+fileAssociations:
+  - ext: panocut
+    name: PanoCut-Projekt
+    description: PanoCut-Projekt
+    role: Editor
+
 publish:
   provider: github
   owner: BlayZzo

@@ -536,3 +536,8 @@ textarea:focus { border-color: var(--accent); }
 .me-bar input { width: 100%; position: relative; z-index: 2; }
 .me-covered { position: absolute; top: 2px; height: 6px; background: rgba(255, 45, 149, 0.45); border-radius: 3px; }
 .me-key { position: absolute; top: 0; width: 3px; height: 26px; margin-left: -1px; background: #a855f7; z-index: 3; cursor: pointer; }
+
+/* Öffnen-Menü in der Kopfleiste */
+.open-menu { display: flex; flex-direction: column; gap: 6px; min-width: 260px; max-width: 360px; }
+.open-menu .recent-item { justify-content: flex-start; text-align: left; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.open-menu .muted { color: var(--text-dim); font-size: 12px; }

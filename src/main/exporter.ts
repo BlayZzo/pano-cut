@@ -192,6 +192,8 @@ export class ExportJob {
         this.onProgress({ phase: 'cancelled', percent: 0, message: 'Abgebrochen' });
         try { fs.rmSync(this.options.outputPath, { force: true }); } catch { /* ignorieren */ }
       } else {
+        // Halbfertige Datei entfernen – sie wäre kaputt und lässt sich nicht abspielen
+        if (this.mode === 'all') try { fs.rmSync(this.options.outputPath, { force: true }); } catch { /* ignorieren */ }
         this.onProgress({ phase: 'error', percent: 0, message: (err as Error).message });
       }
       throw err;

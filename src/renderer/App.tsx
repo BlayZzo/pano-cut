@@ -90,7 +90,30 @@ export function App(): React.ReactElement {
         case 'cam': if (arg) switchToAngle(Number(arg) - 1); break;
       }
     });
-    return () => { offMedia(); offExport(); offPrep(); offUpdate(); offDirty(); offMenu(); };
+    // Mit einer Projektdatei gestartet (Doppelklick im Finder/Explorer)?
+    void api.takePendingProject?.().then((p) => { if (p) void loadProjectPath(p); });
+    // Projektdatei ins Fenster ziehen = öffnen (überall, nicht nur in der Mediathek)
+    const isProj = (f: File) => /\.panocut$/i.test(f.name);
+    const onDragOver = (e: DragEvent) => { if (e.dataTransfer?.types.includes('Files')) e.preventDefault(); };
+    const onDropCapture = (e: DragEvent) => {
+      const f = Array.from(e.dataTransfer?.files ?? []).find(isProj);
+      if (!f) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const p = api.getPathForFile(f);
+      if (p) void loadProjectPath(p);
+    };
+    // Datei daneben fallen gelassen: nicht das Fenster damit ersetzen
+    const onDropBubble = (e: DragEvent) => { if (e.dataTransfer?.types.includes('Files')) e.preventDefault(); };
+    window.addEventListener('dragover', onDragOver);
+    window.addEventListener('drop', onDropCapture, true);
+    window.addEventListener('drop', onDropBubble);
+    return () => {
+      offMedia(); offExport(); offPrep(); offUpdate(); offDirty(); offMenu();
+      window.removeEventListener('dragover', onDragOver);
+      window.removeEventListener('drop', onDropCapture, true);
+      window.removeEventListener('drop', onDropBubble);
+    };
   }, []);
 
   // Automatisch speichern (alle 60 s, wenn ein Pfad existiert und etwas geändert wurde)

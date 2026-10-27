@@ -49,13 +49,35 @@ const DEV_URL = process.env.PANOCUT_DEV_URL;
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
+  app.on('second-instance', (_e, argv) => {
     if (mainWindow) {
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
     }
+    const file = projectArg(argv);
+    if (file) openFromSystem(file);
   });
 }
+
+// ---- Projektdatei per Doppelklick (Finder/Explorer) öffnen ----
+let pendingProject: string | null = null;
+let rendererReady = false;
+function projectArg(argv: string[]): string | null {
+  return argv.slice(1).find((a) => a.toLowerCase().endsWith(`.${PROJECT_EXT}`) && fs.existsSync(a)) ?? null;
+}
+function openFromSystem(file: string): void {
+  if (rendererReady && mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.focus();
+    sendToWindow(IPC.menuAction, `openRecent:${file}`);
+  } else pendingProject = file;
+}
+// macOS meldet die Datei per Ereignis – auch schon vor dem Start des Fensters
+app.on('open-file', (e, file) => {
+  e.preventDefault();
+  if (file.toLowerCase().endsWith(`.${PROJECT_EXT}`)) openFromSystem(file);
+});
+pendingProject = projectArg(process.argv);
 
 registerMediaScheme();
 app.setName('PanoCut');
@@ -120,7 +142,8 @@ function createWindow(): void {
     forceQuit = true;
     mainWindow?.close();
   });
-  mainWindow.on('closed', () => (mainWindow = null));
+  mainWindow.webContents.on('did-start-loading', () => { rendererReady = false; });
+  mainWindow.on('closed', () => { mainWindow = null; rendererReady = false; });
 }
 
 /** Fernsteuerung (Stream Deck) je nach Einstellung starten/stoppen. */
@@ -521,6 +544,15 @@ ipcMain.handle(IPC.saveProject, async (_e, project: Project, filePath?: string) 
   return target;
 });
 
+ipcMain.handle(IPC.takePendingProject, () => {
+  rendererReady = true;
+  const p = pendingProject;
+  pendingProject = null;
+  return p;
+});
+
+ipcMain.handle(IPC.recentProjects, () => loadSettings().recentProjects.filter((p) => fs.existsSync(p)));
+
 ipcMain.handle(IPC.openProject, async (): Promise<ProjectFile | null> => {
   const res = await dialog.showOpenDialog(mainWindow!, {
     title: 'Projekt öffnen',
@@ -530,10 +562,16 @@ ipcMain.handle(IPC.openProject, async (): Promise<ProjectFile | null> => {
   });
   if (res.canceled || !res.filePaths[0]) return null;
   const p = res.filePaths[0];
-  const project = readProject(p);
-  mainWindow?.setRepresentedFilename(p);
-  refreshMenu();
-  return { path: p, project };
+  try {
+    const project = readProject(p);
+    mainWindow?.setRepresentedFilename(p);
+    refreshMenu();
+    return { path: p, project };
+  } catch (err) {
+    log.warn('Projekt öffnen fehlgeschlagen', p, err);
+    dialog.showErrorBox('Projekt konnte nicht geöffnet werden', (err as Error).message);
+    return null;
+  }
 });
 
 ipcMain.handle(IPC.loadProject, async (_e, p: string): Promise<ProjectFile | null> => {
@@ -548,6 +586,7 @@ ipcMain.handle(IPC.loadProject, async (_e, p: string): Promise<ProjectFile | nul
     refreshMenu();
     return { path: p, project };
   } catch (err) {
+    log.warn('Projekt laden fehlgeschlagen', p, err);
     dialog.showErrorBox('Projekt konnte nicht geöffnet werden', (err as Error).message);
     return null;
   }

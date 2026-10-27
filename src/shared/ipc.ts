@@ -113,6 +113,9 @@ export interface PanoCutApi {
   saveProject(project: Project, path?: string): Promise<string | null>;
   openProject(): Promise<ProjectFile | null>;
   loadProject(path: string): Promise<ProjectFile | null>;
+  /** Projektdatei, mit der PanoCut gestartet wurde (Doppelklick im Finder/Explorer), einmalig abholen. */
+  takePendingProject(): Promise<string | null>;
+  recentProjects(): Promise<string[]>;
   onMenuAction(cb: (action: string) => void): () => void;
   setDirty(dirty: boolean): void;
 
@@ -169,6 +172,8 @@ export const IPC = {
   saveProject: 'project:save',
   openProject: 'project:open',
   loadProject: 'project:load',
+  takePendingProject: 'project:takePending',
+  recentProjects: 'project:recent',
   menuAction: 'menu:action',
 
   whisperStatus: 'subs:status',
