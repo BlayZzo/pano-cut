@@ -97,7 +97,7 @@ direkt unter Node ausführen. Vollständige CI-Logs sind aus der Cloud nicht abr
 zeigt nur den Schritt-Status).
 Build- und Selbsttest-Protokoll jedes CI-Laufs liegt im Branch `ci-logs` (`git clone --depth 1 --branch ci-logs …`).
 Oberflächen-Test im echten Electron: `electron . --ui-test` (`main/uitest.ts`, Hook `renderer/testHook.ts` nur mit `--pc-ui-test`):
-importiert Testvideos, prüft per `capturePage`, dass die Vorschau sichtbar ist (Linux-CI + Job `mac-ui` auf macos-14,
+importiert Testvideos, prüft per `capturePage`, dass die Vorschau sichtbar ist (Linux-CI + Job `mac-ui` auf macos-15 (macos-14 ist seit Okt. 2026 abgeschaltet),
 Mac-Protokoll + Screenshot im Branch `ci-logs-mac`). Lehre aus 0.7.0: `.preview-stage canvas` traf auch das Overlay-Canvas →
 schwarzes Bild über der Vorschau; Playwright-Element-Screenshots zeigten das, wurden aber als GPU-Problem fehlgedeutet.
 Import: `needsProxy` (Full-HD-H.264 8 Bit ohne Proxy, `settings.proxyMode`), `MediaItem.prep` = Fortschritt/Restzeit (TopBar `PrepIndicator`,
