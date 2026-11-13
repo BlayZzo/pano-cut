@@ -198,7 +198,7 @@ export class ExportJob {
       }
       throw err;
     } finally {
-      fs.rmSync(this.tempDir, { recursive: true, force: true });
+      if (!process.env.PANOCUT_KEEP_EXPORT_TMP) fs.rmSync(this.tempDir, { recursive: true, force: true });
     }
   }
 
@@ -542,7 +542,7 @@ export class ExportJob {
   private cutoutTrack(s: Segment) {
     const cut = s.clip.cutout;
     const track = cut?.enabled ? s.clip.objects?.find((tr) => tr.id === cut.trackId) : undefined;
-    return s.hasVideo && track?.masks?.length ? track : undefined;
+    return s.hasVideo && track?.masks?.some((m) => fs.existsSync(m.path)) ? track : undefined;
   }
 
   /** 360°-Maske im ganzen Rundum-Bild: wird vor der Ansicht eingerechnet (nicht erst nach der Farbe). */
@@ -1325,7 +1325,7 @@ export class ExportJob {
     // Maskensequenzen für freigestellte Clips
     for (const s of audioOnly ? [] : segs) {
       const track = this.cutoutTrack(s);
-      if (!track?.masks?.length) continue;
+      if (!track?.masks?.some((m) => fs.existsSync(m.path))) continue;
       const list = this.tmpFile(`masks_${s.clip.id}.txt`);
       writeMaskList(track.masks, s.localOffset + s.tlDur, list);
       args.push('-ss', fnum(s.localOffset), '-f', 'concat', '-safe', '0', '-i', list);
@@ -1515,8 +1515,16 @@ export class ExportJob {
       if (c.reverse && !s.reversedFile) chain.push('areverse');
       chain.push(...atempoChain(c.speed));
       if (Math.abs(c.volume - 1) > 1e-4) chain.push(`volume=${fnum(c.volume)}`);
-      if (c.fadeIn > 0.01) chain.push(`afade=t=in:st=0:d=${fnum(Math.min(c.fadeIn, s.tlDur))}`);
-      if (c.fadeOut > 0.01) chain.push(`afade=t=out:st=${fnum(Math.max(0, s.tlDur - c.fadeOut))}:d=${fnum(Math.min(c.fadeOut, s.tlDur))}`);
+      // Ein-/Ausblenden bezogen auf den ganzen Clip – auch wenn nur ein Stück davon exportiert wird (Bereich/Abschnitt)
+      const lo = s.localOffset, D = clipDuration(c);
+      if (c.fadeIn > 0.01 && lo < c.fadeIn) {
+        if (lo < 1e-3) chain.push(`afade=t=in:st=0:d=${fnum(c.fadeIn)}`);
+        else chain.push(`volume='clip((t+${fnum(lo)})/${fnum(c.fadeIn)},0,1)':eval=frame`);
+      }
+      if (c.fadeOut > 0.01 && lo + s.tlDur > D - c.fadeOut) {
+        if (lo + s.tlDur >= D - 1e-3 && s.tlDur >= c.fadeOut) chain.push(`afade=t=out:st=${fnum(s.tlDur - c.fadeOut)}:d=${fnum(c.fadeOut)}`);
+        else chain.push(`volume='clip((${fnum(D - lo)}-t)/${fnum(c.fadeOut)},0,1)':eval=frame`);
+      }
       // Übergänge: weiche Tonüberblendung
       const trA = transitionsByA.get(s);
       if (trA) chain.push(`afade=t=out:st=${fnum(Math.max(0, s.tlDur - trA.duration / 2))}:d=${fnum(trA.duration / 2)}`);

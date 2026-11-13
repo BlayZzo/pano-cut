@@ -61,6 +61,9 @@ export const de = {
     queueSkipHint: 'Keine Vorschau-Datei erstellen – sofort fertig, Abspielen und Spulen können aber weniger flüssig sein.',
     workingHint: 'Die schnelle Vorschau-Datei wird im Hintergrund erstellt – die Datei kann schon benutzt werden.',
     error: 'Fehler',
+    locate: 'Datei suchen …',
+    missing: '⚠️ Datei nicht mehr am alten Ort',
+    relinked: '{n} Datei(en) wiedergefunden und neu verknüpft.',
     remove: 'Aus Mediathek entfernen',
     addToTimeline: 'Zur Timeline hinzufügen',
     showInFolder: 'Im Ordner anzeigen',
@@ -634,6 +637,7 @@ export const de = {
     close: 'Schließen',
   },
   toast: {
+    saveError: 'Speichern fehlgeschlagen: {m}',
     saved: 'Projekt gespeichert',
     imported: '{n} Datei(en) importiert',
     unsupported: '{n} Datei(en) übersprungen (Format nicht unterstützt)',

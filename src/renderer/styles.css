@@ -110,7 +110,7 @@ body.resizing-y, body.resizing-y * { cursor: row-resize !important; user-select:
 .media-badge { position: absolute; top: 5px; left: 5px; background: rgba(0,0,0,0.65); color: #fff; font-size: 10px; padding: 2px 5px; border-radius: 4px; font-weight: 700; }
 .media-dur { position: absolute; bottom: 5px; right: 5px; background: rgba(0,0,0,0.65); color: #fff; font-size: 10px; padding: 2px 5px; border-radius: 4px; font-family: var(--mono); }
 .media-status { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(10, 13, 18, 0.7); font-size: 11px; color: var(--text-dim); text-align: center; padding: 6px; }
-.media-status.error { color: var(--danger); }
+.media-status.error { color: var(--danger); flex-direction: column; }
 .media-name { padding: 6px 8px; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .media-wave { height: 100%; width: 100%; object-fit: fill; opacity: 0.9; }
 .library-empty { padding: 32px 18px; text-align: center; color: var(--text-dim); line-height: 1.5; }

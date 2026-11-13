@@ -511,6 +511,8 @@ export interface Project {
   clips: Record<string, Clip>;
   multicam?: Record<string, MulticamGroup>;   // Mehrkamera-Gruppen
   markers?: Marker[];                         // Marker auf der Timeline (Beat-Marker zum Einrasten/Schneiden)
+  /** Wo zuletzt gearbeitet wurde (Abspielkopf, Zoom, Bildlauf) – wird beim Öffnen wiederhergestellt. */
+  view?: { playhead: number; zoom: number; scrollX: number };
   createdAt: number;
   modifiedAt: number;
 }

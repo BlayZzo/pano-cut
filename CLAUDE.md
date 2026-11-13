@@ -162,4 +162,9 @@ sendcmd-Interpolation über `T` statt `TI` (TI ist bei abgeschnittenem Intervall
 0.11.3: Projekte öffnen: `fileAssociations` (.panocut), `open-file` (Mac, auch vor ready) / argv + `second-instance` (Windows) → `pendingProject`,
 Renderer holt ihn per IPC `takePendingProject` beim Start (setzt `rendererReady`; danach per menuAction `openRecent:`). TopBar-Knopf „Öffnen“
 (Popover mit IPC `recentProjects`), Projektdatei ins Fenster ziehen (App.tsx, capture-drop). openProject-Fehler → Meldung. Fehlgeschlagener Export löscht die Datei.
+0.11.4: `relinkMoved` (project.ts, beim Laden: gleicher Dateiname + Größe im Projektordner/Medienordnern/Unterordnern, 3 Runden), IPC `locateMedia`
+(MediaCard „Datei suchen …“, Ordner-Abgleich für alle fehlenden), `project.view` (Abspielkopf/Zoom/Scroll beim Speichern), `cleanStorage` behält
+`masks/` + `imu.bin` und löscht keine Sounds, fehlende Masken-PNGs werden übersprungen, Ton-Fades clip-bezogen (`volume` eval=frame bei Teilstücken).
+Test-Erkenntnis: 4K-Abschnitt mit 360°-Übergang braucht ~3–4 GB (v360-Tabellen ~1 GB je 360°-Kette) + Encoder (x264 ~1 GB, x265 ~1,4 GB).
+Env `PANOCUT_KEEP_EXPORT_TMP` behält den Export-Temp-Ordner (Fehlersuche).
 Ansicht/Layout: `ViewSettings` (`settings.view`, `useView`/`updateView`), `Splitter.tsx`, `Popover.tsx`.

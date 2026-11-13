@@ -100,6 +100,7 @@ const api: PanoCutApi = {
   openProject: () => ipcRenderer.invoke(IPC.openProject),
   loadProject: (p) => ipcRenderer.invoke(IPC.loadProject, p),
   takePendingProject: () => ipcRenderer.invoke(IPC.takePendingProject),
+  locateMedia: (id, missing) => ipcRenderer.invoke(IPC.locateMedia, id, missing),
   recentProjects: () => ipcRenderer.invoke(IPC.recentProjects),
   onMenuAction: subscribe(IPC.menuAction),
   setDirty: (d) => ipcRenderer.send(IPC.setDirty, d),

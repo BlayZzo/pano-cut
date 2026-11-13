@@ -51,6 +51,7 @@ export function readProject(filePath: string): Project {
   if (!project || project.version !== 1 || !project.tracks || !project.clips) {
     throw new Error('Die Datei ist kein gültiges PanoCut-Projekt.');
   }
+  relinkMoved(project, [path.dirname(filePath)]);
   // Fehlende Cache-Dateien erkennen, damit sie neu erzeugt werden
   for (const m of Object.values(project.media) as MediaItem[]) {
     if (!fs.existsSync(m.path)) {
@@ -65,6 +66,56 @@ export function readProject(filePath: string): Project {
   }
   rememberProject(filePath);
   return project;
+}
+
+/**
+ * Verschobene Videos/Sounds wiederfinden: gleicher Dateiname im Projektordner, in den Ordnern der anderen
+ * (gefundenen) Dateien, in `extraDirs` und je eine Ebene darunter. Gibt die Zahl neu verknüpfter Dateien zurück.
+ */
+export function relinkMoved(project: Project, extraDirs: string[] = []): number {
+  // Mehrere Runden: gefundene Dateien verraten den neuen Ordner, darunter liegen oft die übrigen (z. B. „Musik“)
+  let total = 0;
+  for (let round = 0; round < 3; round++) {
+    const n = relinkRound(project, extraDirs);
+    total += n;
+    if (n === 0) break;
+  }
+  return total;
+}
+
+function relinkRound(project: Project, extraDirs: string[]): number {
+  const media = Object.values(project.media) as MediaItem[];
+  const missing = media.filter((m) => !fs.existsSync(m.path));
+  if (missing.length === 0) return 0;
+  const dirs = new Set<string>(extraDirs);
+  for (const m of media) if (fs.existsSync(m.path)) dirs.add(path.dirname(m.path));
+  // Alter Ordner wurde umbenannt/verschoben? Gleichnamige Ordner neben/unter den Kandidaten mit prüfen
+  const oldDirs = new Set(missing.map((m) => path.basename(path.dirname(m.path))));
+  for (const d of [...dirs]) {
+    let entries: fs.Dirent[] = [];
+    try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; }
+    for (const e of entries.slice(0, 400)) if (e.isDirectory() && !e.name.startsWith('.')) dirs.add(path.join(d, e.name));
+    for (const name of oldDirs) { const sib = path.join(path.dirname(d), name); if (fs.existsSync(sib)) dirs.add(sib); }
+  }
+  let n = 0;
+  for (const m of missing) {
+    const base = path.basename(m.path);
+    for (const d of dirs) {
+      const cand = path.join(d, base);
+      if (!fs.existsSync(cand)) continue;
+      try { if (m.info?.fileSize && fs.statSync(cand).size !== m.info.fileSize) continue; } catch { continue; }
+      const oldDir = path.dirname(m.path);
+      m.path = cand;
+      if (m.companion && !fs.existsSync(m.companion)) {
+        const c = path.join(d, path.basename(m.companion));
+        if (fs.existsSync(c)) { if (m.proxy === m.companion) m.proxy = c; m.companion = c; }
+      }
+      log.info('Datei wiedergefunden', path.join(oldDir, base), '→', cand);
+      n++;
+      break;
+    }
+  }
+  return n;
 }
 
 export function defaultProjectPath(dir: string, name: string): string {

@@ -1,3 +1,17 @@
+## PanoCut 0.11.4 – Sicher speichern & wieder öffnen
+
+**Installieren**
+- Mac mit Apple-Chip (M1–M4): `PanoCut-0.11.4-mac-arm64.dmg`
+- Mac mit Intel: `PanoCut-0.11.4-mac-x64.dmg`
+- Windows 10/11: `PanoCut-0.11.4-win-x64.exe`
+
+- **Verschobene Dateien werden wiedergefunden**: Hast du deine Videos/Musik in einen anderen Ordner gelegt, sucht PanoCut sie beim Öffnen automatisch (Projektordner, Nachbar- und Unterordner). Fehlt trotzdem etwas, zeigt die Mediathek „⚠️ Datei nicht mehr am alten Ort“ mit dem Knopf **„🔎 Datei suchen …“** – eine Datei zeigen genügt, alle anderen aus demselben Ordner werden gleich mit verknüpft.
+- **Du machst da weiter, wo du aufgehört hast**: Abspielkopf, Zoom und Position der Timeline werden mit dem Projekt gespeichert.
+- **Aufräumen löscht keine eigene Arbeit mehr**: Gemalte Masken, eingemessene Bewegungsdaten (360°-Stabilisierung) und Sounds bleiben beim „Speicher aufräumen“ immer erhalten.
+- **Export bricht nicht mehr ab**, wenn einzelne Masken-Bilder fehlen.
+- **Ton beim Export eines Bereichs**: Musik wird am Bereichsende nicht mehr fälschlich ausgeblendet.
+- Klappt das Speichern nicht (z. B. Festplatte voll), erscheint jetzt eine Meldung.
+
 ## PanoCut 0.11.3 – Projekte öffnen
 
 **Installieren**

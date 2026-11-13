@@ -5,6 +5,7 @@ import { cssUrl, mediaUrl } from '../utils/dom';
 import { DRAG_MIME, setDraggingMedia } from '../utils/dnd';
 import { fmt, t } from '../i18n/de';
 import { prepLabel } from '../utils/prep';
+import { locateMissingMedia } from '../actions';
 import { IconFilm, IconImage, IconMusic } from './Icons';
 
 interface Props {
@@ -79,7 +80,14 @@ export function MediaCard({ item, selected, onSelect, onOpen, onContextMenu }: P
             <div className="progress"><div style={{ width: `${prep.percent}%` }} /></div>
           </div>
         )}
-        {item.status === 'error' && <div className="media-status error">{t.library.error}: {item.error}</div>}
+        {item.status === 'error' && (
+          <div className="media-status error" title={item.error}>
+            {/nicht gefunden/.test(item.error ?? '') ? t.library.missing : `${t.library.error}: ${item.error}`}
+            {/nicht gefunden/.test(item.error ?? '') && (
+              <button className="btn sm primary" style={{ marginTop: 6 }} onClick={(e) => { e.stopPropagation(); void locateMissingMedia(item.id); }}>🔎 {t.library.locate}</button>
+            )}
+          </div>
+        )}
       </div>
       <div className="media-name">{item.name}</div>
     </div>

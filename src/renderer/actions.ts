@@ -66,6 +66,23 @@ export async function importFolderDialog(): Promise<void> {
   if (dir) await importFiles([dir]);
 }
 
+/** Fehlende Datei suchen (Dialog) und neu verknüpfen – andere fehlende Dateien im gleichen Ordner gleich mit. */
+export async function locateMissingMedia(id: string): Promise<void> {
+  const { project, updateMedia } = useProject.getState();
+  const missing = Object.values(project.media).filter((m) => m.status === 'error' && /nicht gefunden/.test(m.error ?? ''))
+    .map((m) => ({ id: m.id, path: m.path, fileSize: m.info?.fileSize }));
+  const found = await api().locateMedia(id, missing);
+  const ids = Object.keys(found);
+  for (const mid of ids) {
+    const m = useProject.getState().project.media[mid];
+    if (!m) continue;
+    const item: MediaItem = { ...m, path: found[mid], status: 'processing', error: undefined, thumb: undefined, proxy: undefined, sprite: undefined, waveform: undefined };
+    updateMedia(item);
+    void api().prepareMedia(item);
+  }
+  if (ids.length) useUi.getState().toast(fmt(t.library.relinked, { n: ids.length }), 'success');
+}
+
 export function ensureMediaPrepared(project: Project): void {
   for (const m of Object.values(project.media)) {
     if (m.status === 'processing' || m.status === 'analyzing') void api().prepareMedia(m);
@@ -132,7 +149,15 @@ export function applyTransitionToClip(clipId: string, type: TransitionType): boo
 
 export async function saveProject(saveAs = false): Promise<boolean> {
   const { project, path, setPath } = useProject.getState();
-  const target = await api().saveProject(project, saveAs ? undefined : path ?? undefined);
+  const ui = useUi.getState();
+  const toSave = { ...project, view: { playhead: ui.playhead, zoom: ui.zoom, scrollX: ui.scrollX } };
+  let target: string | null;
+  try {
+    target = await api().saveProject(toSave, saveAs ? undefined : path ?? undefined);
+  } catch (err) {
+    useUi.getState().toast(fmt(t.toast.saveError, { m: (err as Error).message }), 'error');
+    return false;
+  }
   if (!target) return false;
   setPath(target);
   setDirty(false);
@@ -166,9 +191,14 @@ export function applyLoadedProject(project: Project, path: string | null): void 
   setDirty(false);
   const ui = useUi.getState();
   ui.clearSelection();
-  ui.setPlayhead(0);
   ui.setRange(null, null);
-  seekTo(0);
+  // Dort weitermachen, wo zuletzt gespeichert wurde
+  const v = project.view;
+  if (v && Number.isFinite(v.zoom) && v.zoom > 0) ui.setZoom(v.zoom);
+  if (v && Number.isFinite(v.scrollX)) ui.setScrollX(Math.max(0, v.scrollX));
+  const ph = v && Number.isFinite(v.playhead) ? Math.max(0, v.playhead) : 0;
+  ui.setPlayhead(ph);
+  seekTo(ph);
   ensureMediaPrepared(project);
   void api().setSettings({ lastProject: path ?? undefined });
 }

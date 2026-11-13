@@ -115,6 +115,21 @@ function safeList(d: string): string[] {
  * Aufräumen. 'old' = Vorschau-Ordner älter als 30 Tage, 'unused' = alles, was das offene Projekt nicht braucht,
  * 'all' = alle Vorschau-Dateien. Dateien des offenen Projekts (`keepMediaPaths`) bleiben immer erhalten.
  */
+/** Eigene Arbeit (gemalte Masken, eingemessene Bewegungsdaten) bleibt beim Aufräumen erhalten – nur Vorschau-Dateien gehen. */
+const KEEP_IN_CACHE = new Set(['masks', 'imu.bin']);
+function cleanMediaDir(d: string): number {
+  let freed = 0;
+  for (const name of safeList(d)) {
+    if (KEEP_IN_CACHE.has(name)) continue;
+    const p = path.join(d, name);
+    const s = dirSize(p);
+    let bytes = s.bytes;
+    try { if (!fs.statSync(p).isDirectory()) bytes = fs.statSync(p).size; } catch { /* egal */ }
+    try { fs.rmSync(p, { recursive: true, force: true }); freed += bytes; } catch (e) { log.warn('Aufräumen', p, e); }
+  }
+  return freed;
+}
+
 export function cleanStorage(mode: 'old' | 'unused' | 'all', keepMediaPaths: string[]): { freedBytes: number } {
   const cache = getCacheDir();
   const keep = new Set(keepMediaPaths.map((p) => { try { return path.basename(mediaCacheDir(p)); } catch { return ''; } }));
@@ -126,12 +141,8 @@ export function cleanStorage(mode: 'old' | 'unused' | 'all', keepMediaPaths: str
     const s = dirSize(d);
     const drop = mode === 'all' || mode === 'unused' || (mode === 'old' && now - s.newest > OLD_MS);
     if (!drop) continue;
-    try { fs.rmSync(d, { recursive: true, force: true }); freed += s.bytes; } catch (e) { log.warn('Aufräumen', d, e); }
+    freed += cleanMediaDir(d);
   }
-  if (mode === 'all') {
-    const sounds = path.join(app.getPath('userData'), 'sounds');
-    const s = dirSize(sounds);
-    try { fs.rmSync(sounds, { recursive: true, force: true }); freed += s.bytes; } catch { /* egal */ }
-  }
+  // Sounds werden NICHT gelöscht: gespeicherte Projekte verweisen darauf (und sie sind klein)
   return { freedBytes: freed };
 }

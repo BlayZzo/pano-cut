@@ -115,6 +115,8 @@ export interface PanoCutApi {
   loadProject(path: string): Promise<ProjectFile | null>;
   /** Projektdatei, mit der PanoCut gestartet wurde (Doppelklick im Finder/Explorer), einmalig abholen. */
   takePendingProject(): Promise<string | null>;
+  /** Fehlende Datei suchen lassen; gibt neue Pfade zurück (auch für andere fehlende Dateien im gleichen Ordner). */
+  locateMedia(id: string, missing: Array<{ id: string; path: string; fileSize?: number }>): Promise<Record<string, string>>;
   recentProjects(): Promise<string[]>;
   onMenuAction(cb: (action: string) => void): () => void;
   setDirty(dirty: boolean): void;
@@ -173,6 +175,7 @@ export const IPC = {
   openProject: 'project:open',
   loadProject: 'project:load',
   takePendingProject: 'project:takePending',
+  locateMedia: 'media:locate',
   recentProjects: 'project:recent',
   menuAction: 'menu:action',
 

@@ -15,7 +15,8 @@ export function objectsDir(projectId: string): string {
 
 /** Schreibt eine concat-Liste für Masken mit exakten Zeiten (Bildsequenz mit Dauern). */
 export function writeMaskList(masks: Array<{ t: number; path: string }>, totalDuration: number, file: string, startAt = 0): void {
-  const sorted = [...masks].sort((a, b) => a.t - b.t);
+  // Fehlende Masken-Bilder (z. B. nach dem Aufräumen) überspringen, sonst bricht der Export ab
+  const sorted = masks.filter((m) => fs.existsSync(m.path)).sort((a, b) => a.t - b.t);
   const lines: string[] = [];
   // Jede Maske gilt bis zur Mitte zur nächsten (wie maskAt in der Vorschau: nächstliegende Maske)
   const mid = (i: number) => (sorted[i].t + sorted[i + 1].t) / 2;
