@@ -1,0 +1,330 @@
+
+> panocut@0.14.0 typecheck
+> tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit
+
+
+> panocut@0.14.0 build:main
+> node scripts/build-main.mjs
+
+
+  dist/main/main.js  465.6kb
+
+⚡ Done in 23ms
+
+  dist/main/preload.js  10.5kb
+
+⚡ Done in 1ms
+
+  dist/main/audioWorker.js  10.8kb
+
+⚡ Done in 2ms
+
+  dist/main/mtWorker.js  4.2kb
+
+⚡ Done in 0ms
+Hauptprozess gebaut.
+
+> panocut@0.14.0 build:renderer
+> vite build
+
+[36mvite v6.4.6 [32mbuilding for production...[36m[39m
+transforming...
+[32m✓[39m 148 modules transformed.
+rendering chunks...
+computing gzip size...
+[2m../../dist/renderer/[22m[32mindex.html                                 [39m[1m[2m  0.69 kB[22m[1m[22m[2m │ gzip:   0.39 kB[22m
+[2m../../dist/renderer/[22m[2massets/[22m[32mlogo-256-BVJFt2T3.png               [39m[1m[2m 28.85 kB[22m[1m[22m
+[2m../../dist/renderer/[22m[2massets/[22m[35mindex-z3ULlpS1.css                  [39m[1m[2m 43.75 kB[22m[1m[22m[2m │ gzip:   9.16 kB[22m
+[2m../../dist/renderer/[22m[2massets/[22m[36mtestHook-D8jfxL4x.js                [39m[1m[2m  0.25 kB[22m[1m[22m[2m │ gzip:   0.21 kB[22m
+[2m../../dist/renderer/[22m[2massets/[22m[36mSTLLoader-BCha8oLY.js               [39m[1m[2m  3.03 kB[22m[1m[22m[2m │ gzip:   1.47 kB[22m
+[2m../../dist/renderer/[22m[2massets/[22m[36mDRACOLoader-Cl37Wt-A.js             [39m[1m[2m  6.38 kB[22m[1m[22m[2m │ gzip:   2.64 kB[22m
+[2m../../dist/renderer/[22m[2massets/[22m[36mOBJLoader-Bia3r8rw.js               [39m[1m[2m  8.89 kB[22m[1m[22m[2m │ gzip:   2.98 kB[22m
+[2m../../dist/renderer/[22m[2massets/[22m[36mmeshopt_decoder.module-BbCP70j-.js  [39m[1m[2m 22.41 kB[22m[1m[22m[2m │ gzip:   6.01 kB[22m
+[2m../../dist/renderer/[22m[2massets/[22m[36mGLTFLoader-C3T5bmYp.js              [39m[1m[2m 46.88 kB[22m[1m[22m[2m │ gzip:  13.89 kB[22m
+[2m../../dist/renderer/[22m[2massets/[22m[36mFBXLoader-C1kGQHqM.js               [39m[1m[2m 48.87 kB[22m[1m[22m[2m │ gzip:  16.39 kB[22m
+[2m../../dist/renderer/[22m[2massets/[22m[36mthree.module-BtCAaDxU.js            [39m[1m[33m688.39 kB[39m[22m[2m │ gzip: 177.02 kB[22m
+[2m../../dist/renderer/[22m[2massets/[22m[36mindex-BNrt80mF.js                   [39m[1m[33m741.91 kB[39m[22m[2m │ gzip: 236.98 kB[22m
+[33m
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+[32m✓ built in 2.21s[39m
+[2631:1114/225245.311015:ERROR:bus.cc(408)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[2631:1114/225245.311045:ERROR:bus.cc(408)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[2631:1114/225245.311051:ERROR:bus.cc(408)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[2631:1114/225245.311054:ERROR:bus.cc(408)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[2631:1114/225245.311062:ERROR:object_proxy.cc(576)] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[smoke] Testdateien erzeugen …
+22:52:45.329 › ffmpeg -hide_banner -nostdin -y -f lavfi -i testsrc=duration=4:size=640x360:rate=30 -f lavfi -i sine=frequency=440:duration=4 -c:v libx264 -pix_fmt yuv420p -c:a aac -shortest /tmp/panocut-smoke-8VSixk/test.mp4
+[2663:1114/225245.463869:ERROR:viz_main_impl.cc(183)] Exiting GPU process due to errors during initialization
+22:52:45.554 › ffmpeg -hide_banner -nostdin -y -f lavfi -i color=c=red:s=320x240:d=1 -frames:v 1 /tmp/panocut-smoke-8VSixk/test.png
+22:52:45.563 › ffmpeg -hide_banner -nostdin -y -f lavfi -i sine=frequency=220:duration=6 -c:a pcm_s16le /tmp/panocut-smoke-8VSixk/music.wav
+22:52:45.573 › ffmpeg -hide_banner -nostdin -y -f lavfi -i testsrc2=duration=3:size=2048x1024:rate=30 -c:v libx264 -pix_fmt yuv420p /tmp/panocut-smoke-8VSixk/pano.mp4
+[smoke] Filter: v360=true xfade=true drawtext=false subtitles=true vidstab=true sendcmd=true
+[smoke] Import …
+22:52:46.579 › ffmpeg -hide_banner -nostdin -y -ss 0.400 -i /tmp/panocut-smoke-8VSixk/test.mp4 -vf scale=320:-2 -frames:v 1 -q:v 4 /home/runner/.config/PanoCut/cache/9303333d8815b843/thumb.jpg
+22:52:46.597 › ffmpeg -hide_banner -nostdin -y -i /tmp/panocut-smoke-8VSixk/test.mp4 -vf fps=6.000000,scale=160:-2,tile=24x1 -frames:v 1 -q:v 5 /home/runner/.config/PanoCut/cache/9303333d8815b843/sprite.jpg
+22:52:46.627 › ffmpeg -hide_banner -nostdin -y -vn -i /tmp/panocut-smoke-8VSixk/test.mp4 -filter_complex aformat=channel_layouts=mono,compand=gain=-2,showwavespic=s=2000x80:colors=#5eead4:scale=sqrt -frames:v 1 /home/runner/.config/PanoCut/cache/9303333d8815b843/wave.png
+[smoke]  test.mp4: video 640x360 4.00s proxy=false sprite=true wave=true 360=false
+22:52:46.650 › ffmpeg -hide_banner -nostdin -y -i /tmp/panocut-smoke-8VSixk/test.png -vf scale=320:-2 -frames:v 1 -q:v 4 /home/runner/.config/PanoCut/cache/d73de8355a6e903c/thumb.jpg
+[smoke]  test.png: image 320x240 0.00s proxy=false sprite=false wave=false 360=false
+22:52:46.670 › ffmpeg -hide_banner -nostdin -y -i /tmp/panocut-smoke-8VSixk/music.wav -filter_complex aformat=channel_layouts=mono,compand=gain=-2,showwavespic=s=2000x80:colors=#5eead4:scale=sqrt -frames:v 1 /home/runner/.config/PanoCut/cache/80ee4db8a90d6e0d/wave.png
+[smoke]  music.wav: audio 0x0 6.00s proxy=false sprite=false wave=true 360=false
+22:52:46.702 › ffmpeg -hide_banner -nostdin -y -ss 0.300 -i /tmp/panocut-smoke-8VSixk/pano.mp4 -vf scale=320:-2 -frames:v 1 -q:v 4 /home/runner/.config/PanoCut/cache/3e16bf1eca8ef820/thumb.jpg
+22:52:46.753 › ffmpeg -hide_banner -nostdin -y -i /tmp/panocut-smoke-8VSixk/pano.mp4 -vf fps=8.000000,scale=160:-2,tile=24x1 -frames:v 1 -q:v 5 /home/runner/.config/PanoCut/cache/3e16bf1eca8ef820/sprite.jpg
+22:52:46.904 › ffmpeg -hide_banner -nostdin -y -i /tmp/panocut-smoke-8VSixk/pano.mp4 -map 0:v:0 -vf scale=-2:360 -c:v libx264 -preset veryfast -crf 23 -g 15 -pix_fmt yuv420p -threads 0 -movflags +faststart /home/runner/.config/PanoCut/cache/3e16bf1eca8ef820/proxy_360.part.mp4 -progress pipe:1 -nostats
+[smoke]  pano.mp4: video 2048x1024 3.00s proxy=true sprite=true wave=false 360=true
+[smoke] Timeline bauen …
+22:52:47.159 › ffmpeg -hide_banner -nostdin -y -f lavfi -i nullsrc=s=640x360,geq=lum='255*lt(hypot(X-220,Y-180),110)':cb=128:cr=128 -frames:v 1 /tmp/panocut-smoke-8VSixk/mask1.png
+22:52:47.180 › ffmpeg -hide_banner -nostdin -y -f lavfi -i nullsrc=s=640x360,geq=lum='255*lt(hypot(X-420,Y-180),110)':cb=128:cr=128 -frames:v 1 /tmp/panocut-smoke-8VSixk/mask2.png
+[smoke] Export …
+[smoke]  Vorbereitung …
+22:52:47.201 › Export in Abschnitten 0.00–3.60, 3.60–5.00
+[smoke]  0 %
+22:52:47.203 › ffmpeg -hide_banner -nostdin -y -ss 1.0000 -t 1.0000 -i /tmp/panocut-smoke-8VSixk/test.mp4 -map 0:v:0 -vf scale=w=640:h=360:force_original_aspect_ratio=decrease:force_divisible_by=2,fps=30 -map 0:a:0? -c:v libx264 -preset faster -crf 18 -pix_fmt yuv420p -force_key_frames expr:gte(t,n_forced*10.000) -c:a pcm_s16le -f segment -segment_time 10.000 -reset_timestamps 1 /tmp/panocut-export-R6taC9/0_rev_clip_qo2v323d488m.mov.parts/seg_%04d.mov
+22:52:47.270 › ffmpeg -hide_banner -nostdin -y -i /tmp/panocut-export-R6taC9/0_rev_clip_qo2v323d488m.mov.parts/seg_0000.mov -vf reverse -af areverse -c:v libx264 -preset faster -crf 18 -pix_fmt yuv420p -c:a pcm_s16le /tmp/panocut-export-R6taC9/0_rev_clip_qo2v323d488m.mov.parts/rev_seg_0000.mov
+22:52:47.334 › ffmpeg -hide_banner -nostdin -y -f concat -safe 0 -i /tmp/panocut-export-R6taC9/0_rev_clip_qo2v323d488m.mov.parts/list.txt -c:v copy -c:a aac -b:a 192k -movflags +faststart /tmp/panocut-export-R6taC9/0_rev_clip_qo2v323d488m.mov
+22:52:47.372 › ffmpeg -hide_banner -nostdin -y -ss 0 -t 2 -i /tmp/panocut-smoke-8VSixk/test.mp4 -filter_complex [0:v]setpts=PTS-STARTPTS,fps=30,scale=w=640:h=360:force_original_aspect_ratio=decrease:force_divisible_by=2,vidstabdetect=shakiness=5:accuracy=15:result='/tmp/panocut-export-R6taC9/1_stab_clip_x6fwf7zq488m.trf' -f null -
+22:52:47.474 › Export-Graph { inputs: 10, filters: 101, threads: { decoder: 4, filter: 4 } }
+22:52:47.475 › ffmpeg -hide_banner -nostdin -y -filter_complex_threads 4 -ss 0 -t 2 -reinit_filter 0 -threads 4 -i /tmp/panocut-smoke-8VSixk/test.mp4 -ss 0 -t 1 -reinit_filter 0 -threads 4 -i /tmp/panocut-export-R6taC9/0_rev_clip_qo2v323d488m.mov -loop 1 -framerate 30 -t 1 -reinit_filter 0 -threads 4 -i /tmp/panocut-smoke-8VSixk/test.png -ss 0 -t 0.1 -reinit_filter 0 -threads 4 -i /tmp/panocut-smoke-8VSixk/pano.mp4 -ss 0 -t 1 -reinit_filter 0 -threads 4 -i /tmp/panocut-smoke-8VSixk/test.mp4 -ss 0 -t 3.5 -reinit_filter 0 -threads 4 -i /tmp/panocut-smoke-8VSixk/music.wav -ss 1.8 -t 0.4 -reinit_filter 0 -threads 4 -i /tmp/panocut-smoke-8VSixk/test.mp4 -ss 0 -t 0.8 -reinit_filter 0 -threads 4 -i /tmp/panocut-export-R6taC9/0_rev_clip_qo2v323d488m.mov -ss 0.6 -t 0.8 -reinit_filter 0 -threads 4 -i /tmp/panocut-export-R6taC9/0_rev_clip_qo2v323d488m.mov -loop 1 -framerate 30 -t 0.4 -reinit_filter 0 -threads 4 -i /tmp/panocut-smoke-8VSixk/test.png -filter_complex_script /tmp/panocut-export-R6taC9/6_graph_0.txt -map [vout] -c:v libx264 -preset medium -profile:v high -crf 23 -movflags +faststart -t 3.6 -threads 0 /tmp/panocut-export-hmOzMl/part_0.mp4 -progress pipe:1 -nostats
+22:52:48.451 › ffmpeg -hide_banner -nostdin -y -ss 2 -t 1.2 -i /tmp/panocut-smoke-8VSixk/test.mp4 -filter_complex [0:v]setpts=PTS-STARTPTS,fps=30,scale=w=640:h=360:force_original_aspect_ratio=decrease:force_divisible_by=2,format=yuva420p,chromakey=color=0xff0000:similarity=0.2:blend=0.1,despill=type=blue:mix=0.5:expand=0,format=rgba[o] -map [o] -frames:v 1 /tmp/panocut-export-i98GfA/0_cutsize_clip_knnkxb2r489s.png
+22:52:48.494 › ffmpeg -hide_banner -nostdin -y -filter_complex_threads 4 -ss 0.1 -t 1.4 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/pano.mp4 -ss 2 -t 1.2 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/test.mp4 -ss 0 -f concat -safe 0 -reinit_filter 0 -i /tmp/panocut-export-i98GfA/1_masks_clip_knnkxb2r489s.txt -filter_complex_script /tmp/panocut-export-i98GfA/4_graph_0.txt -map [vout] -c:v libx264 -preset medium -profile:v high -crf 23 -movflags +faststart -t 1.4 -threads 0 /tmp/panocut-export-hmOzMl/part_1.mp4 -progress pipe:1 -nostats
+22:52:49.993 › Export-Graph { inputs: 8, filters: 33, threads: { decoder: 4, filter: 4 } }
+22:52:49.994 › ffmpeg -hide_banner -nostdin -y -filter_complex_threads 4 -vn -ss 0 -t 2 -reinit_filter 0 -threads 4 -i /tmp/panocut-smoke-8VSixk/test.mp4 -vn -ss 1 -t 1 -reinit_filter 0 -threads 4 -i /tmp/panocut-smoke-8VSixk/test.mp4 -f lavfi -t 0.1 -reinit_filter 0 -threads 4 -i anullsrc=r=48000:cl=stereo -f lavfi -t 0.1 -reinit_filter 0 -threads 4 -i anullsrc=r=48000:cl=stereo -vn -ss 0 -t 1 -reinit_filter 0 -threads 4 -i /tmp/panocut-smoke-8VSixk/test.mp4 -vn -ss 2 -t 1.2 -reinit_filter 0 -threads 4 -i /tmp/panocut-smoke-8VSixk/test.mp4 -vn -ss 0 -t 3.5 -reinit_filter 0 -threads 4 -i /tmp/panocut-smoke-8VSixk/music.wav -f lavfi -t 5 -reinit_filter 0 -threads 4 -i anullsrc=r=48000:cl=stereo -filter_complex_script /tmp/panocut-export-7zivwh/0_graph_0.txt -map [aout] -c:a aac -b:a 128k -vn -t 5 /tmp/panocut-export-hmOzMl/audio.m4a -progress pipe:1 -nostats
+22:52:50.098 › ffmpeg -hide_banner -nostdin -y -f concat -safe 0 -i /tmp/panocut-export-hmOzMl/parts.txt -i /tmp/panocut-export-hmOzMl/audio.m4a -map 0:v:0 -map 1:a:0 -c copy -movflags +faststart -t 5 /tmp/panocut-smoke-8VSixk/export.mp4
+[smoke] Ergebnis: 5.00 s, 640x360 h264, Audio: aac
+[smoke] 360°-Export mit Größenlimit …
+22:52:50.121 › ffmpeg -hide_banner -nostdin -y -filter_complex_threads 4 -sws_flags lanczos+accurate_rnd -ss 0 -t 2 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/pano.mp4 -filter_complex_script /tmp/panocut-export-TeUlNV/0_graph_1.txt -map [vout] -c:v libx264 -preset medium -profile:v high -b:v 3898531 -maxrate 4483311 -bufsize 7797062 -pass 1 -passlogfile /tmp/panocut-export-TeUlNV/pass -an -t 2 -threads 0 -f null /dev/null -progress pipe:1 -nostats
+22:52:50.696 › ffmpeg -hide_banner -nostdin -y -filter_complex_threads 4 -sws_flags lanczos+accurate_rnd -ss 0 -t 2 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/pano.mp4 -f lavfi -t 2 -reinit_filter 0 -i anullsrc=r=48000:cl=stereo -filter_complex_script /tmp/panocut-export-TeUlNV/1_graph_2.txt -map [vout] -map [aout] -c:v libx264 -preset medium -profile:v high -b:v 3898531 -maxrate 4483311 -bufsize 7797062 -pass 2 -passlogfile /tmp/panocut-export-TeUlNV/pass -c:a aac -b:a 128k -movflags +faststart -t 2 -threads 0 /tmp/panocut-smoke-8VSixk/export360.mp4 -progress pipe:1 -nostats
+[smoke] 360°-Export: 0.94 MB, Metadaten: true
+[smoke] GIF-Export …
+22:52:51.394 › ffmpeg -hide_banner -nostdin -y -ss 0 -t 1 -i /tmp/panocut-smoke-8VSixk/test.mp4 -filter_complex [0:v]setpts=PTS-STARTPTS,fps=10,scale=w=320:h=180:force_original_aspect_ratio=decrease:force_divisible_by=2,vidstabdetect=shakiness=5:accuracy=15:result='/tmp/panocut-export-6dvulc/0_stab_clip_x6fwf7zq488m.trf' -f null -
+22:52:51.418 › ffmpeg -hide_banner -nostdin -y -filter_complex_threads 4 -ss 0 -t 1 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/test.mp4 -ss 0 -t 1 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/music.wav -filter_complex_script /tmp/panocut-export-6dvulc/2_graph_0.txt -map [vout] -t 1 -threads 0 /tmp/panocut-smoke-8VSixk/export.gif -progress pipe:1 -nostats
+[smoke] GIF ok
+[smoke] Effekt-Export (Looks, LUT, Animation, Ducking) …
+22:52:51.529 › ffmpeg -hide_banner -nostdin -y -filter_complex_threads 4 -ss 0 -t 2 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/test.mp4 -loop 1 -framerate 30 -t 2 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/test.png -ss 0 -t 2 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/music.wav -f lavfi -t 2 -reinit_filter 0 -i anullsrc=r=48000:cl=stereo -filter_complex_script /tmp/panocut-export-9JcIV7/3_graph_0.txt -map [vout] -map [aout] -c:v libx264 -preset medium -profile:v high -crf 23 -c:a aac -b:a 128k -movflags +faststart -t 2 -threads 0 /tmp/panocut-smoke-8VSixk/export_fx.mp4 -progress pipe:1 -nostats
+22:52:52.474 › ffmpeg -hide_banner -nostdin -y -ss 1.2 -i /tmp/panocut-smoke-8VSixk/export_fx.mp4 -frames:v 1 -vf crop=4:4:478:178 -f rawvideo -pix_fmt rgb24 /tmp/panocut-smoke-8VSixk/px_1.2.rgb
+22:52:52.497 › ffmpeg -hide_banner -nostdin -y -ss 0.03 -i /tmp/panocut-smoke-8VSixk/export_fx.mp4 -frames:v 1 -vf crop=4:4:478:178 -f rawvideo -pix_fmt rgb24 /tmp/panocut-smoke-8VSixk/px_0.03.rgb
+[smoke] Animation: Pixel bei 1,2 s = 252,0,0, bei 0 s = 95,95,95
+[smoke] Effekte ok
+[smoke] Ebenen-Export (Transparenz, Schatten, Mischmodus) …
+22:52:52.515 › ffmpeg -hide_banner -nostdin -y -f lavfi -i color=c=0x606060:s=640x360:d=2:r=30 -c:v libx264 -pix_fmt yuv420p /tmp/panocut-smoke-8VSixk/grey.mp4
+22:52:52.570 › ffmpeg -hide_banner -nostdin -y -f lavfi -i color=c=red:s=160x160:d=2:r=30,format=rgba,geq=r='255':g='0':b='0':a='255*lt(hypot(X-80\,Y-80)\,50)' -c:v libvpx-vp9 -pix_fmt yuva420p -b:v 0 -crf 20 /tmp/panocut-smoke-8VSixk/fx_alpha.webm
+22:52:52.699 › ffmpeg -hide_banner -nostdin -y -f lavfi -i nullsrc=s=80x80:d=2:r=30,format=gray,geq=lum='255*exp(-(pow(X-40\,2)+pow(Y-40\,2))/300)' -vf format=yuv420p -c:v libvpx-vp9 -b:v 0 -crf 20 /tmp/panocut-smoke-8VSixk/fx_light.webm
+22:52:52.766 › ffmpeg -hide_banner -nostdin -y -ss 0.200 -i /tmp/panocut-smoke-8VSixk/grey.mp4 -vf scale=320:-2 -frames:v 1 -q:v 4 /home/runner/.config/PanoCut/cache/984154386cadf935/thumb.jpg
+22:52:52.783 › ffmpeg -hide_banner -nostdin -y -i /tmp/panocut-smoke-8VSixk/grey.mp4 -vf fps=12.000000,scale=160:-2,tile=24x1 -frames:v 1 -q:v 5 /home/runner/.config/PanoCut/cache/984154386cadf935/sprite.jpg
+22:52:52.815 › ffmpeg -hide_banner -nostdin -y -ss 0.200 -i /tmp/panocut-smoke-8VSixk/fx_alpha.webm -vf scale=320:-2 -frames:v 1 -q:v 4 /home/runner/.config/PanoCut/cache/3b0b61a75c7631cd/thumb.jpg
+22:52:52.825 › ffmpeg -hide_banner -nostdin -y -i /tmp/panocut-smoke-8VSixk/fx_alpha.webm -vf fps=12.000000,scale=160:-2,tile=24x1 -frames:v 1 -q:v 5 /home/runner/.config/PanoCut/cache/3b0b61a75c7631cd/sprite.jpg
+22:52:52.839 › ffmpeg -hide_banner -nostdin -y -i /tmp/panocut-smoke-8VSixk/fx_alpha.webm -map 0:v:0 -vf scale=-2:160 -c:v libx264 -preset veryfast -crf 23 -g 15 -pix_fmt yuv420p -threads 0 -movflags +faststart /home/runner/.config/PanoCut/cache/3b0b61a75c7631cd/proxy_360.part.mp4 -progress pipe:1 -nostats
+22:52:52.865 › ffmpeg -hide_banner -nostdin -y -ss 0.200 -i /tmp/panocut-smoke-8VSixk/fx_light.webm -vf scale=320:-2 -frames:v 1 -q:v 4 /home/runner/.config/PanoCut/cache/c4226abd64b32e02/thumb.jpg
+22:52:52.875 › ffmpeg -hide_banner -nostdin -y -i /tmp/panocut-smoke-8VSixk/fx_light.webm -vf fps=12.000000,scale=160:-2,tile=24x1 -frames:v 1 -q:v 5 /home/runner/.config/PanoCut/cache/c4226abd64b32e02/sprite.jpg
+22:52:52.888 › ffmpeg -hide_banner -nostdin -y -i /tmp/panocut-smoke-8VSixk/fx_light.webm -map 0:v:0 -vf scale=-2:80 -c:v libx264 -preset veryfast -crf 23 -g 15 -pix_fmt yuv420p -threads 0 -movflags +faststart /home/runner/.config/PanoCut/cache/c4226abd64b32e02/proxy_360.part.mp4 -progress pipe:1 -nostats
+22:52:52.901 › ffmpeg -hide_banner -nostdin -y -filter_complex_threads 4 -ss 0 -t 2 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/grey.mp4 -ss 0 -t 2 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/fx_light.webm -c:v libvpx-vp9 -ss 0 -t 2 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/fx_alpha.webm -f lavfi -t 2 -reinit_filter 0 -i anullsrc=r=48000:cl=stereo -filter_complex_script /tmp/panocut-export-2JTXBW/0_graph_0.txt -map [vout] -map [aout] -c:v libx264 -preset medium -profile:v high -crf 23 -c:a aac -b:a 128k -movflags +faststart -t 2 -threads 0 /tmp/panocut-smoke-8VSixk/export_layers.mp4 -progress pipe:1 -nostats
+22:52:53.258 › ffmpeg -hide_banner -nostdin -y -ss 1 -i /tmp/panocut-smoke-8VSixk/export_layers.mp4 -frames:v 1 -vf crop=4:4:318:178 -f rawvideo -pix_fmt rgb24 /tmp/panocut-smoke-8VSixk/lay_318_178.rgb
+22:52:53.277 › ffmpeg -hide_banner -nostdin -y -ss 1 -i /tmp/panocut-smoke-8VSixk/export_layers.mp4 -frames:v 1 -vf crop=4:4:393:178 -f rawvideo -pix_fmt rgb24 /tmp/panocut-smoke-8VSixk/lay_393_178.rgb
+22:52:53.296 › ffmpeg -hide_banner -nostdin -y -ss 1 -i /tmp/panocut-smoke-8VSixk/export_layers.mp4 -frames:v 1 -vf crop=4:4:318:70 -f rawvideo -pix_fmt rgb24 /tmp/panocut-smoke-8VSixk/lay_318_70.rgb
+22:52:53.315 › ffmpeg -hide_banner -nostdin -y -ss 1 -i /tmp/panocut-smoke-8VSixk/export_layers.mp4 -frames:v 1 -vf crop=4:4:20:20 -f rawvideo -pix_fmt rgb24 /tmp/panocut-smoke-8VSixk/lay_20_20.rgb
+[smoke] Ebenen: Effekt 252,0,0 · Schatten 40,40,40 · Licht 156,156,156 · Hintergrund 95,95,95
+[smoke] Ebenen ok
+[smoke] Takterkennung …
+22:52:53.333 › ffmpeg -hide_banner -nostdin -y -f lavfi -i aevalsrc='0.8*sin(2*PI*(55+90*exp(-mod(t-0.25,0.5)*40))*mod(t-0.25,0.5))*exp(-mod(t-0.25,0.5)*14)*gte(t,0.25)':s=22050:d=12 -c:a pcm_s16le /tmp/panocut-smoke-8VSixk/beat.wav
+22:52:53.371 › ffmpeg -hide_banner -nostdin -y -i /tmp/panocut-smoke-8VSixk/beat.wav -vn -ac 1 -ar 22050 -f f32le /tmp/panocut_pcm_2631_mwh04d17_v482m.f32
+22:52:53.455 › Takt erkannt: 119.8 BPM, 24 Schläge (73 ms) beat.wav
+[smoke] Takt: 119.8 BPM, 24 Schläge, größte Abweichung 23 ms
+[smoke] Mehrkamera: Ton-Synchronisierung …
+22:52:53.455 › ffmpeg -hide_banner -nostdin -y -f lavfi -i anoisesrc=d=20:c=pink:a=0.3:seed=7 -af volume='if(lt(random(0),0.12),1,0.06)':eval=frame -ar 22050 /tmp/panocut-smoke-8VSixk/sync.wav
+22:52:53.473 › ffmpeg -hide_banner -nostdin -y -ss 2 -t 15 -i /tmp/panocut-smoke-8VSixk/sync.wav /tmp/panocut-smoke-8VSixk/camA.wav
+22:52:53.486 › ffmpeg -hide_banner -nostdin -y -ss 5.4 -t 12 -i /tmp/panocut-smoke-8VSixk/sync.wav -af highpass=f=400,volume=0.5 /tmp/panocut-smoke-8VSixk/camB.wav
+22:52:53.498 › ffmpeg -hide_banner -nostdin -y -i /tmp/panocut-smoke-8VSixk/camA.wav -vn -ac 1 -ar 22050 -f f32le /tmp/panocut_pcm_2631_mwh04d4q_rszjt.f32
+22:52:53.588 › ffmpeg -hide_banner -nostdin -y -i /tmp/panocut-smoke-8VSixk/camB.wav -vn -ac 1 -ar 22050 -f f32le /tmp/panocut_pcm_2631_mwh04d77_9mlpp.f32
+[smoke] Sync: Versatz 3.398 s (erwartet 3,400), Sicherheit 0.73
+[smoke] Dynamische Übergänge und Belichtungskurve …
+22:52:53.675 › Export in Abschnitten 0.00–2.00, 2.00–3.00, 3.00–4.00, 4.00–7.20
+22:52:53.677 › ffmpeg -hide_banner -nostdin -y -filter_complex_threads 4 -ss 0.5 -t 1.2 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/test.mp4 -ss 0.5 -t 0.8 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/grey.mp4 -ss 1.4 -t 0.6 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/test.mp4 -ss 0.2 -t 0.6 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/grey.mp4 -filter_complex_script /tmp/panocut-export-y92TZI/4_graph_0.txt -map [vout] -c:v libx264 -preset medium -profile:v high -crf 23 -movflags +faststart -t 2 -threads 0 /tmp/panocut-export-BrPgZ4/part_0.mp4 -progress pipe:1 -nostats
+22:52:54.417 › ffmpeg -hide_banner -nostdin -y -filter_complex_threads 4 -ss 1.3 -t 0.4 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/grey.mp4 -ss 0.5 -t 0.6 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/test.mp4 -ss 1.4 -t 0.6 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/grey.mp4 -ss 0.2 -t 0.6 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/test.mp4 -filter_complex_script /tmp/panocut-export-SxCmw0/2_graph_0.txt -map [vout] -c:v libx264 -preset medium -profile:v high -crf 23 -movflags +faststart -t 1 -threads 0 /tmp/panocut-export-BrPgZ4/part_1.mp4 -progress pipe:1 -nostats
+22:52:54.731 › ffmpeg -hide_banner -nostdin -y -filter_complex_threads 4 -ss 1.1 -t 0.6 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/test.mp4 -ss 0.5 -t 0.4 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/grey.mp4 -ss 1.4 -t 0.6 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/test.mp4 -ss 0.2 -t 0.6 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/grey.mp4 -filter_complex_script /tmp/panocut-export-T4hgvH/2_graph_0.txt -map [vout] -c:v libx264 -preset medium -profile:v high -crf 23 -movflags +faststart -t 1 -threads 0 /tmp/panocut-export-BrPgZ4/part_2.mp4 -progress pipe:1 -nostats
+22:52:55.029 › Export-Graph { inputs: 7, filters: 111, threads: { decoder: 4, filter: 4 } }
+22:52:55.030 › ffmpeg -hide_banner -nostdin -y -filter_complex_threads 4 -ss 0.9 -t 0.8 -reinit_filter 0 -threads 4 -i /tmp/panocut-smoke-8VSixk/grey.mp4 -ss 0.5 -t 1.2 -reinit_filter 0 -threads 4 -i /tmp/panocut-smoke-8VSixk/test.mp4 -ss 0.5 -t 1.2 -reinit_filter 0 -threads 4 -i /tmp/panocut-smoke-8VSixk/grey.mp4 -ss 1.4 -t 0.6 -reinit_filter 0 -threads 4 -i /tmp/panocut-smoke-8VSixk/grey.mp4 -ss 0.2 -t 0.6 -reinit_filter 0 -threads 4 -i /tmp/panocut-smoke-8VSixk/test.mp4 -ss 1.4 -t 0.6 -reinit_filter 0 -threads 4 -i /tmp/panocut-smoke-8VSixk/test.mp4 -ss 0.2 -t 0.6 -reinit_filter 0 -threads 4 -i /tmp/panocut-smoke-8VSixk/grey.mp4 -filter_complex_script /tmp/panocut-export-h7mqHD/4_graph_0.txt -map [vout] -c:v libx264 -preset medium -profile:v high -crf 23 -movflags +faststart -t 3.2 -threads 0 /tmp/panocut-export-BrPgZ4/part_3.mp4 -progress pipe:1 -nostats
+22:52:55.832 › Export-Graph { inputs: 7, filters: 21, threads: { decoder: 4, filter: 4 } }
+22:52:55.832 › ffmpeg -hide_banner -nostdin -y -filter_complex_threads 4 -vn -ss 0.5 -t 1.2 -reinit_filter 0 -threads 4 -i /tmp/panocut-smoke-8VSixk/test.mp4 -f lavfi -t 0.1 -reinit_filter 0 -threads 4 -i anullsrc=r=48000:cl=stereo -vn -ss 0.5 -t 1.2 -reinit_filter 0 -threads 4 -i /tmp/panocut-smoke-8VSixk/test.mp4 -f lavfi -t 0.1 -reinit_filter 0 -threads 4 -i anullsrc=r=48000:cl=stereo -vn -ss 0.5 -t 1.2 -reinit_filter 0 -threads 4 -i /tmp/panocut-smoke-8VSixk/test.mp4 -f lavfi -t 0.1 -reinit_filter 0 -threads 4 -i anullsrc=r=48000:cl=stereo -f lavfi -t 7.2 -reinit_filter 0 -threads 4 -i anullsrc=r=48000:cl=stereo -filter_complex_script /tmp/panocut-export-PJ9ifd/0_graph_0.txt -map [aout] -c:a aac -b:a 128k -vn -t 7.2 /tmp/panocut-export-BrPgZ4/audio.m4a -progress pipe:1 -nostats
+22:52:55.916 › ffmpeg -hide_banner -nostdin -y -f concat -safe 0 -i /tmp/panocut-export-BrPgZ4/parts.txt -i /tmp/panocut-export-BrPgZ4/audio.m4a -map 0:v:0 -map 1:a:0 -c copy -movflags +faststart -t 7.2 /tmp/panocut-smoke-8VSixk/export_dyn.mp4
+22:52:55.942 › ffmpeg -hide_banner -nostdin -y -ss 2.400 -i /tmp/panocut-smoke-8VSixk/export_dyn.mp4 -frames:v 1 -vf scale=64:36 -f rawvideo -pix_fmt gray /tmp/panocut-smoke-8VSixk/dyn_2.4.gray
+22:52:55.963 › ffmpeg -hide_banner -nostdin -y -ss 2.050 -i /tmp/panocut-smoke-8VSixk/export_dyn.mp4 -frames:v 1 -vf scale=64:36 -f rawvideo -pix_fmt gray /tmp/panocut-smoke-8VSixk/dyn_2.05.gray
+22:52:55.980 › ffmpeg -hide_banner -nostdin -y -ss 0.050 -i /tmp/panocut-smoke-8VSixk/export_dyn.mp4 -frames:v 1 -vf scale=64:36 -f rawvideo -pix_fmt gray /tmp/panocut-smoke-8VSixk/dyn_0.05.gray
+22:52:55.998 › ffmpeg -hide_banner -nostdin -y -ss 0.900 -i /tmp/panocut-smoke-8VSixk/export_dyn.mp4 -frames:v 1 -vf scale=64:36 -f rawvideo -pix_fmt gray /tmp/panocut-smoke-8VSixk/dyn_0.9.gray
+[smoke] Blitz: Mitte 255, vorher 95 · Belichtung: Anfang 72, später 118
+[smoke] v0.6 ok
+[smoke] Übersetzung DE ↔ EN …
+[smoke]   Übersetzer wird geladen … 0 MB
+[smoke]   Übersetzer wird geladen … 5 MB
+22:52:57.014 › Übersetzung en→de: Firefox-Modell 1.0 vocab:vocab.ende.spm, model:model.ende.intgemm.alphas.bin, lex:lex.50.50.ende.s2t.bin
+22:52:57.092 › Download 406 über net.fetch, versuche erneut https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/translations-models/8a830d1c-e167-4238-8473-4065c65c02d2.bin 
+[smoke]   Sprachmodell EN→DE wird geladen … 0 / 21 MB
+[smoke]   Sprachmodell EN→DE wird geladen … 10 / 21 MB
+[smoke]   Sprachmodell EN→DE wird geladen … 11 / 21 MB
+22:52:57.359 › Download 406 über net.fetch, versuche erneut https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/translations-models/a5117ec6-0b87-4ae1-9c2e-5151de59af1d.spm 
+22:52:57.461 › Download 406 über net.fetch, versuche erneut https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/translations-models/db204e54-8565-4bba-aa52-1e857bcc68a5.bin 
+[smoke]   Sprachmodell EN→DE wird geladen … 21 / 21 MB
+[smoke]   Wird übersetzt …
+Using fallback gemm implementation
+22:52:57.855 › Übersetzung de→en: Firefox-Modell 1.0 model:model.deen.intgemm.alphas.bin, lex:lex.50.50.deen.s2t.bin, vocab:vocab.deen.spm
+22:52:57.874 › Download 406 über net.fetch, versuche erneut https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/translations-models/8e3df11a-c2fc-422a-bc2d-ae234dab44c9.bin 
+22:52:58.004 › Download 406 über net.fetch, versuche erneut https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/translations-models/9fb51529-8473-4138-a9e0-0a588ab574f0.spm 
+22:52:58.048 › Download 406 über net.fetch, versuche erneut https://firefox-settings-attachments.cdn.mozilla.net/main-workspace/translations-models/e2f7beb4-b45d-49da-b83e-ff421ad1268c.bin 
+Using fallback gemm implementation
+[smoke] Übersetzung (2275 ms): ["Hallo, wie geht es Ihnen heute?","Das Auto ist sehr schnell."] / ["The car drives very fast through the tunnel."]
+[smoke] Social-Untertitel …
+22:52:58.298 › ffmpeg -hide_banner -nostdin -y -filter_complex_threads 4 -loop 1 -framerate 30 -t 2 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/test.png -f lavfi -t 2 -reinit_filter 0 -i anullsrc=r=48000:cl=stereo -filter_complex_script /tmp/panocut-export-Mz759a/1_graph_0.txt -map [vout] -map [aout] -c:v libx264 -preset medium -profile:v high -crf 23 -c:a aac -b:a 128k -movflags +faststart -t 2 -threads 0 /tmp/panocut-smoke-8VSixk/export_subs.mp4 -progress pipe:1 -nostats
+22:52:58.449 › ffmpeg -hide_banner -nostdin -y -ss 0.30 -i /tmp/panocut-smoke-8VSixk/export_subs.mp4 -frames:v 1 -f rawvideo -pix_fmt rgb24 /tmp/panocut-smoke-8VSixk/sub_0.3.rgb
+22:52:58.471 › ffmpeg -hide_banner -nostdin -y -ss 1.50 -i /tmp/panocut-smoke-8VSixk/export_subs.mp4 -frames:v 1 -f rawvideo -pix_fmt rgb24 /tmp/panocut-smoke-8VSixk/sub_1.5.rgb
+[smoke] Untertitel: gelb bei 0,3 s 204 px (x≈263), bei 1,5 s 176 px (x≈376)
+[smoke] Social-Untertitel ok
+[smoke] v0.8: Sound-Effekte …
+[smoke] Sounds: 22 erzeugt (815 ms)
+[smoke] v0.8: Glühen, Leuchtspuren, Bewegungsunschärfe, Lautheit …
+22:52:59.333 › ffmpeg -hide_banner -nostdin -y -filter_complex_threads 4 -ss 0 -t 2 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/test.mp4 -ss 0 -t 2 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/music.wav -f lavfi -t 2 -reinit_filter 0 -i anullsrc=r=48000:cl=stereo -filter_complex_script /tmp/panocut-export-yEVFvk/1_graph_0.txt -map [vout] -map [aout] -c:v libx264 -preset medium -profile:v high -crf 23 -c:a aac -b:a 128k -movflags +faststart -t 2 -threads 0 /tmp/panocut-smoke-8VSixk/export_light.mp4 -progress pipe:1 -nostats
+22:52:59.824 › ffmpeg -hide_banner -nostdin -y -i /tmp/panocut-smoke-8VSixk/export_light.mp4 -vn -af ebur128 -f null -
+[smoke] Licht-Effekte ok · Lautheit -14 LUFS
+22:52:59.860 › ffmpeg -hide_banner -nostdin -y -filter_complex_threads 4 -sws_flags lanczos+accurate_rnd -ss 1 -t 0.2 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/test.mp4 -ss 1 -t 0.2 -reinit_filter 0 -i /tmp/panocut-smoke-8VSixk/music.wav -filter_complex_script /tmp/panocut-export-b9XH0R/2_graph_0.txt -map [vout] -c:v mjpeg -q:v 2 -frames:v 1 -update 1 /tmp/panocut-smoke-8VSixk/cover.jpg -progress pipe:1 -nostats
+[smoke] Vorschaubild: 640x360 28715 Bytes
+[smoke] v0.8: Schnitt-Werkzeuge und Analysen …
+22:52:59.983 › ffmpeg -hide_banner -nostdin -y -ss 0.000 -t 4.000 -i /tmp/panocut-smoke-8VSixk/test.mp4 -an -vf fps=4,scale=64:36:flags=area,format=gray -f rawvideo /tmp/panocut-an-2631-1794696779983-80v6r-motion.gray
+22:53:00.011 › ffmpeg -hide_banner -nostdin -y -ss 0.000 -t 6.000 -i /tmp/panocut-smoke-8VSixk/music.wav -vn -af silencedetect=n=-38dB:d=0.6 -f null -
+[smoke] Schnitt ok · Bewegung 16 Werte (Mittel 0.010) · Pausen in Musik: 0
+[smoke] v0.8 ok
+22:53:00.035 › ffmpeg -hide_banner -nostdin -y -i /tmp/dog.jpg -vf scale=768:576 -f rawvideo -pix_fmt rgba /tmp/panocut-smoke-8VSixk/test.rgba
+[smoke] KI: Erkennungsmodell laden und ausführen …
+[smoke]   download 0 %
+[smoke]   download 50 %
+[smoke]   download 75 %
+[smoke]   download 100 %
+[smoke]   load 0 %
+[0;93m2026-11-14 22:53:00.175268290 [W:onnxruntime:onnxruntime-node, device_discovery.cc:95 GetPciBusId] Skipping pci_bus_id for PCI path at "/sys/devices/LNXSYSTM:00/LNXSYBUS:00/ACPI0004:00/MSFT1000:00/5620e0c7-8062-4dce-aeb7-520c7ef76171" because filename "5620e0c7-8062-4dce-aeb7-520c7ef76171" did not match expected pattern of [0-9a-f]+:[0-9a-f]+:[0-9a-f]+[.][0-9a-f]+[m
+[smoke]   done 100 %
+[smoke] KI-Erkennung (167 ms): Hund 86%, Fahrrad 81%, Auto 80%
+[smoke] KI: Maskenmodell laden und ausführen …
+[smoke]   download 0 %
+[smoke]   download 50 %
+[smoke]   download 75 %
+[smoke]   download 100 %
+[smoke]   load 0 %
+[smoke]   done 100 %
+[smoke] KI-Maske: 768x576, 9.0 % Vordergrund
+[smoke] ✅ Selbsttest bestanden
+Unable to revert mtime: /usr/share/fonts
+Unable to revert mtime: /usr/share/fonts/truetype
+Unable to revert mtime: /usr/share/fonts/truetype/dejavu
+Unable to revert mtime: /usr/share/fonts/truetype/lato
+Unable to revert mtime: /usr/share/fonts/truetype/liberation
+Unable to revert mtime: /usr/share/fonts/truetype/noto
+[4969:1114/225301.054027:ERROR:bus.cc(408)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[4969:1114/225301.054068:ERROR:bus.cc(408)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[4969:1114/225301.054072:ERROR:bus.cc(408)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[4969:1114/225301.054076:ERROR:bus.cc(408)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[4969:1114/225301.054081:ERROR:object_proxy.cc(576)] Failed to call method: org.freedesktop.DBus.NameHasOwner: object_path= /org/freedesktop/DBus: unknown error type: 
+[4969:1114/225301.112091:ERROR:bus.cc(408)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[4999:1114/225301.131334:ERROR:viz_main_impl.cc(183)] Exiting GPU process due to errors during initialization
+[ui-test] Testdateien erzeugen …
+22:53:01.754 › ffmpeg -hide_banner -nostdin -y -f lavfi -i testsrc2=duration=4:size=1920x1080:rate=60 -f lavfi -i sine=frequency=440:duration=4 -c:v libx264 -preset veryfast -crf 14 -g 240 -pix_fmt yuv420p -c:a aac -shortest /tmp/panocut-ui-FwPx1z/a_video.mp4
+22:53:02.996 › ffmpeg -hide_banner -nostdin -y -f lavfi -i testsrc2=duration=3:size=2048x1024:rate=30 -c:v libx264 -pix_fmt yuv420p /tmp/panocut-ui-FwPx1z/b_pano360.mp4
+22:53:03.963 › ffmpeg -hide_banner -nostdin -y -f lavfi -i testsrc2=size=1280x720 -frames:v 1 /tmp/panocut-ui-FwPx1z/c_bild.png
+22:53:03.984 › ffmpeg -hide_banner -nostdin -y -f lavfi -i testsrc2=duration=8:size=3840x2160:rate=30 -c:v libx265 -preset ultrafast -tag:v hvc1 -pix_fmt yuv420p /tmp/panocut-ui-FwPx1z/d_4k_hevc.mp4
+22:53:12.003 › ffmpeg -hide_banner -nostdin -y -ss 0.400 -i /tmp/panocut-ui-FwPx1z/a_video.mp4 -vf scale=320:-2 -frames:v 1 -q:v 4 /home/runner/.config/PanoCut/cache/92af5e897b242df1/thumb.jpg
+22:53:12.119 › ffmpeg -hide_banner -nostdin -y -i /tmp/panocut-ui-FwPx1z/a_video.mp4 -vf fps=6.000000,scale=160:-2,tile=24x1 -frames:v 1 -q:v 5 /home/runner/.config/PanoCut/cache/92af5e897b242df1/sprite.jpg
+22:53:12.646 › ffmpeg -hide_banner -nostdin -y -vn -i /tmp/panocut-ui-FwPx1z/a_video.mp4 -filter_complex aformat=channel_layouts=mono,compand=gain=-2,showwavespic=s=2000x80:colors=#5eead4:scale=sqrt -frames:v 1 /home/runner/.config/PanoCut/cache/92af5e897b242df1/wave.png
+22:53:12.676 › ffmpeg -hide_banner -nostdin -y -ss 0.300 -i /tmp/panocut-ui-FwPx1z/b_pano360.mp4 -vf scale=320:-2 -frames:v 1 -q:v 4 /home/runner/.config/PanoCut/cache/42a0510abfb37d9f/thumb.jpg
+22:53:12.740 › ffmpeg -hide_banner -nostdin -y -i /tmp/panocut-ui-FwPx1z/b_pano360.mp4 -vf fps=8.000000,scale=160:-2,tile=24x1 -frames:v 1 -q:v 5 /home/runner/.config/PanoCut/cache/42a0510abfb37d9f/sprite.jpg
+22:53:12.913 › ffmpeg -hide_banner -nostdin -y -i /tmp/panocut-ui-FwPx1z/c_bild.png -vf scale=320:-2 -frames:v 1 -q:v 4 /home/runner/.config/PanoCut/cache/d72de88e03362bd0/thumb.jpg
+22:53:12.920 › ffmpeg -hide_banner -nostdin -y -i /tmp/panocut-ui-FwPx1z/b_pano360.mp4 -map 0:v:0 -vf scale=-2:540 -c:v libx264 -preset veryfast -crf 23 -g 15 -pix_fmt yuv420p -threads 0 -movflags +faststart /home/runner/.config/PanoCut/cache/42a0510abfb37d9f/proxy_540.part.mp4 -progress pipe:1 -nostats
+22:53:12.937 › ffmpeg -hide_banner -nostdin -y -ss 0.800 -i /tmp/panocut-ui-FwPx1z/d_4k_hevc.mp4 -vf scale=320:-2 -frames:v 1 -q:v 4 /home/runner/.config/PanoCut/cache/f6d2fccff78eb2fc/thumb.jpg
+22:53:13.429 › ffmpeg -hide_banner -nostdin -y -i /tmp/panocut-ui-FwPx1z/d_4k_hevc.mp4 -vf fps=3.000000,scale=160:-2,tile=24x1 -frames:v 1 -q:v 5 /home/runner/.config/PanoCut/cache/f6d2fccff78eb2fc/sprite.jpg
+22:53:14.613 › ffmpeg -hide_banner -nostdin -y -i /tmp/panocut-ui-FwPx1z/d_4k_hevc.mp4 -map 0:v:0 -vf scale=-2:540 -c:v libx264 -preset veryfast -crf 23 -g 15 -pix_fmt yuv420p -threads 0 -movflags +faststart /home/runner/.config/PanoCut/cache/f6d2fccff78eb2fc/proxy_540.part.mp4 -progress pipe:1 -nostats
+[ui-test] Import: {"importMs":39,"firstThumbMs":1544,"progressSeen":["d_4k_hevc.mp4:proxy"],"indicator":"4 Datei(en) werden vorbereitet0 %","readyMs":4664,"media":[{"name":"a_video.mp4","status":"ready","proxy":false,"thumb":true,"is360":false},{"name":"b_pano360.mp4","status":"ready","proxy":true,"thumb":true,"is360":true},{"name":"c_bild.png","status":"ready","proxy":false,"thumb":true,"is360":false},{"name":"d_4k_hevc.mp4","status":"ready","proxy":true,"thumb":true,"is360":false}]} (4677 ms)
+[5029:1114/225316.650437:ERROR:gles2_cmd_decoder_passthrough.cc(1094)] [GroupMarkerNotSet(crbug.com/242999)!:A0101F00BC360000]Automatic fallback to software WebGL has been deprecated. Please use the --enable-unsafe-swiftshader flag to opt in to lower security guarantees for trusted content.
+[ui-test] 360°-Shader: ok
+(electron) 'console-message' arguments are deprecated and will be removed. Please use Event<WebContentsConsoleMessageEventParams> object instead.
+[ui-test] Konsole: [GroupMarkerNotSet(crbug.com/242999)!:A0101F00BC360000]Automatic fallback to software WebGL has been deprecated. Please use the --enable-unsafe-swiftshader flag to opt in to lower security guarantees for trusted content.
+ALSA lib confmisc.c:855:(parse_card) [error.core] cannot find card '0'
+ALSA lib conf.c:5211:(_snd_config_evaluate) [error.core] function snd_func_card_inum returned error: No such file or directory
+ALSA lib confmisc.c:422:(snd_func_concat) [error.core] error evaluating strings
+ALSA lib conf.c:5211:(_snd_config_evaluate) [error.core] function snd_func_concat returned error: No such file or directory
+ALSA lib confmisc.c:1342:(snd_func_refer) [error.core] error evaluating name
+ALSA lib conf.c:5211:(_snd_config_evaluate) [error.core] function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5734:(snd_config_expand) [error.core] Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) [error.pcm] Unknown PCM default
+[5392:1114/225316.698652:ERROR:alsa_util.cc(209)] PcmOpen: default,No such file or directory
+ALSA lib confmisc.c:855:(parse_card) [error.core] cannot find card '0'
+ALSA lib conf.c:5211:(_snd_config_evaluate) [error.core] function snd_func_card_inum returned error: No such file or directory
+ALSA lib confmisc.c:422:(snd_func_concat) [error.core] error evaluating strings
+ALSA lib conf.c:5211:(_snd_config_evaluate) [error.core] function snd_func_concat returned error: No such file or directory
+ALSA lib confmisc.c:1342:(snd_func_refer) [error.core] error evaluating name
+ALSA lib conf.c:5211:(_snd_config_evaluate) [error.core] function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5734:(snd_config_expand) [error.core] Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) [error.pcm] Unknown PCM default
+[5392:1114/225316.698724:ERROR:alsa_util.cc(209)] PcmOpen: plug:default,No such file or directory
+[5029:1114/225316.880205:ERROR:gles2_cmd_decoder_passthrough.cc(1094)] [GroupMarkerNotSet(crbug.com/242999)!:A0006800BC360000]Automatic fallback to software WebGL has been deprecated. Please use the --enable-unsafe-swiftshader flag to opt in to lower security guarantees for trusted content.
+[ui-test] Konsole: [GroupMarkerNotSet(crbug.com/242999)!:A0006800BC360000]Automatic fallback to software WebGL has been deprecated. Please use the --enable-unsafe-swiftshader flag to opt in to lower security guarantees for trusted content.
+[ui-test] Vorschau Video bei 1.2 s: sichtbar 126, Canvas 800x450 (794x447), lesbar true, Mittel 125
+[5029:1114/225318.886801:ERROR:gl_utils.cc(431)] [.WebGL-0x34540163db00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+[ui-test] Konsole: [.WebGL-0x34540163db00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+[5029:1114/225318.974122:ERROR:gl_utils.cc(431)] [.WebGL-0x34540163db00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+[5029:1114/225319.045074:ERROR:gl_utils.cc(431)] [.WebGL-0x34540163db00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+[ui-test] Konsole: [.WebGL-0x34540163db00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+[ui-test] Konsole: [.WebGL-0x34540163db00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels
+[5029:1114/225320.746683:ERROR:gl_utils.cc(431)] [.WebGL-0x34540163db00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)
+[ui-test] Konsole: [.WebGL-0x34540163db00]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)
+[ui-test] Konsole: Canvas2D: Multiple readback operations using getImageData are faster with the willReadFrequently attribute set to true. See: https://html.spec.whatwg.org/multipage/canvas.html#concept-canvas-will-read-frequently
+[ui-test] Vorschau 360° bei 5.5 s: sichtbar 128, Canvas 800x450 (794x447), lesbar true, Mittel 128
+[ui-test] Vorschau Bild bei 8.5 s: sichtbar 126, Canvas 800x450 (794x447), lesbar true, Mittel 125
+[ui-test] Vorschau 4K-HEVC bei 15 s: sichtbar 127, Canvas 800x450 (794x447), lesbar true, Mittel 125
+[ui-test] Einzelbild für KI: {"ok":true,"mean":125,"size":"320x180"}
+22:53:25.751 › ffmpeg (frames) -hide_banner -nostdin -ss 3.967 -i /tmp/panocut-ui-FwPx1z/a_video.mp4 -filter_complex [0:v:0]scale=1920:1080:flags=bicubic,format=rgba[o] -map [o] -frames:v 1 -f rawvideo -
+[ui-test] Konsole: Canvas2D: Multiple readback operations using getImageData are faster with the willReadFrequently attribute set to true. See: https://html.spec.whatwg.org/multipage/canvas.html#concept-canvas-will-read-frequently
+[ui-test] Masken-Editor: {"ok":true,"dbg":{"tool":"brush","dirty":"1"},"shown":127,"keys":1,"masks":2,"cut":true,"closed":true}
+[4969:1114/225328.474026:ERROR:bus.cc(408)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[4969:1114/225328.474058:ERROR:bus.cc(408)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[4969:1114/225328.474062:ERROR:bus.cc(408)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[4969:1114/225328.538460:ERROR:bus.cc(408)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[4969:1114/225328.538493:ERROR:bus.cc(408)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[4969:1114/225329.323741:ERROR:bus.cc(408)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[4969:1114/225329.323765:ERROR:bus.cc(408)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[4969:1114/225329.323771:ERROR:bus.cc(408)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[4969:1114/225330.102693:ERROR:bus.cc(408)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[4969:1114/225330.102719:ERROR:bus.cc(408)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[4969:1114/225330.102725:ERROR:bus.cc(408)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[4969:1114/225330.861681:ERROR:bus.cc(408)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[4969:1114/225330.861703:ERROR:bus.cc(408)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[4969:1114/225330.861710:ERROR:bus.cc(408)] Failed to connect to the bus: Could not parse server address: Unknown address type (examples of valid types are "tcp" and on UNIX "unix")
+[ui-test] Wiedergabe: {"at":2.709100000000006,"back":0,"black":0,"samples":50,"seeks":1}
+22:53:31.036 › ffmpeg -hide_banner -nostdin -y -i /home/runner/.config/PanoCut/sounds/boom_1.00_0.0_1.00_1/Boom Bass-Einschlag.wav -filter_complex aformat=channel_layouts=mono,compand=gain=-2,showwavespic=s=2000x80:colors=#5eead4:scale=sqrt -frames:v 1 /home/runner/.config/PanoCut/cache/4c2cc06164a134e4/wave.png
+ALSA lib confmisc.c:855:(parse_card) [error.core] cannot find card '0'
+ALSA lib conf.c:5211:(_snd_config_evaluate) [error.core] function snd_func_card_inum returned error: No such file or directory
+ALSA lib confmisc.c:422:(snd_func_concat) [error.core] error evaluating strings
+ALSA lib conf.c:5211:(_snd_config_evaluate) [error.core] function snd_func_concat returned error: No such file or directory
+ALSA lib confmisc.c:1342:(snd_func_refer) [error.core] error evaluating name
+ALSA lib conf.c:5211:(_snd_config_evaluate) [error.core] function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5734:(snd_config_expand) [error.core] Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) [error.pcm] Unknown PCM default
+[5392:1114/225331.087936:ERROR:alsa_util.cc(209)] PcmOpen: default,No such file or directory
+ALSA lib confmisc.c:855:(parse_card) [error.core] cannot find card '0'
+ALSA lib conf.c:5211:(_snd_config_evaluate) [error.core] function snd_func_card_inum returned error: No such file or directory
+ALSA lib confmisc.c:422:(snd_func_concat) [error.core] error evaluating strings
+ALSA lib conf.c:5211:(_snd_config_evaluate) [error.core] function snd_func_concat returned error: No such file or directory
+ALSA lib confmisc.c:1342:(snd_func_refer) [error.core] error evaluating name
+ALSA lib conf.c:5211:(_snd_config_evaluate) [error.core] function snd_func_refer returned error: No such file or directory
+ALSA lib conf.c:5734:(snd_config_expand) [error.core] Evaluate error: No such file or directory
+ALSA lib pcm.c:2722:(snd_pcm_open_noupdate) [error.pcm] Unknown PCM default
+[5392:1114/225331.088004:ERROR:alsa_util.cc(209)] PcmOpen: plug:default,No such file or directory
+[ui-test] Sound & Werkzeuge: {"clip":true,"dur":1.8,"tools":9}
+22:53:31.539 › ffmpeg -hide_banner -nostdin -y -f lavfi -i testsrc2=duration=3:size=1920x1080:rate=30 -f lavfi -i sine=frequency=300:duration=3 -c:v libx265 -preset ultrafast -tag:v hvc1 -pix_fmt yuv420p -c:a aac -shortest /tmp/panocut-ui-FwPx1z/drohne/DJI_0042.MP4
+22:53:32.395 › ffmpeg -hide_banner -nostdin -y -f lavfi -i testsrc2=duration=3:size=640x360:rate=30 -f lavfi -i sine=frequency=300:duration=3 -c:v libx264 -preset veryfast -pix_fmt yuv420p -c:a aac -shortest -f mp4 /tmp/panocut-ui-FwPx1z/drohne/DJI_0042.LRF
+22:53:32.502 › ffmpeg -hide_banner -nostdin -y -f lavfi -i testsrc2=size=640x360 -frames:v 1 /tmp/panocut-ui-FwPx1z/drohne/unter/foto.png
+22:53:32.561 › ffmpeg -hide_banner -nostdin -y -ss 0.300 -i /tmp/panocut-ui-FwPx1z/drohne/DJI_0042.LRF -vf scale=320:-2 -frames:v 1 -q:v 4 /home/runner/.config/PanoCut/cache/17e55cfac5c5284d/thumb.jpg
+22:53:32.588 › ffmpeg -hide_banner -nostdin -y -i /tmp/panocut-ui-FwPx1z/drohne/DJI_0042.LRF -vf fps=8.000000,scale=160:-2,tile=24x1 -frames:v 1 -q:v 5 /home/runner/.config/PanoCut/cache/17e55cfac5c5284d/sprite.jpg
+22:53:32.633 › ffmpeg -hide_banner -nostdin -y -vn -i /tmp/panocut-ui-FwPx1z/drohne/DJI_0042.LRF -filter_complex aformat=channel_layouts=mono,compand=gain=-2,showwavespic=s=2000x80:colors=#5eead4:scale=sqrt -frames:v 1 /home/runner/.config/PanoCut/cache/17e55cfac5c5284d/wave.png
+22:53:32.656 › ffmpeg -hide_banner -nostdin -y -i /tmp/panocut-ui-FwPx1z/drohne/unter/foto.png -vf scale=320:-2 -frames:v 1 -q:v 4 /home/runner/.config/PanoCut/cache/8b4a5d28cec34166/thumb.jpg
+[ui-test] Ordner-Import mit LRF: {"readyMs":147,"added":2,"lrfItems":0,"status":"ready","companion":"/tmp/panocut-ui-FwPx1z/drohne/DJI_0042.LRF","proxy":"/tmp/panocut-ui-FwPx1z/drohne/DJI_0042.LRF","at":21,"hasBtn":true} Vorschau sichtbar 127
+[ui-test] Original-Ansicht: {"badge":true} sichtbar 127
+[ui-test] ✅ Oberflächen-Test bestanden
+(Ende)
