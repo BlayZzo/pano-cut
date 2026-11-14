@@ -201,3 +201,20 @@ export function formatBytes(bytes: number): string {
 export function clamp(v: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, v));
 }
+
+/** Wie viele Bilder pro Sekunde die Vorschau beim schnellen Abspielen höchstens dekodieren soll (darüber ruckelt es). */
+export const SPEED_DECODE_BUDGET = 480;
+
+/**
+ * Flüssig mögliches Tempo eines Videos: langsamer nur so weit, wie echte Bilder da sind (Quelle 60 fps im
+ * 30-fps-Projekt → ½×), schneller nur so weit, wie die Vorschau Bilder schafft (höchstens 16× – Grenze des Abspielers).
+ */
+export function speedLimits(media: MediaItem | undefined, projectFps: number): { min: number; max: number; fps: number } {
+  if (!media || media.type !== 'video') return { min: 0.05, max: 100, fps: 0 };
+  const fps = media.info.fps && media.info.fps > 1 ? media.info.fps : projectFps || 30;
+  // Langsamer: pro Projekt-Bild muss es ein echtes Bild der Quelle geben → Tempo ≥ Projekt-fps / Quell-fps
+  const min = Math.min(1, Math.max(0.05, Math.round(((projectFps || 30) / fps) * 100) / 100));
+  // Schneller: Quell-Bilder pro Sekunde = Tempo × Quell-fps darf das Vorschau-Budget nicht übersteigen
+  const max = Math.max(1, Math.min(16, Math.floor((SPEED_DECODE_BUDGET / fps) * 10) / 10));
+  return { min, max, fps };
+}

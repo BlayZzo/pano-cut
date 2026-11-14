@@ -1,3 +1,28 @@
+## PanoCut 0.14.0 – Mac ↔ Windows, Tempo-Bausteine, Keyframes kleben am Video
+
+**Installieren**
+- Mac mit Apple-Chip (M1–M4): `PanoCut-0.14.0-mac-arm64.dmg`
+- Mac mit Intel: `PanoCut-0.14.0-mac-x64.dmg`
+- Windows 10/11: `PanoCut-0.14.0-win-x64.exe`
+
+**Projekte auf Mac und PC abwechselnd bearbeiten**
+- Das Projekt merkt sich jetzt zu jeder Datei auch den Weg **relativ zur Projektdatei**. Liegen Projekt und Videos zusammen (z. B. auf einer USB-Platte, in iCloud/OneDrive/Dropbox), öffnet sich dieselbe `.panocut`-Datei auf Mac und Windows mit allem drin.
+- Eigene Arbeit aus dem Programm-Ordner – gemalte Masken, 360°-Bewegungsdaten, Naht-Messung, Sounds, erzeugte Effekte und Objekte – wird beim Speichern in den Ordner **„<Projekt> (PanoCut-Daten)“** neben die Projektdatei kopiert und auf dem anderen Rechner von dort geladen.
+- Vorschau-Dateien werden auf dem anderen Rechner einfach neu erstellt (nichts zu tun).
+- Liegen die Videos dort in einem anderen Ordner: einmal „🔎 Datei suchen …“ – alle anderen aus dem Ordner werden mit verknüpft.
+
+**Tempo als Baustein im Clip**
+- Oben rechts in jedem Clip steht das Tempo als farbiger Baustein (orange ⏩ schneller, blau 🐢 langsamer), dazu „◀ rückwärts“ und bei 360° die Ansicht – auch bei 360°-Videos immer sichtbar.
+
+**Nur flüssiges Tempo**
+- PanoCut prüft die Bildrate (fps) jedes Videos: **langsamer** nur so weit, wie echte Bilder vorhanden sind (60 fps im 30-fps-Projekt → bis ½×, 120 fps → bis ¼×), **schneller** nur so weit, wie die Vorschau ruckelfrei mitkommt (30 fps → bis 16×, 60 fps → bis 8×).
+- Knöpfe außerhalb des Bereichs sind ausgegraut, eingetippte Werte werden begrenzt, der mögliche Bereich steht darunter. Ältere Clips mit ruckelndem Tempo bekommen einen Hinweis mit „Auf flüssigen Wert setzen“.
+- Tempo-Rampen werden automatisch so weit abgeschwächt, dass sie flüssig bleiben.
+
+**Keyframes kleben am Video**
+- Ändert sich das Tempo, wird der Anfang/das Ende gekürzt oder auf Rückwärts gestellt, bleiben Kamerafahrten und alle Keyframes an **demselben Bild des Videos** – die Fahrt wird einfach schneller/langsamer mit. Beim Verschieben des Clips wandern sie sowieso mit.
+- Behoben: Beim Teilen eines Clips wurden Ausschnitt-Fahrten (Zoom/Schwenk) nicht mitgeteilt.
+
 ## PanoCut 0.13.0 – Aufgeräumter Inspektor
 
 **Installieren**

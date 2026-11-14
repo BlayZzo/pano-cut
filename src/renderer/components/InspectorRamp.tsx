@@ -5,7 +5,7 @@ import { beginTransaction, endTransaction, useProject } from '../store/project';
 import { useUi, usePlayheadCoarse } from '../store/ui';
 import { fmt, t } from '../i18n/de';
 import { SelectField, Toggle } from './InspectorBits';
-import { clipDuration } from '@shared/timeline';
+import { clipDuration, speedLimits } from '@shared/timeline';
 import { NEUTRAL_FX } from '@shared/effects';
 import { insertSfx } from '../actions';
 
@@ -20,7 +20,18 @@ export function SpeedRampFields({ clip }: { clip: Clip }): React.ReactElement {
   const inside = playhead > clip.start + 0.05 && playhead < clip.start + D - 0.05;
   const center = o.atPlayhead && inside ? (playhead - clip.start) / D : 0.5;
   const apply = async () => {
-    let pieces = speedRampPieces(clip, o.ramp, o.strength, o.ramp === 'passby' ? 24 : 16, center);
+    // Nur so stark, wie das Video flüssig hergibt (fps): sonst Rampe automatisch abschwächen
+    const st = useProject.getState().project;
+    const lim = speedLimits(st.media[clip.mediaId], st.settings.fps);
+    const fits = (ps: Clip[]) => ps.every((p) => p.speed >= lim.min - 1e-3 && p.speed <= lim.max + 1e-3);
+    let strength = o.strength;
+    let pieces = speedRampPieces(clip, o.ramp, strength, o.ramp === 'passby' ? 24 : 16, center);
+    for (let i = 0; i < 24 && !fits(pieces); i++) {
+      strength *= 0.85;
+      pieces = speedRampPieces(clip, o.ramp, strength, o.ramp === 'passby' ? 24 : 16, center);
+    }
+    if (!fits(pieces)) { useUi.getState().toast(fmt(t.ramp.notSmooth, { min: String(lim.min).replace('.', ','), max: String(lim.max).replace('.', ',') }), 'error'); return; }
+    if (strength < o.strength - 1e-6) useUi.getState().toast(fmt(t.ramp.softened, { p: Math.round((strength / o.strength) * 100) }), 'info');
     // Schnelle Stücke bekommen Bewegungsunschärfe (je schneller, desto mehr)
     if (o.blur) pieces = pieces.map((p) => (p.speed > 1.3 ? { ...p, fx: { ...NEUTRAL_FX, ...(p.fx ?? {}), motionBlur: Math.min(1, (p.speed - 1) * 0.35) } } : p));
     const store = useProject.getState();

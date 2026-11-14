@@ -896,8 +896,6 @@ const TimelineClip = React.memo(function TimelineClip({ clip, media, zoom, strip
 
   const keys = useMemo(() => clipKeyframes(clip), [clip.pano, clip.reframe, clip.motion, clip.id]);
   const tags: string[] = [];
-  if (clip.speed !== 1) tags.push(`${clip.speed < 1 ? clip.speed.toFixed(2).replace(/0+$/, '').replace(/\.$/, '') : Math.round(clip.speed * 100) / 100}×`);
-  if (clip.reverse) tags.push('◀');
   if (clip.muted) tags.push('🔇');
   if (clip.stabilize?.enabled) tags.push('⟲');
   if (clip.subtitles?.enabled && clip.subtitles.segments.length) tags.push('CC');
@@ -922,7 +920,12 @@ const TimelineClip = React.memo(function TimelineClip({ clip, media, zoom, strip
         ? <div className="clip-text">{clip.title?.text}</div>
         : <div className={media?.type === 'audio' ? 'clip-wave' : 'clip-thumbs'} style={strip} />}
       {clip.transition && <div className="transition-mark" title="Übergang" />}
-      {media?.info.is360 && clip.pano && <div className="pano-mark">360° {clip.pano.mode === 'flat' ? 'Ausschnitt' : clip.pano.mode === 'equirect' ? 'Panorama' : 'Planet'}</div>}
+      {/* Kleine Bausteine oben rechts: Tempo, Rückwärts, 360°-Ansicht – immer sichtbar, auch bei 360°-Videos */}
+      <div className="clip-badges">
+        {clip.speed !== 1 && <span className={`cbadge speed ${clip.speed > 1 ? 'fast' : 'slow'}`} title={t.inspector.sectionSpeed}>{clip.speed > 1 ? '⏩' : '🐢'} {String(Math.round(clip.speed * 100) / 100).replace('.', ',')}×</span>}
+        {clip.reverse && <span className="cbadge rev" title={t.inspector.reverse}>◀ {t.timeline.badgeReverse}</span>}
+        {media?.info.is360 && clip.pano && width > 120 && <span className="cbadge pano">360° {clip.pano.mode === 'flat' ? t.timeline.badgeFlat : clip.pano.mode === 'equirect' ? t.timeline.badgeEquirect : t.timeline.badgePlanet}</span>}
+      </div>
       {keys.length > 0 && width > 24 && (
         <div className="kf-row" onPointerDown={kf.row} title={t.keyframes.rowHint}>
           {keys.map((k) => {

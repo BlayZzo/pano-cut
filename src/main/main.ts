@@ -554,7 +554,7 @@ ipcMain.handle(IPC.takePendingProject, () => {
 ipcMain.handle(IPC.locateMedia, async (_e, id: string, missing: Array<{ id: string; path: string; fileSize?: number }>) => {
   const me = missing.find((m) => m.id === id);
   if (!me) return {};
-  const base = path.basename(me.path);
+  const base = me.path.split(/[\\/]/).pop() ?? me.path;
   if (!mainWindow) return {};
   const res = await dialog.showOpenDialog(mainWindow, {
     title: `„${base}“ suchen`, message: `Wo liegt jetzt „${base}“?`,
@@ -566,7 +566,7 @@ ipcMain.handle(IPC.locateMedia, async (_e, id: string, missing: Array<{ id: stri
   const dir = path.dirname(res.filePaths[0]);
   for (const m of missing) {
     if (m.id === id) continue;
-    const cand = path.join(dir, path.basename(m.path));
+    const cand = path.join(dir, m.path.split(/[\\/]/).pop() ?? '');
     try { if (fs.existsSync(cand) && (!m.fileSize || fs.statSync(cand).size === m.fileSize)) out[m.id] = cand; } catch { /* egal */ }
   }
   log.info('Dateien neu verknüpft', out);

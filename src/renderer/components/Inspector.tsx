@@ -1,6 +1,6 @@
 import React from 'react';
 import type { Clip, FitMode, Transform } from '@shared/types';
-import { clipDuration, defaultTransform, formatTime } from '@shared/timeline';
+import { clipDuration, defaultTransform, formatTime, speedLimits } from '@shared/timeline';
 import { beginTransaction, endTransaction, useProject } from '../store/project';
 import { useUi } from '../store/ui';
 import { fmt, t } from '../i18n/de';
@@ -70,7 +70,16 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
   const patch = (p: Partial<Clip>) => updateClips(ids, p);
   const patchTransform = (p: Partial<Transform>) => patch({ transform: { ...clip.transform, ...p } });
   // Mit „Anziehen“: langsamer = länger – die folgenden Clips rücken mit, statt den Clip zu kürzen
-  const setSpeed = (speed: number) => {
+  // Flüssiger Bereich (aus den fps der Videos): langsamer/schneller geht nicht, sonst ruckelt es
+  const allMedia = useProject((s) => s.project.media);
+  const allClips = useProject((s) => s.project.clips);
+  const lim = ids.reduce((acc, id) => {
+    const c = allClips[id];
+    const l = speedLimits(c ? allMedia[c.mediaId] : undefined, fps);
+    return { min: Math.max(acc.min, l.min), max: Math.min(acc.max, l.max), fps: l.fps || acc.fps };
+  }, { min: 0.05, max: 100, fps: 0 });
+  const setSpeed = (raw: number) => {
+    const speed = Math.round(Math.min(lim.max, Math.max(lim.min, raw)) * 100) / 100;
     if (!useUi.getState().magnet) { setClipSpeed(ids, speed); return; }
     const st = useProject.getState();
     beginTransaction();
@@ -111,17 +120,24 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
       onReset={() => { beginTransaction(); setSpeed(1); patch({ reverse: false }); endTransaction(); }}>
       <div className="speed-presets">
         {[0.25, 0.5, 1, 2, 4].map((v) => (
-          <button key={v} className={`chip${clip.speed === v ? ' active' : ''}`} onClick={() => setSpeed(v)}>
+          <button key={v} className={`chip${clip.speed === v ? ' active' : ''}`} disabled={v < lim.min - 1e-6 || v > lim.max + 1e-6} title={v < lim.min - 1e-6 || v > lim.max + 1e-6 ? t.inspector.speedNotSmooth : undefined} onClick={() => setSpeed(v)}>
             {v === 0.25 ? '¼×' : v === 0.5 ? `½× ${t.inspector.slowmo}` : v === 1 ? `1× ${t.inspector.normal}` : v === 4 ? `4× ${t.inspector.timelapse}` : `${v}×`}
           </button>
         ))}
       </div>
       <div className="speed-field">
         <button className="btn sm" title="−" onClick={() => setSpeed(Math.max(0.05, clip.speed > 2 ? clip.speed - 1 : Math.round((clip.speed - 0.1) * 100) / 100))}>−</button>
-        <NumInput className="speed-num" value={clip.speed} min={0.05} max={100} step={0.01} onChange={setSpeed} title={t.inspector.speedType} />
+        <NumInput className="speed-num" value={clip.speed} min={lim.min} max={lim.max} step={0.01} onChange={setSpeed} title={t.inspector.speedType} />
         <span className="speed-x">×</span>
         <button className="btn sm" title="+" onClick={() => setSpeed(clip.speed >= 2 ? Math.floor(clip.speed) + 1 : Math.round((clip.speed + 0.1) * 100) / 100)}>+</button>
       </div>
+      {lim.fps > 0 && (
+        <div className="hint">{fmt(t.inspector.speedRange, { fps: String(Math.round(lim.fps * 100) / 100).replace('.', ','), min: String(lim.min).replace('.', ','), max: String(lim.max).replace('.', ',') })}</div>
+      )}
+      {(clip.speed < lim.min - 1e-6 || clip.speed > lim.max + 1e-6) && (
+        <div className="hint warn">{t.inspector.speedOutside} <button className="btn sm" onClick={() => setSpeed(clip.speed)}>{t.inspector.speedFix}</button></div>
+      )}
+      <div className="hint">{t.inspector.speedKeysHint}</div>
       <Toggle label={t.inspector.reverse} checked={clip.reverse} onChange={(v) => patch({ reverse: v })} />
       {clip.reverse && media?.type === 'video' && !media.proxyReversed && <div className="hint warn">{t.inspector.reversedProxyHint}</div>}
       {count === 1 && media?.type === 'video' && !media.vfx && !clip.mc && <Fold title={t.ramp.section} defaultOpen={false}><SpeedRampFields clip={clip} /></Fold>}

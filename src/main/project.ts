@@ -3,6 +3,11 @@ import path from 'node:path';
 import log from 'electron-log';
 import { DEFAULT_SETTINGS, type MediaItem, type Project, type Settings } from '@shared/types';
 import { getSettingsPath } from './paths';
+import { makePortable, resolvePortable } from './portable';
+
+/** Dateiname/Ordner auch für Pfade vom anderen System (C:\\… auf dem Mac, /Users/… unter Windows). */
+const baseOf = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p;
+const dirOf = (p: string) => { const parts = p.split(/[\\/]/); parts.pop(); return parts.join('/'); };
 
 export const PROJECT_EXT = 'panocut';
 
@@ -38,7 +43,8 @@ export function rememberProject(filePath: string): void {
 
 /** Speichert ein Projekt als JSON. Medienpfade werden absolut gespeichert. */
 export function writeProject(project: Project, filePath: string): void {
-  const data: Project = { ...project, modifiedAt: Date.now() };
+  let data: Project = { ...project, modifiedAt: Date.now() };
+  try { data = makePortable(data, filePath); } catch (e) { log.warn('Mitnehmen (Mac/Windows) fehlgeschlagen', e); }
   const tmp = filePath + '.tmp';
   fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
   fs.renameSync(tmp, filePath);
@@ -47,10 +53,12 @@ export function writeProject(project: Project, filePath: string): void {
 
 export function readProject(filePath: string): Project {
   const raw = fs.readFileSync(filePath, 'utf8');
-  const project = JSON.parse(raw) as Project;
+  let project = JSON.parse(raw) as Project;
   if (!project || project.version !== 1 || !project.tracks || !project.clips) {
     throw new Error('Die Datei ist kein gültiges PanoCut-Projekt.');
   }
+  // Auf einem anderen Rechner gespeichert (Mac ↔ Windows)? Pfade über die Projektdatei auflösen
+  try { project = resolvePortable(project, filePath); } catch (e) { log.warn('Pfade anpassen fehlgeschlagen', e); }
   relinkMoved(project, [path.dirname(filePath)]);
   // Fehlende Cache-Dateien erkennen, damit sie neu erzeugt werden
   for (const m of Object.values(project.media) as MediaItem[]) {
@@ -90,7 +98,7 @@ function relinkRound(project: Project, extraDirs: string[]): number {
   const dirs = new Set<string>(extraDirs);
   for (const m of media) if (fs.existsSync(m.path)) dirs.add(path.dirname(m.path));
   // Alter Ordner wurde umbenannt/verschoben? Gleichnamige Ordner neben/unter den Kandidaten mit prüfen
-  const oldDirs = new Set(missing.map((m) => path.basename(path.dirname(m.path))));
+  const oldDirs = new Set(missing.map((m) => baseOf(dirOf(m.path))));
   for (const d of [...dirs]) {
     let entries: fs.Dirent[] = [];
     try { entries = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; }
@@ -99,15 +107,15 @@ function relinkRound(project: Project, extraDirs: string[]): number {
   }
   let n = 0;
   for (const m of missing) {
-    const base = path.basename(m.path);
+    const base = baseOf(m.path);
     for (const d of dirs) {
       const cand = path.join(d, base);
       if (!fs.existsSync(cand)) continue;
       try { if (m.info?.fileSize && fs.statSync(cand).size !== m.info.fileSize) continue; } catch { continue; }
-      const oldDir = path.dirname(m.path);
+      const oldDir = dirOf(m.path);
       m.path = cand;
       if (m.companion && !fs.existsSync(m.companion)) {
-        const c = path.join(d, path.basename(m.companion));
+        const c = path.join(d, baseOf(m.companion));
         if (fs.existsSync(c)) { if (m.proxy === m.companion) m.proxy = c; m.companion = c; }
       }
       log.info('Datei wiedergefunden', path.join(oldDir, base), '→', cand);

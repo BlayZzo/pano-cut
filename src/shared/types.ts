@@ -513,6 +513,8 @@ export interface Project {
   markers?: Marker[];                         // Marker auf der Timeline (Beat-Marker zum Einrasten/Schneiden)
   /** Wo zuletzt gearbeitet wurde (Abspielkopf, Zoom, Bildlauf) – wird beim Öffnen wiederhergestellt. */
   view?: { playhead: number; zoom: number; scrollX: number };
+  /** Für den Wechsel Mac ↔ Windows: Pfad beim Speichern → Weg relativ zur Projektdatei (main/portable.ts). */
+  portable?: { version: 1; platform: string; files: Record<string, string> };
   createdAt: number;
   modifiedAt: number;
 }

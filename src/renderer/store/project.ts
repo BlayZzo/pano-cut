@@ -8,7 +8,15 @@ import {
 } from '@shared/timeline';
 import { defaultPano, defaultSubtitleStyle } from '@shared/pano';
 import { syncLinkedClips } from '@shared/layers';
-import { sliceClip } from '@shared/clipslice';
+import { anchorClipTimes, sliceClip } from '@shared/clipslice';
+
+/** Änderung anwenden; ändert sie In/Out/Tempo/Rückwärts (ohne selbst Keyframes mitzugeben), wandern die Keyframes mit dem Bild mit. */
+function withAnchor(c: Clip, patch: Partial<Clip>): Clip {
+  const next = { ...c, ...patch };
+  const timing = 'in' in patch || 'out' in patch || 'speed' in patch || 'reverse' in patch;
+  const ownKeys = 'pano' in patch || 'motion' in patch || 'reframe' in patch || 'objects' in patch || 'subtitles' in patch;
+  return timing && !ownKeys ? anchorClipTimes(c, next) : next;
+}
 
 export interface ProjectState {
   project: Project;
@@ -136,16 +144,16 @@ export const useProject = create<ProjectState>()(
       updateClip: (id, patch) => set((s) => {
         const c = s.project.clips[id];
         if (!c) return {};
-        return { project: { ...s.project, clips: { ...s.project.clips, [id]: { ...c, ...patch } } } };
+        return { project: { ...s.project, clips: { ...s.project.clips, [id]: withAnchor(c, patch) } } };
       }),
       patchClips: (patches) => set((s) => {
         const clips = { ...s.project.clips };
-        for (const [id, patch] of Object.entries(patches)) if (clips[id]) clips[id] = { ...clips[id], ...patch };
+        for (const [id, patch] of Object.entries(patches)) if (clips[id]) clips[id] = withAnchor(clips[id], patch);
         return { project: { ...s.project, clips } };
       }),
       updateClips: (ids, patch) => set((s) => {
         const clips = { ...s.project.clips };
-        for (const id of ids) if (clips[id]) clips[id] = { ...clips[id], ...patch };
+        for (const id of ids) if (clips[id]) clips[id] = withAnchor(clips[id], patch);
         return { project: { ...s.project, clips } };
       }),
 
@@ -223,7 +231,7 @@ export const useProject = create<ProjectState>()(
             const srcLen = Math.max(MIN_CLIP_DURATION * sp, (limit - c.start) * sp);
             if (c.reverse) next.in = Math.max(0, c.out - srcLen); else next.out = c.in + srcLen;
           }
-          clips[id] = next;
+          clips[id] = anchorClipTimes(c, next);   // Keyframes bleiben am selben Bild des Videos
         }
         return { project: { ...s.project, clips } };
       }),
@@ -260,6 +268,7 @@ export const useProject = create<ProjectState>()(
           }
         }
         if (overlaps(s.project, next, next.start, next.trackId)) return {};
+        next = anchorClipTimes(c, next);   // Keyframes bleiben am selben Bild des Videos
         return { project: { ...s.project, clips: { ...s.project.clips, [id]: next } } };
       }),
 

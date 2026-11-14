@@ -570,3 +570,10 @@ textarea:focus { border-color: var(--accent); }
 .tab-note { font-size: 11px; color: var(--text-dim); padding: 8px 12px 0; }
 .inspector-tabs { display: flex; flex-wrap: wrap; gap: 3px; }
 .inspector-tabs .itab { flex: 0 0 auto; padding: 4px 8px; overflow: visible; text-overflow: clip; }
+
+/* Bausteine im Clip: Tempo · rückwärts · 360°-Ansicht */
+.clip .clip-badges { position: absolute; right: 4px; top: 3px; display: flex; gap: 3px; pointer-events: none; z-index: 2; max-width: calc(100% - 8px); overflow: hidden; }
+.clip .cbadge { font-size: 9.5px; font-weight: 700; line-height: 1; padding: 2px 5px; border-radius: 3px; background: rgba(0,0,0,0.55); color: #fff; white-space: nowrap; box-shadow: 0 0 0 1px rgba(0,0,0,0.25); }
+.clip .cbadge.speed.fast { background: #e8862a; color: #1b0f02; }
+.clip .cbadge.speed.slow { background: #3d8fe0; color: #fff; }
+.clip .cbadge.rev { background: #b44ad6; }

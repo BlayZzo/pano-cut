@@ -177,4 +177,10 @@ Kopfzeile `.clip-head`, `KeyframeBar` + `Fold` (InspectorBits), Section-Titel oh
 statt vidstab. `InspectorCrop` (aus Effekte), `InspectorMasks` (InspectorMaskDraw.tsx: alle ObjectTracks einmal, KI-Klick als Fold; InspectorObjects/
 Masken-Pinsel nicht mehr im Inspektor), Animation mit Reglern am Abspielkopf + `PathFields` (InspectorPath.tsx), `HIDDEN_PRESETS`.
 Anziehen = `closeGaps()` (einmalig, nur ungesperrte Spuren; `ui.magnet` bleibt false).
+0.14.0: Mac↔Windows `main/portable.ts` (`makePortable` beim Speichern: `project.portable.files` = Pfad → relativ zur Projektdatei; eigene Daten aus
+userData (cache/**/masks, imu.bin, seam_*, sounds, effects, objects …, nicht Proxy/Thumb/Sprite/Wave) nach „<Projekt> (PanoCut-Daten)“ kopiert;
+`resolvePortable` beim Laden), relinkMoved mit `baseOf`/`dirOf` für fremde Pfade. Clip-Bausteine `.clip-badges` (Tempo/rückwärts/360°).
+`speedLimits(media, projectFps)` (timeline.ts: min = Projekt-fps/Quell-fps, max = min(16, 480/Quell-fps)) im Inspektor + Rampe (Stärke ×0,85 bis passend).
+Keyframes am Bild: `anchorClipTimes`/`retimeClipTimes` (clipslice.ts, affin über Quellzeit) in setSpeed/trimClip/update*(withAnchor, wenn in/out/speed/reverse
+ohne eigene Keyframes geändert werden); `shiftClipTimes` teilt jetzt auch `reframe` und ObjectTrack `keys`.
 Ansicht/Layout: `ViewSettings` (`settings.view`, `useView`/`updateView`), `Splitter.tsx`, `Popover.tsx`.
