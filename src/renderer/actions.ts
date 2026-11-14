@@ -1,5 +1,6 @@
 // Zentrale Aktionen – von Menü, Tastenkürzeln und Buttons gemeinsam genutzt.
 import { deleteKeyframes, groupByClip } from '@shared/keyframes';
+import { packTracks as packTrackClips } from '@shared/edit';
 import type { Clip, MediaItem, Project, TransitionType, UserEffect } from '@shared/types';
 import { clipDuration, clipEnd, clipsOnTrack, formatTime, makeId, projectDuration } from '@shared/timeline';
 import { autoEnhance, frameStats, type FrameStats } from '@shared/color';
@@ -283,6 +284,15 @@ export function deleteSelectedKeyframes(): boolean {
   if (Object.keys(patches).length) { p.patchClips(patches); setDirty(true); }
   ui.setKfSelection([]);
   return true;
+}
+
+/** „Anziehen“: einmal alle Lücken schließen – nur auf nicht gesperrten Spuren. */
+export function closeGaps(): void {
+  const p = useProject.getState();
+  const ids = p.project.tracks.filter((tr) => !tr.locked).map((tr) => tr.id);
+  const changed = packTrackClips(p.project.clips, ids).length > 0;
+  if (changed) { beginTransaction(); p.packTracks(ids); endTransaction(); }
+  useUi.getState().toast(changed ? t.timeline.gapsClosed : t.timeline.noGaps, changed ? 'success' : 'info');
 }
 
 export function deleteSelection(): void {

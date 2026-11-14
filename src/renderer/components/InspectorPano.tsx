@@ -9,7 +9,7 @@ import { defaultPano, defaultStitch, keyframeAt, panoViewAt, removeKeyframe, ups
 import { beginTransaction, endTransaction, useProject } from '../store/project';
 import { useUi, usePlayheadCoarse } from '../store/ui';
 import { fmt, t } from '../i18n/de';
-import { Section, SelectField, Slider, Toggle } from './InspectorBits';
+import { Fold, KeyframeBar, Section, SelectField, Slider, Toggle } from './InspectorBits';
 import { seekTo } from '../engine/instance';
 
 let lastMove: { move: CameraMove; strength: number } = { move: 'orbit', strength: 1 };
@@ -51,9 +51,8 @@ function CameraMoveFields({ clip, pano, local }: { clip: Clip; pano: PanoSetting
 }
 
 /** 360°-Abschnitt: Ansicht, Keyframes, Stitching. */
-export function InspectorPano({ clip, media }: { clip: Clip; media: MediaItem }): React.ReactElement | null {
+export function InspectorPano({ clip }: { clip: Clip; media?: MediaItem }): React.ReactElement | null {
   const setPano = useProject((s) => s.setPano);
-  const updateMediaStitch = useProject((s) => s.updateMediaStitch);
   const fps = useProject((s) => s.project.settings.fps);
   const is360Project = useProject((s) => !!s.project.settings.is360);
   const playhead = usePlayheadCoarse(0.25);
@@ -69,10 +68,35 @@ export function InspectorPano({ clip, media }: { clip: Clip; media: MediaItem })
     setPano(clip.id, upsertKeyframe(pano, { ...base, ...p }));
   };
 
+  return (
+    <>
+      <Section title={`🎥 ${t.camera.title}`} badge="360°" onReset={() => setPano(clip.id, defaultPano(pano.mode))}>
+        <SelectField label={t.pano.mode} value={pano.mode} onChange={(v) => setPano(clip.id, { ...pano, mode: v as PanoMode, keyframes: pano.keyframes.map((k) => ({ ...k, fov: v === 'littleplanet' ? Math.max(k.fov, 200) : Math.min(k.fov, 150) })) })}
+          options={[{ value: 'flat', label: t.pano.modeFlat }, { value: 'equirect', label: t.pano.modeEquirect }, { value: 'littleplanet', label: t.pano.modeLittle }]} />
+        <Slider label={t.pano.yaw} value={view.yaw} min={-180} max={180} step={1} unit="°" onChange={(v) => patchView({ yaw: v })} />
+        <Slider label={t.pano.pitch} value={view.pitch} min={-90} max={90} step={1} unit="°" onChange={(v) => patchView({ pitch: v })} />
+        <Slider label={t.pano.roll} value={view.roll} min={-180} max={180} step={1} unit="°" onChange={(v) => patchView({ roll: v })} />
+        {pano.mode !== 'equirect' && (
+          <Slider label={t.pano.fov} value={view.fov} min={pano.mode === 'littleplanet' ? 120 : 30} max={pano.mode === 'littleplanet' ? 320 : 150} step={1} unit="°" onChange={(v) => patchView({ fov: v })} />
+        )}
+        <KeyframeBar times={pano.keyframes.map((k) => k.t)} local={local} fps={fps} onSeek={(k) => seekTo(clip.start + k)}
+          onAdd={() => setPano(clip.id, upsertKeyframe(pano, { t: local, ...view }))}
+          onRemove={(k) => { if (pano.keyframes.length > 1) setPano(clip.id, removeKeyframe(pano, k)); }} />
+        {pano.keyframes.length > 1 && (
+          <SelectField label={t.moves.ease} value={pano.ease ?? (pano.smooth ? 'smooth' : 'linear')} options={EASE_OPTIONS()} onChange={(v) => setPano(clip.id, { ...pano, ease: v as MoveEase, smooth: v !== 'linear' })} />
+        )}
+        <Fold title={t.camera.presets}><CameraMoveFields clip={clip} pano={pano} local={local} /></Fold>
+      </Section>
+    </>
+  );
+}
+
+/** 360°-Technik: Linsen zusammensetzen (Naht). Eigener Reiter „360°“. */
+export function InspectorStitch({ media }: { media: MediaItem }): React.ReactElement | null {
+  const updateMediaStitch = useProject((s) => s.updateMediaStitch);
   const stitch = media.stitch ?? defaultStitch('equirect');
   const restitch = () => {
     const m = useProject.getState().project.media[media.id];
-    // Alte Vorschau-Datei bleibt bis zum Ende sichtbar (bzw. die Vorschau setzt live aus dem Rohvideo zusammen)
     if (m) void window.panocut.prepareMedia({ ...m, proxyReversed: undefined, proxyStabilized: undefined, status: 'processing' });
   };
   const [aligning, setAligning] = useState(false);
@@ -90,7 +114,6 @@ export function InspectorPano({ clip, media }: { clip: Clip; media: MediaItem })
       useUi.getState().toast(`${t.pano.alignFailed}: ${(e as Error).message}`, 'error');
     } finally { setAligning(false); }
   };
-  // Bewegte Naht: Versatz naher Dinge über das ganze Video messen
   const [seamBusy, setSeamBusy] = useState<number | null>(null);
   React.useEffect(() => window.panocut.onSeamProgress((p) => { if (p.id === media.id) setSeamBusy(p.percent); }), [media.id]);
   const measureSeam = async () => {
@@ -114,40 +137,11 @@ export function InspectorPano({ clip, media }: { clip: Clip; media: MediaItem })
     const g = Math.sqrt(1 + pc / 100);
     updateMediaStitch(media.id, { lens: [{ ...lensCal(stitch, 0), gain: [1 / g, 1 / g, 1 / g] }, { ...front, gain: [g, g, g] }] });
   };
-
+  if (!media.stitch || media.stitch.mode === 'equirect') return null;
   return (
     <>
-      <Section title={t.pano.section} badge="360°" onReset={() => setPano(clip.id, defaultPano(pano.mode))}>
-        <SelectField label={t.pano.mode} value={pano.mode} onChange={(v) => setPano(clip.id, { ...pano, mode: v as PanoMode, keyframes: pano.keyframes.map((k) => ({ ...k, fov: v === 'littleplanet' ? Math.max(k.fov, 200) : Math.min(k.fov, 150) })) })}
-          options={[{ value: 'flat', label: t.pano.modeFlat }, { value: 'equirect', label: t.pano.modeEquirect }, { value: 'littleplanet', label: t.pano.modeLittle }]} />
-        <Slider label={t.pano.yaw} value={view.yaw} min={-180} max={180} step={1} unit="°" onChange={(v) => patchView({ yaw: v })} />
-        <Slider label={t.pano.pitch} value={view.pitch} min={-90} max={90} step={1} unit="°" onChange={(v) => patchView({ pitch: v })} />
-        <Slider label={t.pano.roll} value={view.roll} min={-180} max={180} step={1} unit="°" onChange={(v) => patchView({ roll: v })} />
-        {pano.mode !== 'equirect' && (
-          <Slider label={t.pano.fov} value={view.fov} min={pano.mode === 'littleplanet' ? 120 : 30} max={pano.mode === 'littleplanet' ? 320 : 150} step={1} unit="°" onChange={(v) => patchView({ fov: v })} />
-        )}
-        <div className="hint">{t.pano.keyframeHint}</div>
-        <div className="field-row" style={{ flexWrap: 'wrap' }}>
-          <button className="btn sm primary" onClick={() => setPano(clip.id, upsertKeyframe(pano, { t: local, ...view }))}>◆ {t.pano.addKeyframe}</button>
-          {atKey && pano.keyframes.length > 1 && <button className="btn sm ghost" onClick={() => setPano(clip.id, removeKeyframe(pano, atKey.t))}>{t.pano.removeKeyframe}</button>}
-        </div>
-        {pano.keyframes.length > 1 && (
-          <>
-            <div className="hint">{fmt(t.pano.noKeyframeHere, { t: formatTime(editingT, fps) })}</div>
-            <div className="keyframe-list">
-              {pano.keyframes.map((k) => (
-                <button key={k.t} className={`chip${atKey && Math.abs(atKey.t - k.t) < 1e-6 ? ' active' : ''}`} onClick={() => seekTo(clip.start + k.t)} title={`Blick ${Math.round(k.yaw)}° / ${Math.round(k.pitch)}°, Sichtfeld ${Math.round(k.fov)}°`}>
-                  ◆ {formatTime(k.t, fps)}
-                </button>
-              ))}
-            </div>
-            <SelectField label={t.moves.ease} value={pano.ease ?? (pano.smooth ? 'smooth' : 'linear')} options={EASE_OPTIONS()} onChange={(v) => setPano(clip.id, { ...pano, ease: v as MoveEase, smooth: v !== 'linear' })} />
-          </>
-        )}
-        <CameraMoveFields clip={clip} pano={pano} local={local} />
-      </Section>
-      {media.stitch && media.stitch.mode !== 'equirect' && (
-        <Section title={t.pano.stitch} defaultOpen={false}>
+      {(
+        <Section title={t.pano.stitch} defaultOpen>
           <button className="btn sm primary" style={{ width: '100%' }} disabled={aligning} onClick={() => void autoAlign()}>{aligning ? t.pano.aligning : `✦ ${t.pano.align}`}</button>
           <div className="hint">{stitch.calibrated ? (stitch.calibrated === 'auto' ? t.pano.alignedAuto : t.pano.alignedCamera) : t.pano.alignHint}</div>
           <Slider label={t.pano.stitchBlend} value={stitch.blend ?? 0} min={0} max={Math.max(0, stitch.fov - 184)} step={0.5} unit="°" onChange={(v) => updateMediaStitch(media.id, { blend: v })} />

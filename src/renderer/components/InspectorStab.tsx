@@ -7,7 +7,7 @@ import { fmt, t } from '../i18n/de';
 import { Section, SelectField, Slider, Toggle } from './InspectorBits';
 
 /** 360°: Stabilisierung mit den Bewegungsdaten der Kamera (wie FlowState) + unsichtbarer Selfie-Stick. */
-export function InspectorStab({ clip, media }: { clip: Clip; media: MediaItem }): React.ReactElement {
+export function InspectorStab({ clip, media, part }: { clip: Clip; media: MediaItem; part: 'stab' | 'nadir' }): React.ReactElement {
   const updateClip = useProject((s) => s.updateClip);
   const updateMedia = useProject((s) => s.updateMedia);
   const [busy, setBusy] = useState<number | null>(null);
@@ -35,7 +35,7 @@ export function InspectorStab({ clip, media }: { clip: Clip; media: MediaItem })
 
   return (
     <>
-      <Section title={t.stab.section} badge={media.imu ? '✓' : undefined} defaultOpen={!!clip.stab360 && clip.stab360.mode !== 'off'}>
+      {part === 'stab' && <Section title={t.stabilize.section} badge={clip.stab360 && clip.stab360.mode !== 'off' ? t.stabilize.on : '360°'} defaultOpen={!!clip.stab360 && clip.stab360.mode !== 'off'}>
         {!media.imu ? (
           <>
             <div className="hint">{t.stab.needData}</div>
@@ -60,8 +60,8 @@ export function InspectorStab({ clip, media }: { clip: Clip; media: MediaItem })
             </button>
           </>
         )}
-      </Section>
-      <Section title={t.stab.nadirSection} defaultOpen={nadir.enabled}>
+      </Section>}
+      {part === 'nadir' && <Section title={t.stab.nadirSection} defaultOpen>
         <Toggle label={t.stab.nadirOn} checked={nadir.enabled} onChange={(v) => setNadir({ enabled: v })} />
         {nadir.enabled && (
           <>
@@ -70,7 +70,7 @@ export function InspectorStab({ clip, media }: { clip: Clip; media: MediaItem })
           </>
         )}
         <div className="hint">{t.stab.nadirHint}</div>
-      </Section>
+      </Section>}
     </>
   );
 }

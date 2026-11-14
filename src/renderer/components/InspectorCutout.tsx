@@ -24,7 +24,7 @@ function pickDetection(dets: Detection[], u: number, v: number): Detection | nul
 }
 
 /** „Per Klick freistellen“: Knopf drücken, ins Bild klicken – Objekt wird über den ganzen Clip verfolgt und freigestellt. */
-export function InspectorClickCutout({ clip, media }: { clip: Clip; media: MediaItem }): React.ReactElement {
+export function InspectorClickCutout({ clip, media, bare }: { clip: Clip; media: MediaItem; bare?: boolean }): React.ReactElement {
   const [o, setO] = useState(last);
   const upd = (p: Partial<typeof o>) => { const n = { ...o, ...p }; last = n; setO(n); };
   const [busy, setBusy] = useState<{ percent: number; message: string } | null>(null);
@@ -62,8 +62,8 @@ export function InspectorClickCutout({ clip, media }: { clip: Clip; media: Media
     useUi.getState().setPointPick({ clipId: clip.id, onPick: (u, v) => void run(u, v) });
   };
 
-  return (
-    <Section title={`🤖 ${t.cutout.section}`} defaultOpen={false}>
+  const inner = (
+    <>
       <div className="hint">{t.cutout.hint}</div>
       <SelectField label={t.cutout.detModel} value={o.detModel} onChange={(v) => upd({ detModel: v as AiDetectModel })} options={[
         { value: 'yolox-nano', label: t.ai.modelFast }, { value: 'yolox-tiny', label: t.ai.modelBetter }, { value: 'yolox-s', label: t.ai.modelBest },
@@ -82,6 +82,7 @@ export function InspectorClickCutout({ clip, media }: { clip: Clip; media: Media
         <button className="btn primary" style={{ width: '100%' }} onClick={start}>🖱 {t.cutout.start}</button>
       )}
       {(clip.objects?.length ?? 0) > 0 && <div className="hint">{t.cutout.after}</div>}
-    </Section>
+    </>
   );
+  return bare ? inner : <Section title={`🤖 ${t.cutout.section}`} defaultOpen={false}>{inner}</Section>;
 }

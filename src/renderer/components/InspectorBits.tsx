@@ -3,6 +3,11 @@ import { beginTransaction, endTransaction } from '../store/project';
 import { t } from '../i18n/de';
 import { IconChevron } from './Icons';
 
+/** Abschnitts-Titel ohne vorangestellte Emojis – ruhiger, professioneller Look (wie in Resolve). */
+function plainTitle(title: string): string {
+  return title.replace(/^[^\p{L}\p{N}]+/u, '');
+}
+
 export function Section({ title, children, defaultOpen = true, onReset, badge }: { title: string; children: React.ReactNode; defaultOpen?: boolean; onReset?: () => void; badge?: string }): React.ReactElement {
   const [open, setOpen] = useState(defaultOpen);
   // Aufklappen, wenn der Abschnitt nachträglich Inhalt bekommt (z. B. erstes erkanntes Objekt)
@@ -14,7 +19,7 @@ export function Section({ title, children, defaultOpen = true, onReset, badge }:
   return (
     <div className="section">
       <div className="section-title" onClick={() => setOpen(!open)}>
-        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><IconChevron open={open} /> {title}{badge && <span className="pill">{badge}</span>}</span>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><IconChevron open={open} /> {plainTitle(title)}{badge && <span className="pill">{badge}</span>}</span>
         {onReset && open && <button className="btn sm ghost" onClick={(e) => { e.stopPropagation(); onReset(); }}>{t.inspector.reset}</button>}
       </div>
       {open && <div className="section-body">{children}</div>}
@@ -100,6 +105,42 @@ export function SelectField({ label, value, options, onChange }: { label: string
       <select value={value} onChange={(e) => onChange(e.target.value)} style={{ gridColumn: '2 / span 2' }}>
         {options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
       </select>
+    </div>
+  );
+}
+
+/**
+ * Einheitliche Keyframe-Leiste (360°-Blick, Ausschnitt, Animation): ◀ vorheriger · ◆ setzen/entfernen · ▶ nächster.
+ * Die Regler darüber ändern immer den Wert am Abspielkopf; die Rauten in der Timeline zeigen alle Keyframes.
+ */
+export function KeyframeBar({ times, local, fps, onSeek, onAdd, onRemove }: {
+  times: number[]; local: number; fps: number; onSeek: (t: number) => void; onAdd: () => void; onRemove: (t: number) => void;
+}): React.ReactElement {
+  const tol = 0.5 / Math.max(1, fps);
+  const here = times.find((k) => Math.abs(k - local) < tol);
+  const prev = [...times].reverse().find((k) => k < local - tol);
+  const next = times.find((k) => k > local + tol);
+  const idx = here !== undefined ? times.indexOf(here) + 1 : 0;
+  return (
+    <div className="kf-bar">
+      <button className="btn sm ghost icon" title={t.kfBar.prev} disabled={prev === undefined} onClick={() => prev !== undefined && onSeek(prev)}>◀</button>
+      <button className={`btn sm kf-toggle${here !== undefined ? ' on' : ''}`} title={here !== undefined ? t.kfBar.remove : t.kfBar.add}
+        onClick={() => (here !== undefined ? onRemove(here) : onAdd())}>◆</button>
+      <button className="btn sm ghost icon" title={t.kfBar.next} disabled={next === undefined} onClick={() => next !== undefined && onSeek(next)}>▶</button>
+      <span className="kf-bar-label">
+        {times.length < 2 && here === undefined ? t.kfBar.static : here !== undefined ? t.kfBar.at.replace('{i}', String(idx)).replace('{n}', String(times.length)) : t.kfBar.between.replace('{n}', String(times.length))}
+      </span>
+    </div>
+  );
+}
+
+/** Aufklappbarer Unterbereich innerhalb eines Abschnitts (für selten gebrauchte Einstellungen). */
+export function Fold({ title, children, defaultOpen = false }: { title: string; children: React.ReactNode; defaultOpen?: boolean }): React.ReactElement {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className={`fold${open ? ' open' : ''}`}>
+      <button className="fold-title" onClick={() => setOpen(!open)}><IconChevron open={open} /> {title}</button>
+      {open && <div className="fold-body">{children}</div>}
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { beginTransaction, endTransaction, setDirty, useProject } from '../store
 import { useUi, useView, getView, updateView, ZOOM_MAX, ZOOM_MIN, type DragState } from '../store/ui';
 import { Popover } from './Popover';
 import { engine, seekTo, stopPlayback } from '../engine/instance';
-import { addTitleToTimeline, applyEffectToClips, applyTransitionToClip, deleteSelection, duplicateSelection, splitAtPlayhead, zoomBy, zoomToFit } from '../actions';
+import { addTitleToTimeline, applyEffectToClips, applyTransitionToClip, closeGaps, deleteSelection, duplicateSelection, splitAtPlayhead, zoomBy, zoomToFit } from '../actions';
 import type { TransitionType } from '@shared/types';
 import { TITLE_TEMPLATES } from '@shared/pano';
 import { t } from '../i18n/de';
@@ -128,8 +128,6 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
   const zoom = useUi((s) => s.zoom);
   const setZoom = useUi((s) => s.setZoom);
   const snapping = useUi((s) => s.snapping);
-  const magnet = useUi((s) => s.magnet);
-  const setMagnet = useUi((s) => s.setMagnet);
   const setSnapping = useUi((s) => s.setSnapping);
   const selection = useUi((s) => s.selection);
   const kfSelection = useUi((s) => s.kfSelection);
@@ -583,7 +581,7 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
         <button className="btn sm" title={t.timeline.delete} onClick={deleteSelection} disabled={selection.length === 0}><IconTrash /></button>
         <div className="sep" />
         <button className={`btn sm icon${snapping ? ' active' : ''}`} title={t.timeline.snap} onClick={() => setSnapping(!snapping)}><IconMagnet /></button>
-        <button className={`btn sm${magnet ? ' active' : ''}`} title={t.timeline.magnetHint} onClick={() => { const on = !magnet; setMagnet(on); if (on) packTracks(project.tracks.map((tr) => tr.id)); }}>⇤ {t.timeline.magnet}</button>
+        <button className="btn sm" title={t.timeline.magnetHint} onClick={closeGaps}>⇤ {t.timeline.magnet}</button>
         <div className="sep" />
         <button className="btn sm icon ghost" title={t.timeline.zoomOut} onClick={() => zoomBy(1 / 1.3)}><IconZoomOut /></button>
         <input type="range" min={0} max={100} value={zoomToSlider(zoom)} onChange={(e) => setZoom(sliderToZoom(Number(e.target.value)))} style={{ width: 110, accentColor: 'var(--accent)' }} title="Zoom" />

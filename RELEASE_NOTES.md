@@ -1,3 +1,32 @@
+## PanoCut 0.13.0 – Aufgeräumter Inspektor
+
+**Installieren**
+- Mac mit Apple-Chip (M1–M4): `PanoCut-0.13.0-mac-arm64.dmg`
+- Mac mit Intel: `PanoCut-0.13.0-mac-x64.dmg`
+- Windows 10/11: `PanoCut-0.13.0-win-x64.exe`
+
+**Neue, feste Ordnung der Reiter (wie in DaVinci Resolve)** – bei 360°- und normalen Videos immer an derselben Stelle:
+- **Video**: Kamera (normal = Ausschnitt/Zoom, 360° = Blickrichtung) · Position & Größe · Zuschneiden · Geschwindigkeit (mit Tempo-Rampe) · Stabilisierung · Übergang · Ebene
+- **Farbe**: Bild · Effekte · Licht & Bewegung
+- **Ton** · **Text**
+- **Freistellen**: alle Masken in EINER Liste + Green Screen
+- **Animation**: selten Gebrauchtes (Animation mit Bewegungspfad, Auftritt mit Aufprall, eigenen Effekt speichern)
+- **360°** (nur bei 360°-Videos): Zusammensetzen (Naht) · Unsichtbarer Selfie-Stick
+
+**Doppeltes entfernt**
+- Masken erschienen zweimal (unter „Masken“ und „Objekte“) – jetzt eine Liste mit Bearbeiten, Nach vorne, In die Mediathek, Löschen. Der alte Masken-Pinsel ist weg (der Masken-Editor kann alles besser).
+- Stabilisierung gab es bei 360°-Videos zweimal – jetzt nur noch die passende.
+- Bewegungspfad und Animation waren getrennt, obwohl sie dasselbe steuern – jetzt zusammen.
+- Zoom/Ken-Burns gab es als Kamera **und** als Animation – jetzt nur noch unter „Kamera“ (verlustfrei aus dem vollen Bild). Auftritte gibt es nur noch unter „Auftritt mit Aufprall“.
+- Geschwindigkeit: statt vier Bedienarten (Knöpfe, ±1, ±0,1, Schieber) nur noch Schnellwahl + Zahl mit −/+.
+- „Helligkeit“ (doppelt zu „Belichtung“) taucht nur noch auf, wenn sie schon benutzt wurde.
+
+**Keyframes einfacher**: Überall dieselbe Leiste ◀ ◆ ▶ – die Regler ändern immer den Wert am Abspielkopf, ◆ setzt bzw. entfernt dort einen Keyframe, ◀ ▶ springen zum vorherigen/nächsten. Die Listen mit Zeiten und die Zahlentabelle sind weg (die Rauten in der Timeline zeigen alles).
+
+**Anziehen** ist jetzt ein einmaliger Knopf (oder Taste M): ein Klick schließt alle Lücken – danach ist nichts mehr dauerhaft eingeschaltet. **Gesperrte Spuren bleiben dabei unverändert.**
+
+Außerdem: Clip-Name und Infos stehen fest oben über den Reitern; Abschnitts-Titel ohne Emojis, ruhiger und professioneller.
+
 ## PanoCut 0.12.0 – Keyframes direkt in der Timeline bearbeiten
 
 **Installieren**

@@ -171,4 +171,10 @@ Env `PANOCUT_KEEP_EXPORT_TMP` behält den Export-Temp-Ordner (Fehlersuche).
 `clampKeyShift` (im Clip, Reihenfolge bleibt, Abstand 1 Bild), `shiftKeyframes`, `deleteKeyframes` (pano/reframe behalten ≥1), `exactRefs`),
 `ui.kfSelection`, Store `patchClips`, Timeline `.kf-row` (Rauten, KF_ROW 14 px; Klick/Strg/Umschalt, Rahmen nur wenn in der Zeile begonnen,
 Ziehen in beginTransaction), `deleteSelection` löscht zuerst ausgewählte Keyframes.
+0.13.0: Inspektor neu geordnet (Inspector.tsx): Reiter video/color/audio/text/cutout/anim/pano (alte Werte clip/look/motion/ai werden gemappt),
+Kopfzeile `.clip-head`, `KeyframeBar` + `Fold` (InspectorBits), Section-Titel ohne führende Emojis (`plainTitle`). Kamera an fester Stelle:
+`InspectorPano` (nur Blick) bzw. `InspectorReframe`; 360-Technik `InspectorStitch` + `InspectorStab part='nadir'` im Reiter 360°, IMU-Stab `part='stab'`
+statt vidstab. `InspectorCrop` (aus Effekte), `InspectorMasks` (InspectorMaskDraw.tsx: alle ObjectTracks einmal, KI-Klick als Fold; InspectorObjects/
+Masken-Pinsel nicht mehr im Inspektor), Animation mit Reglern am Abspielkopf + `PathFields` (InspectorPath.tsx), `HIDDEN_PRESETS`.
+Anziehen = `closeGaps()` (einmalig, nur ungesperrte Spuren; `ui.magnet` bleibt false).
 Ansicht/Layout: `ViewSettings` (`settings.view`, `useView`/`updateView`), `Splitter.tsx`, `Popover.tsx`.

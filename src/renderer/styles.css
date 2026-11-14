@@ -551,3 +551,22 @@ textarea:focus { border-color: var(--accent); }
 .clip .kf.motion { --kf-c: #b07cf6; }
 .clip .kf:hover::before { transform: rotate(45deg) scale(1.25); }
 .clip .kf.on::before { background: #fff; border-color: var(--kf-c, #9ad); box-shadow: 0 0 0 2px var(--kf-c, #9ad); transform: rotate(45deg) scale(1.15); }
+
+/* Aufgeräumter Inspektor (0.13) */
+.inspector-tabs { grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); }
+.itab { padding: 4px 4px; font-size: 11.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.clip-head { padding: 8px 12px 6px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 2px; }
+.clip-head input { font-weight: 600; background: transparent; border: 1px solid transparent; padding: 2px 4px; margin-left: -4px; border-radius: 4px; color: var(--text); }
+.clip-head input:hover, .clip-head input:focus { border-color: var(--border); background: var(--bg); }
+.clip-head .meta { font-size: 11px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kf-bar { display: flex; align-items: center; gap: 4px; margin: 6px 0 2px; padding: 4px; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); }
+.kf-bar .kf-toggle { color: var(--text-dim); font-size: 13px; min-width: 30px; }
+.kf-bar .kf-toggle.on { color: #062521; background: var(--accent); border-color: var(--accent); }
+.kf-bar-label { font-size: 11px; color: var(--text-dim); margin-left: 4px; }
+.fold { margin-top: 8px; border-top: 1px solid var(--border); }
+.fold-title { display: flex; align-items: center; gap: 6px; width: 100%; background: none; border: none; color: var(--text-dim); font-size: 11.5px; font-weight: 600; padding: 7px 0 3px; cursor: pointer; text-align: left; }
+.fold-title:hover { color: var(--text); }
+.fold-body { display: flex; flex-direction: column; gap: 6px; padding-bottom: 4px; }
+.tab-note { font-size: 11px; color: var(--text-dim); padding: 8px 12px 0; }
+.inspector-tabs { display: flex; flex-wrap: wrap; gap: 3px; }
+.inspector-tabs .itab { flex: 0 0 auto; padding: 4px 8px; overflow: visible; text-overflow: clip; }

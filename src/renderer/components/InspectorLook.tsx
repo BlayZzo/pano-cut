@@ -3,13 +3,15 @@ import React, { useState } from 'react';
 import type { Clip, ColorGrade, Crop, ImageFx, Motion, MotionKeyframe, MotionPreset } from '@shared/types';
 import { clipDuration, defaultColor } from '@shared/timeline';
 import { LOOKS } from '@shared/color';
-import { MOTION_PRESETS, NEUTRAL_FX, createMotion, hasMotion, insertKeyframe } from '@shared/effects';
-import { beginTransaction, endTransaction, useProject } from '../store/project';
+import { MOTION_PRESETS, NEUTRAL_FX, createMotion, hasMotion, insertKeyframe, motionKeyAtPublic } from '@shared/effects';
+import { useProject } from '../store/project';
 import { useUi, usePlayheadCoarse } from '../store/ui';
 import { fmt, t } from '../i18n/de';
 import { DEFAULT_TRAIL_THRESHOLD } from '@shared/lights';
 import { removeLight } from '../lightActions';
-import { Section, SelectField, Slider, Toggle } from './InspectorBits';
+import { Fold, KeyframeBar, Section, SelectField, Slider, Toggle } from './InspectorBits';
+import { PathFields } from './InspectorPath';
+import { seekTo } from '../engine/instance';
 import { autoEnhanceClips, saveClipAsEffect } from '../actions';
 
 const SubHead = ({ children }: { children: React.ReactNode }) => (
@@ -64,7 +66,7 @@ export function InspectorColor({ clip, ids }: { clip: Clip; ids: string[] }): Re
           <Slider label={t.look.whites} value={num(c.whites)} min={-100} max={100} step={1} onChange={(v) => patch({ whites: v })} />
           <Slider label={t.look.blacks} value={num(c.blacks)} min={-100} max={100} step={1} onChange={(v) => patch({ blacks: v })} />
           <Slider label={t.look.gamma} value={num(c.gamma, 1)} min={0.3} max={3} step={0.01} onChange={(v) => patch({ gamma: v })} />
-          <Slider label={t.inspector.brightness} value={c.brightness} min={-1} max={1} step={0.01} onChange={(v) => patch({ brightness: v })} />
+          {c.brightness !== 0 && <Slider label={t.inspector.brightness} value={c.brightness} min={-1} max={1} step={0.01} onChange={(v) => patch({ brightness: v })} />}
         </>
       )}
 
@@ -102,13 +104,11 @@ export function InspectorColor({ clip, ids }: { clip: Clip; ids: string[] }): Re
 export function InspectorFx({ clip, ids }: { clip: Clip; ids: string[] }): React.ReactElement {
   const updateClips = useProject((s) => s.updateClips);
   const fx = { ...NEUTRAL_FX, ...(clip.fx ?? {}) };
-  const crop: Crop = clip.crop ?? { left: 0, right: 0, top: 0, bottom: 0 };
   const patchFx = (p: Partial<ImageFx>) => updateClips(ids, { fx: { ...fx, ...p } });
-  const patchCrop = (p: Partial<Crop>) => updateClips(ids, { crop: { ...crop, ...p } });
-  const active = fx.vignette > 0 || fx.sharpen > 0 || fx.denoise > 0 || fx.blur > 0 || fx.grain > 0 || fx.mirror || fx.flip || crop.left > 0 || crop.right > 0 || crop.top > 0 || crop.bottom > 0;
+  const active = fx.vignette > 0 || fx.sharpen > 0 || fx.denoise > 0 || fx.blur > 0 || fx.grain > 0 || fx.mirror || fx.flip;
   const pct = (v: number) => `${Math.round(v * 100)} %`;
   return (
-    <Section title={t.fx.section} defaultOpen={active} badge={active ? '•' : undefined} onReset={() => updateClips(ids, { fx: undefined, crop: undefined })}>
+    <Section title={t.fx.section} defaultOpen={active} badge={active ? '•' : undefined} onReset={() => patchFx({ vignette: 0, blur: 0, sharpen: 0, denoise: 0, grain: 0, mirror: false, flip: false })}>
       <Slider label={t.fx.vignette} value={fx.vignette} min={0} max={1} step={0.01} display={pct} onChange={(v) => patchFx({ vignette: v })} />
       <Slider label={t.fx.blur} value={fx.blur} min={0} max={1} step={0.01} display={pct} onChange={(v) => patchFx({ blur: v })} />
       <Slider label={t.fx.sharpen} value={fx.sharpen} min={0} max={1} step={0.01} display={pct} onChange={(v) => patchFx({ sharpen: v })} />
@@ -117,7 +117,19 @@ export function InspectorFx({ clip, ids }: { clip: Clip; ids: string[] }): React
       {(fx.sharpen > 0 || fx.denoise > 0 || fx.grain > 0) && <div className="hint">{t.fx.exportOnly}</div>}
       <Toggle label={t.fx.mirror} checked={fx.mirror} onChange={(v) => patchFx({ mirror: v })} />
       <Toggle label={t.fx.flip} checked={fx.flip} onChange={(v) => patchFx({ flip: v })} />
-      <SubHead>{t.fx.crop}</SubHead>
+    </Section>
+  );
+}
+
+// ---------- Zuschnitt (im Reiter „Video“) ----------
+
+export function InspectorCrop({ clip, ids }: { clip: Clip; ids: string[] }): React.ReactElement {
+  const updateClips = useProject((s) => s.updateClips);
+  const crop: Crop = clip.crop ?? { left: 0, right: 0, top: 0, bottom: 0 };
+  const patchCrop = (p: Partial<Crop>) => updateClips(ids, { crop: { ...crop, ...p } });
+  const active = crop.left > 0 || crop.right > 0 || crop.top > 0 || crop.bottom > 0;
+  return (
+    <Section title={t.fx.crop} defaultOpen={active} badge={active ? '•' : undefined} onReset={() => updateClips(ids, { crop: undefined })}>
       <Slider label={t.fx.cropLeft} value={crop.left} min={0} max={45} step={0.5} unit=" %" onChange={(v) => patchCrop({ left: v })} />
       <Slider label={t.fx.cropRight} value={crop.right} min={0} max={45} step={0.5} unit=" %" onChange={(v) => patchCrop({ right: v })} />
       <Slider label={t.fx.cropTop} value={crop.top} min={0} max={45} step={0.5} unit=" %" onChange={(v) => patchCrop({ top: v })} />
@@ -183,70 +195,70 @@ export function InspectorLightFx({ clip, ids }: { clip: Clip; ids: string[] }): 
   );
 }
 
-// ---------- Animation ----------
+// ---------- Animation (selten gebraucht → eigener Reiter) ----------
+
+/** Vorlagen, die anderswo schon einfacher gehen, nur zeigen, wenn sie gerade benutzt werden:
+ *  Zoom/Ken Burns = „Kamera“ (verlustfrei aus dem vollen Bild), Auftritte = „Auftritt mit Aufprall“. */
+const HIDDEN_PRESETS = new Set<MotionPreset>(['kenburns', 'zoomin', 'zoomout', 'dropin', 'slam', 'flyin-left', 'flyin-right', 'rise']);
+const IDENTITY = { x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 };
 
 export function InspectorMotion({ clip, ids }: { clip: Clip; ids: string[] }): React.ReactElement {
   const updateClips = useProject((s) => s.updateClips);
-  const playhead = usePlayheadCoarse(0.5);
+  const fps = useProject((s) => s.project.settings.fps);
+  const playhead = usePlayheadCoarse(0.1);
   const dur = clipDuration(clip);
   const m = clip.motion;
   const on = hasMotion(m) || m?.preset === 'custom';
   const setMotion = (next: Motion | undefined) => updateClips(ids, { motion: next });
   const setPreset = (preset: string) => {
     if (!preset) { setMotion(undefined); return; }
-    if (preset === 'custom') {
-      setMotion({ preset: 'custom', intensity: 1, smooth: m?.smooth ?? true, keyframes: m?.keyframes.length ? m.keyframes : [{ t: 0, x: 0, y: 0, scale: 1, rotation: 0, opacity: 1 }] });
-      return;
-    }
     setMotion({ ...createMotion(preset as MotionPreset, dur, m?.intensity ?? 1), smooth: m?.smooth ?? true });
   };
   const local = Math.max(0, Math.min(dur, playhead - clip.start));
-  const updateKey = (i: number, p: Partial<MotionKeyframe>) => {
+  const cur = m ? motionKeyAtPublic(m, local) : IDENTITY;
+  const atKey = m?.keyframes.find((k) => Math.abs(k.t - local) < 0.5 / Math.max(1, fps));
+  // Regler ändern den Keyframe am Abspielkopf (bzw. den einzigen); sonst entsteht dort ein neuer
+  const patchKey = (p: Partial<MotionKeyframe>) => {
     if (!m) return;
-    const kfs = m.keyframes.map((k, j) => (j === i ? { ...k, ...p } : k)).sort((a, b) => a.t - b.t);
-    setMotion({ ...m, preset: 'custom', keyframes: kfs });
+    const base: MotionKeyframe = atKey ?? (m.keyframes.length === 1 ? m.keyframes[0] : { t: local, ...cur });
+    const rest = m.keyframes.filter((k) => k !== base && Math.abs(k.t - base.t) > 1e-6);
+    setMotion({ ...m, preset: 'custom', keyframes: [...rest, { ...base, ...p }].sort((a, b) => a.t - b.t) });
   };
-  const numInput = (value: number, onChange: (v: number) => void, step: number, title: string) => (
-    <input type="number" className="num" value={Math.round(value * 100) / 100} step={step} title={title}
-      onFocus={beginTransaction} onBlur={endTransaction}
-      onChange={(e) => { const v = parseFloat(e.target.value); if (!isNaN(v)) onChange(v); }} />
-  );
+  const addKey = () => {
+    const t0 = Math.round(local * 100) / 100;
+    if (!m) setMotion({ preset: 'custom', intensity: 1, smooth: true, keyframes: [{ t: t0, ...IDENTITY }] });
+    else setMotion(insertKeyframe(m, t0));
+  };
+  const removeKey = (k: number) => {
+    if (!m) return;
+    const rest = m.keyframes.filter((x) => Math.abs(x.t - k) > 1e-6);
+    setMotion(rest.length || m.osc ? { ...m, preset: 'custom', keyframes: rest } : undefined);
+  };
+  const presets = MOTION_PRESETS.filter((p) => p.id !== 'custom' && (!HIDDEN_PRESETS.has(p.id) || p.id === m?.preset));
+  const pct = (v: number) => `${Math.round(v * 100)} %`;
 
   return (
-    <Section title={t.motion.section} defaultOpen={on} badge={on && m ? MOTION_PRESETS.find((p) => p.id === m.preset)?.name.split(' (')[0] : undefined}
+    <Section title={t.motion.section} defaultOpen={on} badge={on && m ? (m.preset === 'custom' ? fmt(t.path.points, { n: m.keyframes.length }) : MOTION_PRESETS.find((p) => p.id === m.preset)?.name.split(' (')[0]) : undefined}
       onReset={on ? () => setMotion(undefined) : undefined}>
-      <SelectField label={t.motion.preset} value={m?.preset ?? ''} onChange={setPreset}
-        options={[{ value: '', label: t.motion.none }, ...MOTION_PRESETS.map((p) => ({ value: p.id, label: p.name }))]} />
+      <SelectField label={t.motion.preset} value={m && m.preset !== 'custom' ? m.preset : ''} onChange={setPreset}
+        options={[{ value: '', label: m?.preset === 'custom' ? t.motion.own : t.motion.none }, ...presets.map((p) => ({ value: p.id, label: p.name }))]} />
       {m && m.preset !== 'custom' && (
-        <Slider label={t.motion.intensity} value={m.intensity} min={0} max={2} step={0.05} display={(v) => `${Math.round(v * 100)} %`}
+        <Slider label={t.motion.intensity} value={m.intensity} min={0} max={2} step={0.05} display={pct}
           onChange={(v) => setMotion({ ...createMotion(m.preset, dur, v), smooth: m.smooth })} />
       )}
-      {m && <Toggle label={t.motion.smooth} checked={m.smooth} onChange={(v) => setMotion({ ...m, smooth: v })} />}
-      {m && (
+      {m && m.keyframes.length > 0 && (
         <>
-          <SubHead>{t.motion.keyframes}</SubHead>
-          <div className="key-table">
-            <div className="key-row key-head"><span>{t.motion.time}</span><span>{t.motion.x}</span><span>{t.motion.y}</span><span>{t.motion.scale}</span><span>{t.motion.rotation}</span><span>{t.motion.opacity}</span><span /></div>
-            {m.keyframes.map((k, i) => (
-              <div className="key-row" key={i}>
-                {numInput(k.t, (v) => updateKey(i, { t: Math.max(0, Math.min(dur, v)) }), 0.1, 's')}
-                {numInput(k.x, (v) => updateKey(i, { x: v }), 1, t.motion.x)}
-                {numInput(k.y, (v) => updateKey(i, { y: v }), 1, t.motion.y)}
-                {numInput(k.scale, (v) => updateKey(i, { scale: Math.max(0.01, v) }), 0.05, t.motion.scale)}
-                {numInput(k.rotation, (v) => updateKey(i, { rotation: v }), 1, t.motion.rotation)}
-                {numInput(k.opacity, (v) => updateKey(i, { opacity: Math.max(0, Math.min(1, v)) }), 0.05, t.motion.opacity)}
-                <button className="btn sm ghost" title={t.common.delete} disabled={m.keyframes.length <= 1}
-                  onClick={() => setMotion({ ...m, preset: 'custom', keyframes: m.keyframes.filter((_, j) => j !== i) })}>×</button>
-              </div>
-            ))}
-          </div>
-          <div className="field-row">
-            <button className="btn sm" onClick={() => setMotion(insertKeyframe(m, Math.round(local * 100) / 100))}>＋ {t.motion.addKey}</button>
-            <button className="btn sm danger" onClick={() => setMotion(undefined)}>{t.motion.remove}</button>
-          </div>
-          <div className="hint">{t.motion.keyHint}</div>
+          <Slider label={t.motion.x} value={cur.x} min={-100} max={100} step={0.5} unit=" %" onChange={(v) => patchKey({ x: v })} />
+          <Slider label={t.motion.y} value={cur.y} min={-100} max={100} step={0.5} unit=" %" onChange={(v) => patchKey({ y: v })} />
+          <Slider label={t.motion.scale} value={cur.scale} min={0.05} max={4} step={0.01} display={pct} onChange={(v) => patchKey({ scale: v })} />
+          <Slider label={t.motion.rotation} value={cur.rotation} min={-360} max={360} step={1} unit="°" onChange={(v) => patchKey({ rotation: v })} />
+          <Slider label={t.motion.opacity} value={cur.opacity} min={0} max={1} step={0.01} display={pct} onChange={(v) => patchKey({ opacity: v })} />
         </>
       )}
+      <KeyframeBar times={m?.keyframes.map((k) => k.t) ?? []} local={local} fps={fps} onSeek={(k) => seekTo(clip.start + k)} onAdd={addKey} onRemove={removeKey} />
+      {!m && <div className="hint">{t.motion.startHint}</div>}
+      {m && <Toggle label={t.motion.smooth} checked={m.smooth} onChange={(v) => setMotion({ ...m, smooth: v })} />}
+      {ids.length === 1 && <Fold title={t.path.section}><PathFields clip={clip} /></Fold>}
     </Section>
   );
 }

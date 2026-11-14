@@ -1,24 +1,22 @@
 import React from 'react';
 import type { Clip, FitMode, Transform } from '@shared/types';
-import { clipDuration, defaultTransform, formatDuration, formatTime } from '@shared/timeline';
+import { clipDuration, defaultTransform, formatTime } from '@shared/timeline';
 import { beginTransaction, endTransaction, useProject } from '../store/project';
 import { useUi } from '../store/ui';
 import { fmt, t } from '../i18n/de';
-import { Section, Slider , NumInput } from './InspectorBits';
-import { InspectorPano } from './InspectorPano';
+import { Fold, NumInput, Section, Slider, Toggle } from './InspectorBits';
+import { InspectorPano, InspectorStitch } from './InspectorPano';
 import { InspectorStab } from './InspectorStab';
 import { InspectorReframe } from './InspectorReframe';
 import { InspectorTitle } from './InspectorTitle';
 import { InspectorStabilize, InspectorSubtitles, InspectorTransition } from './InspectorExtras';
-import { InspectorChroma, InspectorObjects } from './InspectorAi';
-import { DuckingFields, InspectorColor, InspectorFx, InspectorLightFx, InspectorMotion, SaveEffectButton } from './InspectorLook';
-import { InspectorClickCutout } from './InspectorCutout';
-import { InspectorMaskDraw } from './InspectorMaskDraw';
+import { InspectorChroma } from './InspectorAi';
+import { DuckingFields, InspectorColor, InspectorCrop, InspectorFx, InspectorLightFx, InspectorMotion, SaveEffectButton } from './InspectorLook';
+import { InspectorMasks } from './InspectorMaskDraw';
 import { InspectorLayer, InspectorVfx } from './InspectorLayer';
 import { InspectorMusic } from './InspectorMusic';
 import { SpeedRampFields } from './InspectorRamp';
 import { InspectorDropIn } from './InspectorDropIn';
-import { InspectorPath } from './InspectorPath';
 import { createMulticam, multicamCandidates } from '../multicamActions';
 
 export function Inspector(): React.ReactElement {
@@ -90,45 +88,74 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
     endTransaction();
   };
 
-  // Kategorien (Reiter), damit nicht alles untereinander steht
-  type Cat = 'clip' | 'look' | 'motion' | 'audio' | 'text' | 'ai';
+  // Reiter wie in DaVinci Resolve: immer dieselbe Reihenfolge, 360°-Technik in einem eigenen Reiter
+  type Cat = 'video' | 'color' | 'audio' | 'text' | 'cutout' | 'anim' | 'pano';
+  const is360 = !isTitle && !!media?.info.is360 && media.type === 'video';
+  const visualMedia = !!media && (media.type === 'video' || media.type === 'image') && !media.vfx && !media.model3d;
   const cats: Array<{ id: Cat; label: string; show: boolean }> = [
-    { id: 'clip', label: t.inspector.catClip, show: true },
-    { id: 'look', label: t.inspector.catLook, show: !isAudioOnly && !isTitle },
-    { id: 'motion', label: t.inspector.catMotion, show: !isAudioOnly },
+    { id: 'video', label: t.inspector.catVideo, show: !isAudioOnly },
+    { id: 'color', label: t.inspector.catColor, show: !isAudioOnly && !isTitle },
     { id: 'audio', label: t.inspector.catAudio, show: !isTitle && !isImage && (isAudioOnly || !!media?.info.hasAudio) },
     { id: 'text', label: t.inspector.catText, show: isTitle || (media?.type === 'video' && !!media.info.hasAudio) },
-    { id: 'ai', label: t.inspector.catAi, show: !isTitle && !!media && media.type !== 'audio' && !media.vfx && !media.model3d },
+    { id: 'cutout', label: t.inspector.catCutout, show: !isTitle && visualMedia },
+    { id: 'anim', label: t.inspector.catAnim, show: !isAudioOnly },
+    { id: 'pano', label: '360°', show: is360 },
   ];
   const visible = cats.filter((c) => c.show);
-  const cat: Cat = visible.some((c) => c.id === inspectorTab) ? (inspectorTab as Cat) : visible[0].id;
+  const legacy: Record<string, Cat> = { clip: 'video', look: 'color', motion: 'video', ai: 'cutout' };
+  const wanted = (legacy[inspectorTab] ?? inspectorTab) as Cat;
+  const cat: Cat = visible.some((c) => c.id === wanted) ? wanted : visible[0].id;
+
+  const speedSection = !isImage && !isTitle && (
+    <Section title={t.inspector.sectionSpeed} defaultOpen={clip.speed !== 1 || clip.reverse} badge={clip.speed !== 1 ? `${Math.round(clip.speed * 100) / 100}×` : undefined}
+      onReset={() => { beginTransaction(); setSpeed(1); patch({ reverse: false }); endTransaction(); }}>
+      <div className="speed-presets">
+        {[0.25, 0.5, 1, 2, 4].map((v) => (
+          <button key={v} className={`chip${clip.speed === v ? ' active' : ''}`} onClick={() => setSpeed(v)}>
+            {v === 0.25 ? '¼×' : v === 0.5 ? `½× ${t.inspector.slowmo}` : v === 1 ? `1× ${t.inspector.normal}` : v === 4 ? `4× ${t.inspector.timelapse}` : `${v}×`}
+          </button>
+        ))}
+      </div>
+      <div className="speed-field">
+        <button className="btn sm" title="−" onClick={() => setSpeed(Math.max(0.05, clip.speed > 2 ? clip.speed - 1 : Math.round((clip.speed - 0.1) * 100) / 100))}>−</button>
+        <NumInput className="speed-num" value={clip.speed} min={0.05} max={100} step={0.01} onChange={setSpeed} title={t.inspector.speedType} />
+        <span className="speed-x">×</span>
+        <button className="btn sm" title="+" onClick={() => setSpeed(clip.speed >= 2 ? Math.floor(clip.speed) + 1 : Math.round((clip.speed + 0.1) * 100) / 100)}>+</button>
+      </div>
+      <Toggle label={t.inspector.reverse} checked={clip.reverse} onChange={(v) => patch({ reverse: v })} />
+      {clip.reverse && media?.type === 'video' && !media.proxyReversed && <div className="hint warn">{t.inspector.reversedProxyHint}</div>}
+      {count === 1 && media?.type === 'video' && !media.vfx && !clip.mc && <Fold title={t.ramp.section} defaultOpen={false}><SpeedRampFields clip={clip} /></Fold>}
+    </Section>
+  );
 
   return (
     <>
+      <div className="clip-head">
+        {count > 1
+          ? <strong>{fmt(t.inspector.multi, { n: count })}</strong>
+          : <input type="text" value={clip.name} onChange={(e) => updateClip(clip.id, { name: e.target.value })} onFocus={beginTransaction} onBlur={endTransaction} spellCheck={false} title={t.inspector.name} />}
+        <div className="meta" title={media?.path}>
+          {formatTime(clipDuration(clip), fps)}
+          {!isTitle && media ? ` · ${media.name}` : ''}
+          {media?.info.width ? ` · ${media.info.width}×${media.info.height}` : ''}
+          {media?.info.fps ? ` · ${Math.round(media.info.fps * 100) / 100} fps` : ''}
+        </div>
+      </div>
       <div className="inspector-tabs">
         {visible.map((c) => <button key={c.id} className={`itab${cat === c.id ? ' active' : ''}`} onClick={() => setInspectorTab(c.id)}>{c.label}</button>)}
       </div>
 
-      {cat === 'clip' && <>
-      <Section title={count > 1 ? fmt(t.inspector.multi, { n: count }) : t.inspector.sectionClip}>
-        <div className="field-full">
-          <label>{t.inspector.name}</label>
-          <input type="text" value={clip.name} onChange={(e) => updateClip(clip.id, { name: e.target.value })} onFocus={beginTransaction} onBlur={endTransaction} spellCheck={false} />
-        </div>
-        <dl className="kv">
-          <dt>{t.inspector.duration}</dt><dd>{formatTime(clipDuration(clip), fps)} ({formatDuration(clipDuration(clip))})</dd>
-          {!isTitle && <><dt>{t.inspector.source}</dt><dd title={media?.path}>{media?.name ?? '–'}</dd></>}
-          {media?.info.width ? <><dt>Größe</dt><dd>{media.info.width}×{media.info.height}{media.info.fps ? ` · ${Math.round(media.info.fps * 100) / 100} fps` : ''}{media.info.is360 ? ' · 360°' : ''}</dd></> : null}
-        </dl>
-      </Section>
+      {cat === 'video' && <>
       {!isTitle && media?.vfx && <InspectorVfx clip={clip} media={media} />}
       {!isTitle && media?.model3d && (
         <Section title={t.model3d.title} badge="3D">
           <button className="btn primary" style={{ width: '100%' }} onClick={() => useUi.getState().setModelPanel({ mediaId: media.id })}>{t.model3d.edit}</button>
         </Section>
       )}
-      {!isAudioOnly && !isTitle && (
-        <Section title={t.inspector.sectionTransform} onReset={() => patch({ transform: defaultTransform(), opacity: 1, fit: 'contain' })}>
+      {is360 && <InspectorPano clip={clip} media={media} />}
+      {!is360 && visualMedia && count === 1 && media && <InspectorReframe clip={clip} media={media} />}
+      {!isTitle && (
+        <Section title={t.inspector.sectionTransform} defaultOpen={isTransformed(clip)} badge={isTransformed(clip) ? '•' : undefined} onReset={() => patch({ transform: defaultTransform(), opacity: 1, fit: 'contain' })}>
           <div className="field">
             <label>{t.inspector.fit}</label>
             <select value={clip.fit} onChange={(e) => patch({ fit: e.target.value as FitMode })} style={{ gridColumn: '2 / span 2' }}>
@@ -149,68 +176,27 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
           <Slider label={t.inspector.opacity} value={clip.opacity} min={0} max={1} step={0.01} display={(v) => `${Math.round(v * 100)} %`} onChange={(v) => patch({ opacity: v })} />
         </Section>
       )}
-      {!isTitle && !isAudioOnly && <InspectorTransition clip={clip} />}
-      {!isTitle && !isAudioOnly && <InspectorLayer clip={clip} ids={ids} />}
-      {!isTitle && media?.info.is360 && media.type === 'video' && <InspectorPano clip={clip} media={media} />}
-      {!isTitle && media?.info.is360 && media.type === 'video' && <InspectorStab clip={clip} media={media} />}
-      {!isAudioOnly && !isTitle && count === 1 && <SaveEffectButton clip={clip} />}
+      {!isTitle && visualMedia && <InspectorCrop clip={clip} ids={ids} />}
+      {speedSection}
+      {is360 && media && <InspectorStab clip={clip} media={media} part="stab" />}
+      {!is360 && media?.type === 'video' && !media.vfx && !media.model3d && <InspectorStabilize clip={clip} media={media} />}
+      {!isTitle && <InspectorTransition clip={clip} />}
+      {!isTitle && <InspectorLayer clip={clip} ids={ids} />}
       </>}
 
-      {cat === 'look' && <>
+      {cat === 'color' && <>
       <InspectorColor clip={clip} ids={ids} />
       <InspectorFx clip={clip} ids={ids} />
       <InspectorLightFx clip={clip} ids={ids} />
-      {media && media.type !== 'audio' && !media.vfx && !media.model3d && <InspectorChroma clip={clip} />}
-      {media?.type === 'video' && !media.vfx && !media.model3d && <InspectorStabilize clip={clip} media={media} />}
-      </>}
-
-      {cat === 'motion' && <>
-      {!isTitle && media && (media.type === 'video' || media.type === 'image') && !media.info.is360 && !media.vfx && count === 1 && <InspectorReframe clip={clip} media={media} />}
-      {!isImage && !isTitle && (
-        <Section title={t.inspector.sectionSpeed} onReset={() => { beginTransaction(); setSpeed(1); patch({ reverse: false }); endTransaction(); }}>
-          <div className="speed-presets">
-            <button className={`chip${clip.speed === 0.25 ? ' active' : ''}`} onClick={() => setSpeed(0.25)}>¼×</button>
-            <button className={`chip${clip.speed === 0.5 ? ' active' : ''}`} onClick={() => setSpeed(0.5)}>½× {t.inspector.slowmo}</button>
-            <button className={`chip${clip.speed === 1 ? ' active' : ''}`} onClick={() => setSpeed(1)}>1× {t.inspector.normal}</button>
-            <button className={`chip${clip.speed === 2 ? ' active' : ''}`} onClick={() => setSpeed(2)}>2×</button>
-            <button className={`chip${clip.speed === 4 ? ' active' : ''}`} onClick={() => setSpeed(4)}>4× {t.inspector.timelapse}</button>
-          </div>
-          <div className="speed-field">
-            <button className="btn sm" title="−1" onClick={() => setSpeed(Math.max(0.05, clip.speed >= 2 ? clip.speed - 1 : clip.speed / 2))}>−1</button>
-            <button className="btn sm ghost" title="−0,1" onClick={() => setSpeed(Math.max(0.05, Math.round((clip.speed - 0.1) * 100) / 100))}>−,1</button>
-            <NumInput className="speed-num" value={clip.speed} min={0.05} max={100} step={0.01} onChange={setSpeed} title={t.inspector.speedType} />
-            <span className="speed-x">×</span>
-            <button className="btn sm ghost" title="+0,1" onClick={() => setSpeed(Math.round((clip.speed + 0.1) * 100) / 100)}>+,1</button>
-            <button className="btn sm" title="+1" onClick={() => setSpeed(clip.speed < 1 ? Math.min(1, clip.speed * 2) : Math.floor(clip.speed) + 1)}>+1</button>
-          </div>
-          <Slider label={t.inspector.speedFine} value={Math.log2(clip.speed)} min={-4} max={6.64} step={0.01} display={(v) => `${(2 ** v).toFixed(2)}×`} onChange={(v) => setSpeed(Math.round(2 ** v * 100) / 100)} />
-          <div className="hint">{t.inspector.speedHint}</div>
-          <label className="toggle">
-            <input type="checkbox" checked={clip.reverse} onChange={(e) => patch({ reverse: e.target.checked })} />
-            {t.inspector.reverse}
-          </label>
-          {clip.reverse && media?.type === 'video' && !media.proxyReversed && <div className="hint warn">{t.inspector.reversedProxyHint}</div>}
-        </Section>
-      )}
-      {!isImage && !isTitle && count === 1 && media?.type === 'video' && !media.vfx && !clip.mc && (
-        <Section title={t.ramp.section} defaultOpen>
-          <SpeedRampFields clip={clip} />
-        </Section>
-      )}
-      {!isAudioOnly && <InspectorMotion clip={clip} ids={ids} />}
-      {!isAudioOnly && !isTitle && count === 1 && <InspectorPath clip={clip} />}
-      {!isTitle && count === 1 && media && !media.vfx && (media.hasAlpha || clip.cutout?.enabled) && <InspectorDropIn clip={clip} />}
       </>}
 
       {cat === 'audio' && <>
+      {isAudioOnly && speedSection}
       {!clip.mc && media && (isAudioOnly || media.info.hasAudio) && !media.vfx && <InspectorMusic clip={clip} media={media} />}
       {!isImage && !isTitle && media?.info.hasAudio && (
         <Section title={t.inspector.sectionAudio} onReset={() => patch({ volume: 1, muted: false, fadeIn: 0, fadeOut: 0, ducking: undefined })}>
           <Slider label={t.inspector.volume} value={clip.volume} min={0} max={2} step={0.01} display={(v) => `${Math.round(v * 100)} %`} onChange={(v) => patch({ volume: v })} />
-          <label className="toggle">
-            <input type="checkbox" checked={clip.muted} onChange={(e) => patch({ muted: e.target.checked })} />
-            {t.inspector.mute}
-          </label>
+          <Toggle label={t.inspector.mute} checked={clip.muted} onChange={(v) => patch({ muted: v })} />
           <Slider label={t.inspector.fadeIn} value={clip.fadeIn} min={0} max={10} step={0.1} unit=" s" onChange={(v) => patch({ fadeIn: v })} />
           <Slider label={t.inspector.fadeOut} value={clip.fadeOut} min={0} max={10} step={0.1} unit=" s" onChange={(v) => patch({ fadeOut: v })} />
           <DuckingFields clip={clip} ids={ids} />
@@ -223,11 +209,31 @@ function ClipInspector({ clip, ids, count }: { clip: Clip; ids: string[]; count:
       {!isTitle && media?.type === 'video' && media.info.hasAudio && <InspectorSubtitles clip={clip} media={media} />}
       </>}
 
-      {cat === 'ai' && media && <>
-      {count === 1 && (media.type === 'video' || media.type === 'image') && <InspectorMaskDraw clip={clip} media={media} />}
-      {count === 1 && media.type === 'video' && <InspectorClickCutout clip={clip} media={media} />}
-      <InspectorObjects clip={clip} media={media} />
+      {cat === 'cutout' && media && <>
+      {count === 1 && <InspectorMasks clip={clip} media={media} />}
+      <InspectorChroma clip={clip} />
+      </>}
+
+      {cat === 'anim' && <>
+      <InspectorMotion clip={clip} ids={ids} />
+      {!isTitle && count === 1 && media && !media.vfx && (media.hasAlpha || clip.cutout?.enabled) && <InspectorDropIn clip={clip} />}
+      {!isAudioOnly && !isTitle && count === 1 && (
+        <Section title={t.effects.ownSection} defaultOpen={false}>
+          <div className="hint">{t.effects.ownHint}</div>
+          <SaveEffectButton clip={clip} />
+        </Section>
+      )}
+      </>}
+
+      {cat === 'pano' && media && <>
+      <InspectorStitch media={media} />
+      <InspectorStab clip={clip} media={media} part="nadir" />
       </>}
     </>
   );
+}
+
+function isTransformed(c: Clip): boolean {
+  const tr = c.transform;
+  return tr.scale !== 1 || tr.x !== 0 || tr.y !== 0 || tr.rotation !== 0 || c.opacity !== 1 || c.fit !== 'contain';
 }

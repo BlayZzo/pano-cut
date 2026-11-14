@@ -19,7 +19,8 @@ export function evenPathTiming(m: Motion): Motion {
   return { ...m, keyframes: k.map((key, i) => ({ ...key, t: Math.round((a + ((b - a) * d[i]) / total) * 1000) / 1000 })) };
 }
 
-export function InspectorPath({ clip }: { clip: Clip }): React.ReactElement {
+/** Bewegungspfad im Bild zeichnen + Kurve/Unschärfe (im Abschnitt „Animation“). */
+export function PathFields({ clip }: { clip: Clip }): React.ReactElement {
   const pathEdit = useUi((s) => s.pathEdit);
   const setPathEdit = useUi((s) => s.setPathEdit);
   const m = clip.motion ?? emptyMotion();
@@ -27,7 +28,7 @@ export function InspectorPath({ clip }: { clip: Clip }): React.ReactElement {
   const write = (next: Motion) => { useProject.getState().updateClip(clip.id, { motion: next }); setDirty(true); };
   const editing = pathEdit === clip.id;
   return (
-    <Section title={t.path.section} defaultOpen={editing || (n > 1 && m.preset === 'custom')} badge={n ? fmt(t.path.points, { n }) : undefined}>
+    <>
       <div className="hint">{t.path.hint}</div>
       <button className={`btn${editing ? ' active' : ' primary'}`} style={{ width: '100%' }} onClick={() => {
         if (editing) { setPathEdit(null); return; }
@@ -35,7 +36,6 @@ export function InspectorPath({ clip }: { clip: Clip }): React.ReactElement {
         setPathEdit(clip.id);
       }}>{editing ? t.path.done : t.path.edit}</button>
       <Toggle label={t.path.curve} checked={m.curve !== false} onChange={(v) => write({ ...m, curve: v })} />
-      <Toggle label={t.path.smooth} checked={m.smooth} onChange={(v) => write({ ...m, smooth: v })} />
       <Slider label={t.path.blur} value={m.blur ?? 0} min={0} max={1} step={0.05} display={(v) => `${Math.round(v * 100)} %`} onChange={(v) => write({ ...m, blur: v })} />
       <div className="field-row" style={{ flexWrap: 'wrap', gap: 4 }}>
         <button className="btn sm" title={t.path.evenHint} disabled={n < 3} onClick={() => write(evenPathTiming(m))}>{t.path.even}</button>
@@ -46,6 +46,6 @@ export function InspectorPath({ clip }: { clip: Clip }): React.ReactElement {
         <button className="btn sm ghost" disabled={n === 0} onClick={() => write({ ...m, keyframes: [] })}>{t.path.clear}</button>
       </div>
       {n === 0 && <div className="hint">{t.path.none}</div>}
-    </Section>
+    </>
   );
 }
