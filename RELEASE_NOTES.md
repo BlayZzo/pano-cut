@@ -1,3 +1,17 @@
+## PanoCut 0.12.0 – Keyframes direkt in der Timeline bearbeiten
+
+**Installieren**
+- Mac mit Apple-Chip (M1–M4): `PanoCut-0.12.0-mac-arm64.dmg`
+- Mac mit Intel: `PanoCut-0.12.0-mac-x64.dmg`
+- Windows 10/11: `PanoCut-0.12.0-win-x64.exe`
+
+- **Keyframes als Rauten im Clip**: Unten in jedem Clip mit Kamerafahrt oder Animation erscheint eine schmale Zeile mit Rauten – türkis = 360°-Blick, orange = Ausschnitt, lila = Animation.
+- **Anklicken** wählt einen Keyframe aus (er wird weiß) und setzt den Abspielkopf darauf. Erst dann passiert etwas – vorher bleibt alles, wie es ist.
+- **Ziehen** verschiebt ihn (rastet aufs Bild bzw. am Abspielkopf ein). Die Reihenfolge bleibt erhalten, er kann den Clip nicht verlassen.
+- **Entf / Rücktaste** oder Rechtsklick → „Keyframe löschen“ entfernt ihn.
+- **Mehrere auswählen wie im Finder/Explorer**: Strg/Cmd-Klick = einzeln dazu oder weg, Umschalt-Klick = alles dazwischen, in der Rauten-Zeile einen **Rahmen aufziehen** = alle darin. Mehrere ausgewählte Keyframes verschiebst oder löschst du gemeinsam.
+- Alles lässt sich mit ⌘Z / Strg+Z rückgängig machen (ein Schritt pro Verschieben).
+
 ## PanoCut 0.11.4 – Sicher speichern & wieder öffnen
 
 **Installieren**

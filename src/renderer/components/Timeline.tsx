@@ -13,6 +13,8 @@ import { cssUrl } from '../utils/dom';
 import { beatsOnTimeline } from '@shared/beats';
 import { DRAG_EFFECT, DRAG_MIME, DRAG_TITLE, DRAG_TRANSITION, getDragging, getDraggingMedia } from '../utils/dnd';
 import { ContextMenu, type MenuEntry } from './ContextMenu';
+import { clampKeyShift, clipKeyframes, exactRefs, groupByClip, keyId, shiftKeyframes, type KeyRef } from '@shared/keyframes';
+import { deleteSelectedKeyframes } from '../actions';
 import { IconEye, IconEyeOff, IconFit, IconLock, IconMagnet, IconMute, IconPlus, IconScissors, IconTrash, IconUnlock, IconVolume, IconZoomIn, IconZoomOut } from './Icons';
 
 const RULER_H = 24;
@@ -20,6 +22,8 @@ const TRACK_SIZES = { small: { video: 40, audio: 30 }, medium: { video: 64, audi
 let trackSize: keyof typeof TRACK_SIZES = 'medium';
 const SNAP_PX = 8;
 const DIVIDER_H = 6;
+/** Höhe der Keyframe-Zeile unten im Clip (Rauten). */
+const KF_ROW = 14;
 
 function trackHeight(tr: Track): number {
   return tr.kind === 'video' ? TRACK_SIZES[trackSize].video : TRACK_SIZES[trackSize].audio;
@@ -128,6 +132,8 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
   const setMagnet = useUi((s) => s.setMagnet);
   const setSnapping = useUi((s) => s.setSnapping);
   const selection = useUi((s) => s.selection);
+  const kfSelection = useUi((s) => s.kfSelection);
+  const setKfSelection = useUi((s) => s.setKfSelection);
   const select = useUi((s) => s.select);
   const toggleSelect = useUi((s) => s.toggleSelect);
   const drag = useUi((s) => s.drag);
@@ -221,6 +227,7 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
     if (track?.locked) return;
     stopPlayback();
     const ui = useUi.getState();
+    if (ui.kfSelection.length) setKfSelection([]);
     let ids: string[];
     if (kind === 'move') {
       if (e.shiftKey || e.metaKey || e.ctrlKey) { toggleSelect(clip.id); ids = useUi.getState().selection; if (!ids.includes(clip.id)) return; }
@@ -320,41 +327,161 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
     window.addEventListener('pointerup', up);
   };
 
-  // ---------- Rahmen aufziehen = mehrere Clips auswählen ----------
+  // ---------- Rahmen aufziehen = mehrere Clips (oder Keyframes) auswählen ----------
   const [marquee, setMarquee] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
-  const onEmptyPointerDown = (e: React.PointerEvent) => {
-    const el = e.target as HTMLElement;
-    if (e.button !== 0 || !(e.target === e.currentTarget || el.classList.contains('lane') || el.classList.contains('lanes-content'))) return;
+  /** kfOnly: Rahmen beginnt in einer Keyframe-Zeile → wählt Keyframes statt Clips (wie Dateien im Finder/Explorer). */
+  const startMarquee = (e: React.PointerEvent, kfOnly: boolean) => {
     const sc = scrollRef.current;
     if (!sc) return;
     const r = sc.getBoundingClientRect();
     const pos = (ev: { clientX: number; clientY: number }) => ({ x: ev.clientX - r.left + sc.scrollLeft, y: ev.clientY - r.top + sc.scrollTop });
     const p0 = pos(e);
     if (p0.y < RULER_H) return;
+    stopPlayback();
     const additive = e.shiftKey || e.metaKey || e.ctrlKey;
     const base = additive ? useUi.getState().selection : [];
+    const kfBase = additive ? useUi.getState().kfSelection : [];
     let rect = { x0: p0.x, y0: p0.y, x1: p0.x, y1: p0.y };
+    const box = () => ({ t0: Math.min(rect.x0, rect.x1) / zoom, t1: Math.max(rect.x0, rect.x1) / zoom, y0: Math.min(rect.y0, rect.y1), y1: Math.max(rect.y0, rect.y1) });
     const hits = () => {
-      const t0 = Math.min(rect.x0, rect.x1) / zoom, t1 = Math.max(rect.x0, rect.x1) / zoom;
-      const y0 = Math.min(rect.y0, rect.y1), y1 = Math.max(rect.y0, rect.y1);
+      const { t0, t1, y0, y1 } = box();
       const lanes = offsets.filter((o) => o.top + o.height > y0 && o.top < y1).map((o) => o.track.id);
       return Object.values(project.clips).filter((c) => lanes.includes(c.trackId) && c.start < t1 && clipEnd(c) > t0).map((c) => c.id);
+    };
+    const kfHits = () => {
+      const { t0, t1, y0, y1 } = box();
+      const out: string[] = [];
+      for (const o of offsets) {
+        const cy = o.top + o.height - 5 - KF_ROW / 2;   // Mitte der Rauten-Zeile (Clip hat 4 px Abstand + Rand)
+        if (cy < y0 - KF_ROW / 2 || cy > y1 + KF_ROW / 2) continue;
+        for (const c of Object.values(project.clips)) {
+          if (c.trackId !== o.track.id) continue;
+          for (const k of clipKeyframes(c)) { const at = c.start + k.t; if (at >= t0 && at <= t1) out.push(keyId(c.id, k.kind, k.t)); }
+        }
+      }
+      return out;
     };
     const move = (ev: PointerEvent) => {
       const p = pos(ev);
       rect = { ...rect, x1: p.x, y1: p.y };
       if (Math.abs(rect.x1 - rect.x0) + Math.abs(rect.y1 - rect.y0) < 4) return;
       setMarquee(rect);
-      select([...new Set([...base, ...hits()])]);
+      if (kfOnly) {
+        const ks = [...new Set([...kfBase, ...kfHits()])];
+        setKfSelection(ks);
+        select([...new Set(ks.map((id) => id.split('|')[0]))]);
+      } else {
+        if (!additive) setKfSelection([]);
+        select([...new Set([...base, ...hits()])]);
+      }
     };
     const up = () => {
       window.removeEventListener('pointermove', move);
       window.removeEventListener('pointerup', up);
       setMarquee(null);
-      if (Math.abs(rect.x1 - rect.x0) + Math.abs(rect.y1 - rect.y0) < 4 && !additive) select([]);
+      if (Math.abs(rect.x1 - rect.x0) + Math.abs(rect.y1 - rect.y0) < 4 && !additive) { select([]); setKfSelection([]); }
     };
     window.addEventListener('pointermove', move);
     window.addEventListener('pointerup', up);
+  };
+  const onEmptyPointerDown = (e: React.PointerEvent) => {
+    const el = e.target as HTMLElement;
+    if (e.button !== 0 || !(e.target === e.currentTarget || el.classList.contains('lane') || el.classList.contains('lanes-content'))) return;
+    startMarquee(e, false);
+  };
+  const onKeyRowPointerDown = (e: React.PointerEvent) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    startMarquee(e, true);
+  };
+
+  // ---------- Keyframes: anklicken = auswählen, ziehen = verschieben ----------
+  const kfAnchor = useRef<{ trackId: string; at: number } | null>(null);
+  const onKeyPointerDown = (e: React.PointerEvent, clip: Clip, ref: KeyRef) => {
+    if (e.button !== 0) return;
+    e.stopPropagation();
+    stopPlayback();
+    const ui = useUi.getState();
+    const id = keyId(clip.id, ref.kind, ref.t);
+    let sel = ui.kfSelection;
+    if (e.metaKey || e.ctrlKey) {
+      // Strg/Cmd: einzeln dazu oder weg
+      sel = sel.includes(id) ? sel.filter((x) => x !== id) : [...sel, id];
+      kfAnchor.current = { trackId: clip.trackId, at: clip.start + ref.t };
+    } else if (e.shiftKey && kfAnchor.current) {
+      // Umschalt: alles zwischen der zuletzt angeklickten Raute und dieser (auf derselben Spur)
+      const a = Math.min(kfAnchor.current.at, clip.start + ref.t), b = Math.max(kfAnchor.current.at, clip.start + ref.t);
+      const range: string[] = [];
+      for (const c of Object.values(project.clips)) {
+        if (c.trackId !== clip.trackId) continue;
+        for (const k of clipKeyframes(c)) { const at = c.start + k.t; if (at >= a - 1e-4 && at <= b + 1e-4) range.push(keyId(c.id, k.kind, k.t)); }
+      }
+      sel = [...new Set([...sel, ...range])];
+    } else {
+      if (!sel.includes(id)) sel = [id];
+      kfAnchor.current = { trackId: clip.trackId, at: clip.start + ref.t };
+    }
+    setKfSelection(sel);
+    select([...new Set([clip.id, ...sel.map((x) => x.split('|')[0])])]);
+    if (!sel.includes(id)) return;   // gerade abgewählt → nicht ziehen
+
+    // Ziehen: alle ausgewählten Keyframes gemeinsam
+    const fps = project.settings.fps || 30;
+    const groups = groupByClip(sel);
+    const baseClips = new Map<string, Clip>();
+    for (const [cid, refs] of groups) { const c = project.clips[cid]; if (c) { baseClips.set(cid, c); groups.set(cid, exactRefs(c, refs)); } }
+    const startX = e.clientX;
+    const playhead = ui.playhead;
+    const grabbedAt = clip.start + ref.t;
+    let moved = false;
+    const move = (ev: PointerEvent) => {
+      const dx = ev.clientX - startX;
+      if (!moved && Math.abs(dx) < 3) return;
+      if (!moved) { moved = true; beginTransaction(); }
+      let dt = dx / zoom;
+      // Einrasten am Abspielkopf, sonst aufs Bildraster
+      if (useUi.getState().snapping && Math.abs(grabbedAt + dt - playhead) * zoom < SNAP_PX) dt = playhead - grabbedAt;
+      else dt = Math.round(dt * fps) / fps;
+      // Begrenzen: im Clip bleiben, Reihenfolge nicht vertauschen
+      let lim = dt;
+      for (const [cid, refs] of groups) {
+        const c = baseClips.get(cid);
+        if (!c) continue;
+        const v = clampKeyShift(c, refs, dt, 1 / fps);
+        if (Math.abs(v) < Math.abs(lim)) lim = v;
+      }
+      const patches: Record<string, Partial<Clip>> = {};
+      const nextSel: string[] = [];
+      for (const [cid, refs] of groups) {
+        const c = baseClips.get(cid);
+        if (!c) continue;
+        patches[cid] = shiftKeyframes(c, refs, lim);
+        for (const r0 of refs) nextSel.push(keyId(cid, r0.kind, Math.max(0, r0.t + lim)));
+      }
+      useProject.getState().patchClips(patches);
+      setKfSelection(nextSel);
+      setSnapLine(Math.abs(grabbedAt + lim - playhead) < 1e-6 ? playhead : null);
+    };
+    const up = () => {
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      setSnapLine(null);
+      if (moved) { endTransaction(); setDirty(true); }
+      else if (!e.shiftKey && !e.metaKey && !e.ctrlKey) seekTo(clip.start + ref.t);   // Klick: Abspielkopf auf den Keyframe
+    };
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+  };
+  const keyMenu = (clip: Clip, ref: KeyRef, x: number, y: number) => {
+    const id = keyId(clip.id, ref.kind, ref.t);
+    const ui = useUi.getState();
+    if (!ui.kfSelection.includes(id)) { setKfSelection([id]); select([clip.id]); }
+    const n = useUi.getState().kfSelection.length;
+    setMenu({ x, y, entries: [
+      { label: t.keyframes.jump, onClick: () => seekTo(clip.start + ref.t) },
+      { sep: true },
+      { label: n > 1 ? t.keyframes.deleteN.replace('{n}', String(n)) : t.keyframes.delete, danger: true, onClick: () => { deleteSelectedKeyframes(); } },
+    ] });
   };
 
   // ---------- Drop aus der Mediathek ----------
@@ -440,6 +567,14 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
   };
 
   const fps = project.settings.fps;
+  // Stabile Referenz für die (memoisierten) Clips; die Funktionen lesen den aktuellen Zustand über Refs
+  const kfImpl = useRef({ onKeyPointerDown, onKeyRowPointerDown, keyMenu });
+  kfImpl.current = { onKeyPointerDown, onKeyRowPointerDown, keyMenu };
+  const kfHandlers = useMemo<KfHandlers>(() => ({
+    down: (e, c, r) => kfImpl.current.onKeyPointerDown(e, c, r),
+    row: (e) => kfImpl.current.onKeyRowPointerDown(e),
+    menu: (c, r, x, y) => kfImpl.current.keyMenu(c, r, x, y),
+  }), []);
 
   return (
     <section className="timeline" onContextMenu={(e) => e.preventDefault()}>
@@ -520,6 +655,8 @@ export function Timeline({ zoomFitRef }: { zoomFitRef: React.MutableRefObject<()
                   dropPreview={dropPreview?.trackId === track.id ? dropPreview : null}
                   onClipPointerDown={startClipDrag}
                   onClipContextMenu={clipMenu}
+                  kfSelection={kfSelection}
+                  kf={kfHandlers}
                 />
               </React.Fragment>
             ))}
@@ -656,9 +793,17 @@ interface LaneProps {
   dropPreview: { trackId: string; time: number; media: MediaItem | null; title?: string; transitionClip?: string } | null;
   onClipPointerDown: (e: React.PointerEvent, clip: Clip, kind: DragState['kind']) => void;
   onClipContextMenu: (clip: Clip, x: number, y: number) => void;
+  kfSelection: string[];
+  kf: KfHandlers;
 }
 
-const Lane = React.memo(function Lane({ track, top, height, project, zoom, strips, selection, drag, dropPreview, onClipPointerDown, onClipContextMenu }: LaneProps): React.ReactElement {
+interface KfHandlers {
+  down: (e: React.PointerEvent, clip: Clip, ref: KeyRef) => void;
+  row: (e: React.PointerEvent) => void;
+  menu: (clip: Clip, ref: KeyRef, x: number, y: number) => void;
+}
+
+const Lane = React.memo(function Lane({ track, top, height, project, zoom, strips, selection, drag, dropPreview, onClipPointerDown, onClipContextMenu, kfSelection, kf }: LaneProps): React.ReactElement {
   const clips = useMemo(() => Object.values(project.clips).filter((c) => c.trackId === track.id), [project.clips, track.id]);
   const dragTarget = drag?.kind === 'move' && (drag.trackMap ? Object.values(drag.trackMap).includes(track.id) : drag.trackId === track.id);
   // Clips, die per Spurwechsel hierher gezogen werden (Geister)
@@ -679,6 +824,8 @@ const Lane = React.memo(function Lane({ track, top, height, project, zoom, strip
             movedAway={!!inDrag && inDrag.kind === 'move' && !inDrag.copy && (inDrag.trackMap ? inDrag.trackMap[clip.id] !== track.id : !!inDrag.trackId && inDrag.trackId !== track.id)}
             onPointerDown={onClipPointerDown}
             onContextMenu={onClipContextMenu}
+            kfSelection={kfSelection}
+            kf={kf}
           />
         );
       })}
@@ -715,9 +862,13 @@ interface ClipProps {
   movedAway: boolean;
   onPointerDown: (e: React.PointerEvent, clip: Clip, kind: DragState['kind']) => void;
   onContextMenu: (clip: Clip, x: number, y: number) => void;
+  kfSelection: string[];
+  kf: KfHandlers;
 }
 
-const TimelineClip = React.memo(function TimelineClip({ clip, media, zoom, strips, selected, drag, movedAway, onPointerDown, onContextMenu }: ClipProps): React.ReactElement {
+const KF_TITLE: Record<KeyRef['kind'], string> = { pano: t.keyframes.pano, reframe: t.keyframes.reframe, motion: t.keyframes.motion };
+
+const TimelineClip = React.memo(function TimelineClip({ clip, media, zoom, strips, selected, drag, movedAway, onPointerDown, onContextMenu, kfSelection, kf }: ClipProps): React.ReactElement {
   let start = clip.start;
   let end = clipEnd(clip);
   if (drag) {
@@ -745,6 +896,7 @@ const TimelineClip = React.memo(function TimelineClip({ clip, media, zoom, strip
     strip = { backgroundImage: cssUrl(media.thumb), backgroundSize: 'auto 100%', backgroundRepeat: 'repeat-x' };
   }
 
+  const keys = useMemo(() => clipKeyframes(clip), [clip.pano, clip.reframe, clip.motion, clip.id]);
   const tags: string[] = [];
   if (clip.speed !== 1) tags.push(`${clip.speed < 1 ? clip.speed.toFixed(2).replace(/0+$/, '').replace(/\.$/, '') : Math.round(clip.speed * 100) / 100}×`);
   if (clip.reverse) tags.push('◀');
@@ -773,6 +925,25 @@ const TimelineClip = React.memo(function TimelineClip({ clip, media, zoom, strip
         : <div className={media?.type === 'audio' ? 'clip-wave' : 'clip-thumbs'} style={strip} />}
       {clip.transition && <div className="transition-mark" title="Übergang" />}
       {media?.info.is360 && clip.pano && <div className="pano-mark">360° {clip.pano.mode === 'flat' ? 'Ausschnitt' : clip.pano.mode === 'equirect' ? 'Panorama' : 'Planet'}</div>}
+      {keys.length > 0 && width > 24 && (
+        <div className="kf-row" onPointerDown={kf.row} title={t.keyframes.rowHint}>
+          {keys.map((k) => {
+            const id = keyId(clip.id, k.kind, k.t);
+            const on = kfSelection.includes(id);
+            return (
+              <div
+                key={`${k.kind}${k.t}`}
+                className={`kf ${k.kind}${on ? ' on' : ''}`}
+                style={{ left: Math.min(width - 6, Math.max(6, (k.t + (drag?.kind === 'trimStart' ? clip.start - start : 0)) * zoom)) }}
+                title={`${KF_TITLE[k.kind]} · ${k.t.toFixed(2)} s`}
+                data-kf={id}
+                onPointerDown={(e) => kf.down(e, clip, k)}
+                onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); kf.menu(clip, k, e.clientX, e.clientY); }}
+              />
+            );
+          })}
+        </div>
+      )}
       <div className="handle l" onPointerDown={(e) => onPointerDown(e, clip, 'trimStart')} />
       <div className="handle r" onPointerDown={(e) => onPointerDown(e, clip, 'trimEnd')} />
     </div>

@@ -1,4 +1,5 @@
 // Zentrale Aktionen – von Menü, Tastenkürzeln und Buttons gemeinsam genutzt.
+import { deleteKeyframes, groupByClip } from '@shared/keyframes';
 import type { Clip, MediaItem, Project, TransitionType, UserEffect } from '@shared/types';
 import { clipDuration, clipEnd, clipsOnTrack, formatTime, makeId, projectDuration } from '@shared/timeline';
 import { autoEnhance, frameStats, type FrameStats } from '@shared/color';
@@ -269,7 +270,23 @@ export function splitAtPlayhead(): void {
   if (created.length) ui.select(created);
 }
 
+/** Ausgewählte Keyframes löschen (360°-Blick und Ausschnitt behalten mindestens einen). */
+export function deleteSelectedKeyframes(): boolean {
+  const ui = useUi.getState();
+  if (ui.kfSelection.length === 0) return false;
+  const p = useProject.getState();
+  const patches: Record<string, Partial<Clip>> = {};
+  for (const [clipId, refs] of groupByClip(ui.kfSelection)) {
+    const clip = p.project.clips[clipId];
+    if (clip) patches[clipId] = deleteKeyframes(clip, refs);
+  }
+  if (Object.keys(patches).length) { p.patchClips(patches); setDirty(true); }
+  ui.setKfSelection([]);
+  return true;
+}
+
 export function deleteSelection(): void {
+  if (deleteSelectedKeyframes()) return;
   const ui = useUi.getState();
   if (ui.selection.length === 0) return;
   const p = useProject.getState();

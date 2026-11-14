@@ -24,6 +24,9 @@ export interface UiState {
   appInfo: AppInfo | null;
   settings: Settings;
   selection: string[];
+  /** Ausgewählte Keyframes (Schlüssel aus shared/keyframes keyId). */
+  kfSelection: string[];
+  setKfSelection(ids: string[]): void;
   playhead: number;
   playing: boolean;
   importing: number;
@@ -122,6 +125,7 @@ export const useUi = create<UiState>()((set, get) => ({
   appInfo: null,
   settings: DEFAULT_SETTINGS,
   selection: [],
+  kfSelection: [],
   playhead: 0,
   playing: false,
   importing: 0,
@@ -175,7 +179,8 @@ export const useUi = create<UiState>()((set, get) => ({
   setSettings: (settings) => set({ settings }),
   select: (ids) => set({ selection: ids }),
   toggleSelect: (id) => set((s) => ({ selection: s.selection.includes(id) ? s.selection.filter((x) => x !== id) : [...s.selection, id] })),
-  clearSelection: () => set({ selection: [] }),
+  clearSelection: () => set({ selection: [], kfSelection: [] }),
+  setKfSelection: (ids) => set({ kfSelection: ids }),
   setPlayhead: (t) => set({ playhead: Math.max(0, t) }),
   setPlaying: (playing) => set({ playing }),
   setLoop: (loop) => set({ loop }),

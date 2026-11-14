@@ -503,6 +503,15 @@ export const de = {
     selectFirst: 'Zuerst einen Video- oder Bild-Clip auswählen',
     softWarn: 'Ab {z}× wird das Bild weicher (die Quelle hat nicht mehr Bildpunkte). Für scharfe Zooms: Video in höherer Auflösung als das Projekt filmen (z. B. 4K für Full HD).',
   },
+  keyframes: {
+    pano: '360°-Blick',
+    reframe: 'Ausschnitt',
+    motion: 'Animation',
+    jump: 'Abspielkopf hierhin',
+    delete: 'Keyframe löschen',
+    deleteN: '{n} Keyframes löschen',
+    rowHint: 'Keyframes: anklicken = auswählen · ziehen = verschieben · Entf = löschen · Strg/Cmd-Klick = mehrere · Umschalt-Klick = Bereich · in der Zeile einen Rahmen aufziehen = mehrere',
+  },
   timeline: {
     markerHint: 'Marker – ziehen zum Verschieben, Doppelklick zum Löschen (Taste B setzt neue)',
     magnet: 'Anziehen',

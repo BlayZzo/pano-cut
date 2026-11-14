@@ -167,4 +167,8 @@ Renderer holt ihn per IPC `takePendingProject` beim Start (setzt `rendererReady`
 `masks/` + `imu.bin` und löscht keine Sounds, fehlende Masken-PNGs werden übersprungen, Ton-Fades clip-bezogen (`volume` eval=frame bei Teilstücken).
 Test-Erkenntnis: 4K-Abschnitt mit 360°-Übergang braucht ~3–4 GB (v360-Tabellen ~1 GB je 360°-Kette) + Encoder (x264 ~1 GB, x265 ~1,4 GB).
 Env `PANOCUT_KEEP_EXPORT_TMP` behält den Export-Temp-Ordner (Fehlersuche).
+0.12.0: Keyframes in der Timeline: `shared/keyframes.ts` (Arten pano/reframe/motion, `keyId` = clipId|Art|ms, `clipKeyframes` (360/Ausschnitt erst ab 2),
+`clampKeyShift` (im Clip, Reihenfolge bleibt, Abstand 1 Bild), `shiftKeyframes`, `deleteKeyframes` (pano/reframe behalten ≥1), `exactRefs`),
+`ui.kfSelection`, Store `patchClips`, Timeline `.kf-row` (Rauten, KF_ROW 14 px; Klick/Strg/Umschalt, Rahmen nur wenn in der Zeile begonnen,
+Ziehen in beginTransaction), `deleteSelection` löscht zuerst ausgewählte Keyframes.
 Ansicht/Layout: `ViewSettings` (`settings.view`, `useView`/`updateView`), `Splitter.tsx`, `Popover.tsx`.

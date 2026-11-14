@@ -27,6 +27,8 @@ export interface ProjectState {
   addClip(mediaId: string, trackId: string, start: number): Clip | null;
   updateClip(id: string, patch: Partial<Clip>): void;
   updateClips(ids: string[], patch: Partial<Clip>): void;
+  /** Mehrere Clips mit je eigener Änderung – ein Rückgängig-Schritt. */
+  patchClips(patches: Record<string, Partial<Clip>>): void;
   setSpeed(ids: string[], speed: number): void;
   moveClips(ids: string[], dt: number, trackId?: string, copy?: boolean): string[];
   /** Clips an neue Stellen/Spuren setzen (Mehrfachauswahl über mehrere Spuren). `magnet` = danach lückenlos nach links. */
@@ -135,6 +137,11 @@ export const useProject = create<ProjectState>()(
         const c = s.project.clips[id];
         if (!c) return {};
         return { project: { ...s.project, clips: { ...s.project.clips, [id]: { ...c, ...patch } } } };
+      }),
+      patchClips: (patches) => set((s) => {
+        const clips = { ...s.project.clips };
+        for (const [id, patch] of Object.entries(patches)) if (clips[id]) clips[id] = { ...clips[id], ...patch };
+        return { project: { ...s.project, clips } };
       }),
       updateClips: (ids, patch) => set((s) => {
         const clips = { ...s.project.clips };
